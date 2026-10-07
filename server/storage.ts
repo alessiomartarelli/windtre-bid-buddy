@@ -3,6 +3,8 @@ import { profiles, organizations, brands, organizationBrands, type Brand, type I
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isCjMobileEligible, cjT0Month, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
 import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
+import type { CjCohortData, CjCohortRow } from "@shared/customerJourneyCohorts";
+import { CJ_PRESUMED_PAID_DRIVERS } from "@shared/customerJourney";
 
 // Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
 type DbExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -196,6 +198,7 @@ export interface IStorage {
   getCustomerJourneyValues(journeyIds: string[]): Promise<Map<string, number>>;
   getCustomerJourneyItemFacets(journeyIds: string[], addettiFilter?: string[] | null): Promise<Map<string, CjJourneyFacets>>;
   getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null): Promise<CjReportRow[]>;
+  getCustomerJourneyCohortRows(orgId: string, addettiFilter?: string[] | null): Promise<CjCohortData>;
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
   updateCustomerJourneyItemEconomicState(id: string, orgId: string, state: CjEconomicState | null, userId: string | null): Promise<CustomerJourneyItem>;
@@ -1536,6 +1539,7 @@ export class DatabaseStorage implements IStorage {
       cond = eq(customerJourneys.organizationId, orgId);
     }
     const rows = await db.select({
+      itemId: customerJourneyItems.id,
       journeyId: customerJourneys.id,
       customerKey: customerJourneys.customerKey,
       customerType: customerJourneys.customerType,
@@ -1567,6 +1571,7 @@ export class DatabaseStorage implements IStorage {
         : (referente || r.nominativo || r.customerKey);
       const v = r.importo != null ? parseFloat(String(r.importo)) : NaN;
       return {
+        itemId: r.itemId,
         journeyId: r.journeyId,
         categoria: r.categoria, tipologia: r.tipologia, descrizione: r.descrizione,
         customerKey: r.customerKey,
@@ -1591,6 +1596,75 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.select().from(customerJourneyItems)
       .where(and(eq(customerJourneyItems.id, id), eq(customerJourneyItems.organizationId, orgId)));
     return row;
+  }
+
+  async getCustomerJourneyCohortRows(orgId: string, addettiFilter?: string[] | null): Promise<CjCohortData> {
+    // Start from the same tenant/operator isolation as the existing report.
+    // Never expand an operator's authorized rows to colleagues' contracts.
+    const report = await this.getCustomerJourneyReportRows(orgId, addettiFilter);
+    const empty: CjCohortData = { rows: [], legacyUploads: 0, ambiguousItems: 0, operatorScoped: addettiFilter != null };
+    if (!report.length) return empty;
+    const ids = report.map(r => r.itemId!).filter(Boolean);
+    const items = await db.select({
+      id: customerJourneyItems.id, driver: customerJourneyItems.driver,
+      codiceContratto: customerJourneyItems.codiceContratto, cf: customerJourneyItems.cf,
+      piva: customerJourneyItems.piva, pod: customerJourneyItems.pod, pdr: customerJourneyItems.pdr,
+      dataInserimento: customerJourneyItems.dataInserimento,
+      economicState: customerJourneyItems.economicState,
+      economicStateManual: customerJourneyItems.economicStateManual,
+      economicStateUpdatedAt: customerJourneyItems.economicStateUpdatedAt,
+    }).from(customerJourneyItems).where(and(
+      eq(customerJourneyItems.organizationId, orgId), inArray(customerJourneyItems.id, ids),
+    ));
+    // SQL projects only the fields used by the engine, not complete jsonb
+    // uploads. Missing legacy keys remain absent (not fabricated as null).
+    const keys = [...DRMS_OUTCOME_FIELD_KEYS, "SEQ_ID", "NATURA", "TIPO_FONIA", "COMPETENZA",
+      "CODICE_CONTRATTO", "P_IVA_CLIENTE", "IMPORTO_NUM", "IMPORTO", "DATA_EVENTO",
+      "TIPO_TRANSAZIONE", "DESCRIZIONE_EVENTO"];
+    const keySql = sql.join(keys.map(k => sql`${k}`), sql`, `);
+    const projected = await db.execute(sql`
+      SELECT u.id AS upload_id,
+        COALESCE((SELECT jsonb_object_agg(k, v) FROM jsonb_each(
+          CASE WHEN jsonb_typeof(e.value) = 'object' THEN e.value ELSE '{}'::jsonb END
+        ) AS f(k,v)
+          WHERE k = ANY(ARRAY[${keySql}]::text[])), '{}'::jsonb) AS row
+      FROM drms_uploads u
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE WHEN jsonb_typeof(u.rows) = 'array' THEN u.rows ELSE '[]'::jsonb END
+      ) AS e(value)
+      WHERE u.organization_id = ${orgId} AND jsonb_typeof(e.value) = 'object'
+    `);
+    const inputs: DrmsOutcomeItem[] = items.map(it => ({
+      ...it, dataInserimento: it.dataInserimento?.toISOString() ?? null,
+    }));
+    const drmsRows: DrmsOutcomeRow[] = (projected.rows as { upload_id: string; row: DrmsOutcomeRow }[])
+      .map(p => ({ ...p.row, __UPLOAD_ID: p.upload_id }));
+    const { outcomes, summary } = computeDrmsOutcomes(drmsRows, inputs);
+    const byId = new Map(items.map(it => [it.id, it]));
+    const rows: CjCohortRow[] = report.map(r => {
+      const it = byId.get(r.itemId!)!;
+      const outcome = outcomes.get(it.id);
+      let economicHistory: CjCohortRow["economicHistory"] = outcome?.history
+        .map(h => ({ month: h.competenza, state: h.state, source: "drms" as const })) ?? [];
+      let historyIncomplete = !!it.economicState && !economicHistory.length;
+      if (it.economicStateManual) {
+        // Only the latest manual decision is persisted. Do not invent a
+        // historical sequence or silently use the conflicting DRMS result.
+        historyIncomplete = true;
+        const date = it.economicStateUpdatedAt?.toISOString().slice(0, 7);
+        economicHistory = date && it.economicState
+          ? [{ month: date, state: it.economicState as CjEconomicState, source: "manuale" }] : [];
+      } else if (CJ_PRESUMED_PAID_DRIVERS.has(r.driver) && !economicHistory.length && !it.economicState) {
+        const date = r.insertedAt?.slice(0, 7);
+        economicHistory = date ? [{ month: date, state: "pagato", source: "presunto" }] : [];
+        historyIncomplete = !date;
+      }
+      return { ...r, itemId: it.id, economicHistory, historyIncomplete };
+    });
+    return {
+      rows, legacyUploads: summary.legacyUploads.length,
+      ambiguousItems: summary.ambiguous, operatorScoped: addettiFilter != null,
+    };
   }
 
   async updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem> {

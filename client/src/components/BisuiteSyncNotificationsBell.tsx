@@ -67,6 +67,7 @@ export function BisuiteSyncNotificationsBell() {
     fresh.forEach((id) => seen.add(id));
     queryClient.invalidateQueries({ queryKey: ['/api/customer-journeys'] });
     queryClient.invalidateQueries({ queryKey: ['/api/customer-journeys/report'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/customer-journeys/report-cohorts'] });
     queryClient.invalidateQueries({ queryKey: ['/api/customer-journeys/drms-status'] });
   }, [data]);
 

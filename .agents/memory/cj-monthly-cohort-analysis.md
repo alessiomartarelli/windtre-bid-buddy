@@ -17,6 +17,8 @@ La reportistica deve consentire di scegliere il mese di apertura delle CJ e un m
 
 **Why:** l'utente ha scelto esplicitamente «Entrambe le letture, separate». Un'unica attribuzione nasconderebbe il lavoro commerciale di chi prosegue la vendita sui clienti acquisiti da colleghi.
 
-**Why:** il totale maturato di una coorte non basta a capire da quali mesi provenga il risultato né chi abbia effettuato le vendite successive. L'utente chiede anche la lettura inversa: riconoscimenti del mese suddivisi per mese di apertura dei clienti.
+**Attribuzione economica approvata:** associare al venditore successivo l'incremento marginale prodotto dalla sua vendita, mantenendo il percorso completo nella vista dell'addetto di apertura. Affiancare clienti distinti e nuove piste agli euro: gli scaglioni non misurano proporzionalmente il merito e non sono commissioni individuali.
 
-**How to apply:** separare sempre mese apertura, mese vendita e mese riconoscimento economico. Non sommare i risultati delle due viste addetti. La ripartizione degli incrementi economici tra venditori multipli resta da definire prima dello sviluppo; non ampliare il valore alle commissioni DRMS o interpretarlo come utile netto.
+**Why:** dopo l'esempio delle piste con incrementi diversi, l'utente ha approvato lo sviluppo dell'impostazione consigliata. Una ripartizione percentuale tra colleghi non è stata richiesta.
+
+**How to apply:** separare sempre mese apertura, mese vendita e mese riconoscimento economico. Non sommare i risultati delle due viste addetti e non ricontare l'intero gettone ogni mese; non ampliare il valore alle commissioni DRMS o interpretarlo come utile netto.

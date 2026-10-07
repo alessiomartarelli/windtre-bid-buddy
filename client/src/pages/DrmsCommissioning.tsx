@@ -1663,6 +1663,7 @@ export default function DrmsCommissioning() {
     if (prevCjOutcomeRunning.current && !cjOutcomeRunning) {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-cohorts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bisuite-notifications"] });
       toast({
         title: "Esito Customer Journey terminato",

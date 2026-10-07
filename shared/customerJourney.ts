@@ -57,6 +57,7 @@ export interface CjDriverSummary {
 // pagina "Reportistica" per aggregare per negozio / addetto / ragione sociale.
 // L'isolamento per operatore (solo i propri item) è applicato lato server.
 export interface CjReportRow {
+  itemId?: string;
   categoria?: string | null;
   tipologia?: string | null;
   descrizione?: string | null;
@@ -455,7 +456,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
         driver: r.driver,
         eventDate: r.eventDate ?? null,
         // smartphone: liquidato presunto (nessun processo automatico).
-        pagato: effectiveEconomicState(r) === "pagato",
+        pagato: ["pagato", "riaccreditato"].includes(effectiveEconomicState(r) ?? ""),
       });
     }
   }

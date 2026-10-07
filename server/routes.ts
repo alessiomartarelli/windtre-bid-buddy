@@ -4261,6 +4261,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/customer-journeys/report-cohorts", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const filter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
+      const result = await storage.getCustomerJourneyCohortRows(profile.organizationId, filter);
+      res.setHeader("Cache-Control", "private, no-store");
+      res.json(result);
+    } catch (error) {
+      console.error("Customer journey cohort report error:", error);
+      res.status(500).json({ error: "Errore nel recupero dell'analisi mensile CJ" });
+    }
+  });
+
   // Dettaglio journey: anagrafica + items + riepilogo driver
   // (attivati vs attivabili). L'operatore può vedere solo le proprie journey.
   app.get("/api/customer-journeys/:id", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {

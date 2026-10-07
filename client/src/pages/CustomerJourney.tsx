@@ -60,6 +60,7 @@ import {
   exportJourneyPdf, exportJourneyExcel,
   exportJourneyListPdf, exportJourneyListExcel,
 } from "@/lib/customerJourneyExport";
+import CohortReport from "@/components/customer-journey/CohortReport";
 
 interface DriverSummary {
   driver: string;
@@ -81,7 +82,7 @@ type SortDir = "asc" | "desc";
 
 type CjView = "schede" | "report";
 type ReportDim = "negozio" | "addetto" | "cliente";
-type ReportTab = "analisi" | "dettaglio";
+type ReportTab = "analisi" | "dettaglio" | "coorti";
 type GettoneDim = "negozio" | "addetto";
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -604,6 +605,7 @@ export default function CustomerJourneyPage() {
     onSuccess: (data: { journeys?: number; items?: number; skippedNoIdentity?: number; skippedNoIdentityWithDriver?: number; t0MovedBack?: number; t0MovedForward?: number }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-cohorts"] });
       // Gli scarti per identità cliente mancante non devono sparire in
       // silenzio: li mostriamo quando riguardano articoli di piste tracciate.
       const skipped = data?.skippedNoIdentityWithDriver ?? 0;
@@ -640,6 +642,7 @@ export default function CustomerJourneyPage() {
     if (prevDrmsRunningRef.current && !drmsOutcomeRunning) {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-cohorts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bisuite-notifications"] });
       toast({
         title: "Esito da DRMS terminato",
@@ -660,6 +663,7 @@ export default function CustomerJourneyPage() {
     onSuccess: (raw: CjDrmsApplySummary | { pending: true; message?: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-cohorts"] });
       if ("pending" in raw && raw.pending) {
         // Segna subito il run come in corso (il polling lo confermerà) così
         // il pulsante si disabilita senza attendere il prossimo refetch.
@@ -738,6 +742,7 @@ export default function CustomerJourneyPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys", selectedId] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-cohorts"] });
     },
     onError: (err: unknown) => {
       toast({
@@ -757,6 +762,7 @@ export default function CustomerJourneyPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys", selectedId] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-cohorts"] });
     },
     onError: (err: unknown) => {
       toast({
@@ -791,6 +797,8 @@ export default function CustomerJourneyPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys", selectedId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-cohorts"] });
       toast({ title: "Dettagli aggiornati" });
     },
     onError: (err: unknown) => {
@@ -810,6 +818,8 @@ export default function CustomerJourneyPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys", selectedId] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-cohorts"] });
       toast({ title: "Ragione sociale aggiornata" });
     },
     onError: (err: unknown) => {
@@ -1290,8 +1300,9 @@ export default function CustomerJourneyPage() {
               </button>
             </div>
 
-            {/* Filtri condivisi tra le due viste */}
-            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+            {/* Filtri condivisi tra Schede e Reportistica standard. Le coorti
+                hanno filtri locali per non restringere lo storico con il perimetro esterno. */}
+            {(view !== "report" || reportTab !== "coorti") && <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
               <div className="relative w-full sm:max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -1380,7 +1391,7 @@ export default function CustomerJourneyPage() {
                   Azzera filtri
                 </Button>
               )}
-            </div>
+            </div>}
 
             {/* Filtro schede per data di inserimento SIM (coorte per data di
                 inserimento SIM). Condivide lo stato date con l'Analisi gettoni. */}
@@ -1556,6 +1567,15 @@ export default function CustomerJourneyPage() {
                     <BarChart3 className="h-4 w-4 mr-2" />
                     Dettaglio
                   </Button>
+                  <Button
+                    variant={reportTab === "coorti" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setReportTab("coorti")}
+                    data-testid="report-tab-coorti"
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Coorti mensili
+                  </Button>
                 </div>
                 {reportTab === "analisi" ? (
                   <AnalisiView
@@ -1575,7 +1595,7 @@ export default function CustomerJourneyPage() {
                     onExtraProdottiChange={setExtraProdotti}
                     onOpenJourney={setSelectedId}
                   />
-                ) : (
+                ) : reportTab === "dettaglio" ? (
                   <ReportView
                     isLoading={reportQuery.isLoading}
                     groups={reportGroups}
@@ -1583,6 +1603,11 @@ export default function CustomerJourneyPage() {
                     dim={reportDim}
                     onDimChange={setReportDim}
                     dimLabel={REPORT_DIM_LABEL}
+                  />
+                ) : (
+                  <CohortReport
+                    triggerDate={configQuery.data?.triggerDate}
+                    onOpenJourney={setSelectedId}
                   />
                 )}
               </div>
