@@ -22,3 +22,9 @@ La reportistica deve consentire di scegliere il mese di apertura delle CJ e un m
 **Why:** dopo l'esempio delle piste con incrementi diversi, l'utente ha approvato lo sviluppo dell'impostazione consigliata. Una ripartizione percentuale tra colleghi non è stata richiesta.
 
 **How to apply:** separare sempre mese apertura, mese vendita e mese riconoscimento economico. Non sommare i risultati delle due viste addetti e non ricontare l'intero gettone ogni mese; non ampliare il valore alle commissioni DRMS o interpretarlo come utile netto.
+
+**Confronto richiesto:** mantenere fissa la coorte CJ e affiancare la sua progressione cumulativa nei mesi successivi: clienti con zero, uno, due o più prodotti aggiuntivi e differenze rispetto al mese precedente.
+
+**Why:** l'utente ha rifiutato il solo totale attuale dei clienti con un prodotto, chiedendo «le differenze tra un mese e l'altro dello stesso periodo customer journey». Non basta confrontare coorti diverse o mostrare un mese isolato.
+
+**How to apply:** distinguere la distribuzione cumulativa dai nuovi acquisti del mese e dalle transizioni tra livelli. Dichiarare se il confronto è ricalcolato sulla validità attuale anziché una fotografia storica degli stati.
