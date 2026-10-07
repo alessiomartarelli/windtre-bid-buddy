@@ -8,6 +8,7 @@
 - [CJ validità ↔ gettone parity](cj-validity-gettone-parity.md) — scheda badges e gettone DEVONO condividere helper UTC + regole T0; "attivante" solo se driver mobile.
 - [CustomerJourney page perf](cj-page-perf-memoization.md) — keep derived data memoized; use stable EMPTY_* module constants (not `?? []`) so memos don't bust; useCallback handlers so sub-view memo works.
 - [CJ gettone cohort & KPI](cj-gettone-cohort.md) — analisi gettoni: cohort = solo journey con ≥1 SIM mobile attiva; tieni separati simAttivate (volume) e clienti (distinti).
+- [CJ analisi mensile delle coorti](cj-monthly-cohort-analysis.md) — distinguere mese apertura clienti, mese acquisti successivi e mese riconoscimento economico; rendere visibile chi prosegue il cross-sell.
 - [BiSuite ragione sociale](bisuite-ragione-sociale.md) — clienti azienda: BiSuite non dà la ragione sociale strutturata (campi vuoti, rawData=dealer); ricavala dall'email + manuale, normalizza prima del fallback `??`.
 - [XLSX readFile ESM quirk](xlsx-esm-readfile.md) — `XLSX.readFile` non esiste in ESM/tsx; leggi il buffer con fs e usa `XLSX.read(buf,{type:"buffer"})`.
 - [Drizzle sql ANY array](drizzle-sql-any-array.md) — `sql\`= ANY(${jsArray})\`` esplode in più placeholder => PG 42809; costruisci `ARRAY[...]::int[]` con `sql.join`.
