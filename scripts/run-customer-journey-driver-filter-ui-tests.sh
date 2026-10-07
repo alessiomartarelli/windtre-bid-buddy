@@ -27,4 +27,4 @@ for i in $(seq 1 30); do
 done
 
 echo "[cj-driver-filter-ui-tests] running suite ..."
-exec node --import tsx --test tests/customer-journey-driver-filter-ui.test.mjs
+exec node --import tsx --test tests/customer-journey-driver-filter-ui.test.mjs tests/customer-journey-membership-ui.test.mjs

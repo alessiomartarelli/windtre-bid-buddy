@@ -47,6 +47,7 @@ import type {
   CjGettoneGroup, CjGettoneTotals, CjGettoneJourney, CjGettoneDetailRow,
   CjDriverPhase,
 } from "@shared/customerJourney";
+import { cjUnqualifiedInsertDates, isCjJourneyQualified } from "@shared/customerJourneyMembership";
 import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
   computeTimeline, groupByNegozio, cjDriverColor, isFadedState,
@@ -84,6 +85,7 @@ type CjView = "schede" | "report";
 type ReportDim = "negozio" | "addetto" | "cliente";
 type ReportTab = "analisi" | "dettaglio" | "coorti";
 type GettoneDim = "negozio" | "addetto";
+type CjMembership = "active" | "inactive";
 
 const SORT_LABELS: Record<SortKey, string> = {
   data: "Data apertura",
@@ -538,6 +540,7 @@ export default function CustomerJourneyPage() {
   const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<CjView>("schede");
+  const [cjMembership, setCjMembership] = useState<CjMembership>("active");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"tutti" | "privato" | "azienda">("tutti");
   // Multi-selezione negozi (Task #466): vuoto = tutti, selezioni = OR.
@@ -897,23 +900,39 @@ export default function CustomerJourneyPage() {
       driverFilter,
     )), [journeys, activeFilters, driverFilter]);
 
-  // Filtro schede per data di INSERIMENTO SIM: riusa la stessa derivazione
-  // dell'Analisi gettoni (`buildGettoneJourneys` => `insertedAt` per journey)
-  // così il "dal–al" resta coerente fra le due viste. Le journey senza SIM
-  // mobile attiva (fuori coorte gettone) non hanno data di inserimento: con un
-  // intervallo impostato vengono escluse, senza intervallo restano visibili.
-  // Applicato sulla base senza tipo così i contatori dei chip lo includono.
-  const simInsertNoType = useMemo(() => {
-    if (!dateFrom && !dateTo) return filteredNoType;
-    const allowed = new Set(
-      filterGettoneByInsertDate(
-        buildGettoneJourneys(reportRows),
-        dateFrom || null,
-        dateTo || null,
-      ).map((g) => g.journeyId),
-    );
-    return filteredNoType.filter((j) => allowed.has(j.id));
-  }, [filteredNoType, reportRows, dateFrom, dateTo]);
+  // Membership is taken from the canonical mobile-driver summary, not from
+  // report rows (which may be scoped to another operator).
+  const activeNoType = useMemo(
+    () => filteredNoType.filter((j) => isCjJourneyQualified(j)),
+    [filteredNoType],
+  );
+  const inactiveNoType = useMemo(
+    () => filteredNoType.filter((j) => !isCjJourneyQualified(j)),
+    [filteredNoType],
+  );
+
+  // For active journeys, preserve gettoni's SIM insertion-date semantics.
+  // Inactive journeys have no active SIM to drive that model, so supplement
+  // their dates from report items—never substitute openedAt.
+  const datedMemberships = useMemo(() => {
+    if (!dateFrom && !dateTo) return { active: activeNoType, inactive: inactiveNoType };
+    const activeAllowed = new Set(filterGettoneByInsertDate(
+      buildGettoneJourneys(reportRows), dateFrom || null, dateTo || null,
+    ).map((g) => g.journeyId));
+    const insertDates = cjUnqualifiedInsertDates(reportRows);
+    const inactiveInRange = (j: JourneyListItem) => {
+      const date = insertDates.get(j.id);
+      if (!date) return false;
+      const day = date.slice(0, 10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(day) &&
+        (!dateFrom || day >= dateFrom) && (!dateTo || day <= dateTo);
+    };
+    return {
+      active: activeNoType.filter((j) => activeAllowed.has(j.id)),
+      inactive: inactiveNoType.filter(inactiveInRange),
+    };
+  }, [activeNoType, inactiveNoType, reportRows, dateFrom, dateTo]);
+  const simInsertNoType = cjMembership === "active" ? datedMemberships.active : datedMemberships.inactive;
 
   // Lista schede effettiva: applica il filtro tipo cliente sopra la base.
   const simInsertFiltered = useMemo(
@@ -933,6 +952,8 @@ export default function CustomerJourneyPage() {
     () => simInsertNoType.filter((j) => j.customerType === "azienda").length,
     [simInsertNoType],
   );
+  const membershipActiveCount = typeFilter === "tutti" ? datedMemberships.active.length : datedMemberships.active.filter((j) => j.customerType === typeFilter).length;
+  const membershipInactiveCount = typeFilter === "tutti" ? datedMemberships.inactive.length : datedMemberships.inactive.filter((j) => j.customerType === typeFilter).length;
 
   // Righe report filtrate con gli stessi filtri della lista schede: una riga
   // item-level ha un singolo PDV/addetto/stato (wrappati in array).
@@ -1109,7 +1130,7 @@ export default function CustomerJourneyPage() {
   }, [selectedId, goToOffset]);
 
   const listFilterLabel = useMemo(() => {
-    const parts: string[] = [];
+    const parts: string[] = [cjMembership === "active" ? "Schede clienti · Attivi in CJ" : "Schede clienti · Non più qualificati"];
     if (typeFilter === "privato") parts.push("Solo privati");
     else if (typeFilter === "azienda") parts.push("Solo business");
     if (search.trim()) parts.push(`Ricerca: "${search.trim()}"`);
@@ -1119,7 +1140,7 @@ export default function CustomerJourneyPage() {
     if (senza.length) parts.push(`Senza: ${senza.join(", ")}`);
     parts.push(`Ordine: ${SORT_LABELS[sortKey]} ${sortDir === "asc" ? "↑" : "↓"}`);
     return parts.join(" · ");
-  }, [typeFilter, search, driverFilter, sortKey, sortDir]);
+  }, [cjMembership, typeFilter, search, driverFilter, sortKey, sortDir]);
 
   const handleExportListPdf = useCallback(async () => {
     setListPdfPending(true);
@@ -1299,6 +1320,60 @@ export default function CustomerJourneyPage() {
                 Reportistica
               </button>
             </div>
+
+            {view === "schede" && (
+              <section className="space-y-2" aria-label="Membership delle schede clienti">
+                <div role="tablist" aria-label="Membership Customer Journey" className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/35 p-1 sm:inline-flex sm:w-auto">
+                  <button
+                    type="button"
+                    role="tab"
+                    id="cj-membership-active"
+                    aria-selected={cjMembership === "active"}
+                    aria-controls="cj-membership-panel"
+                    tabIndex={cjMembership === "active" ? 0 : -1}
+                    onClick={() => setCjMembership("active")}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+                        event.preventDefault();
+                        setCjMembership("inactive");
+                        document.getElementById("cj-membership-inactive")?.focus();
+                      }
+                    }}
+                    data-testid="cj-membership-active"
+                    className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${cjMembership === "active" ? "bg-indigo-600 text-white shadow-sm" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
+                  >
+                    <span>Attivi in CJ</span>
+                    <Badge variant="secondary" className={cjMembership === "active" ? "bg-white/20 text-white" : ""}>{membershipActiveCount}</Badge>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="cj-membership-inactive"
+                    aria-selected={cjMembership === "inactive"}
+                    aria-controls="cj-membership-panel"
+                    tabIndex={cjMembership === "inactive" ? 0 : -1}
+                    onClick={() => setCjMembership("inactive")}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+                        event.preventDefault();
+                        setCjMembership("active");
+                        document.getElementById("cj-membership-active")?.focus();
+                      }
+                    }}
+                    data-testid="cj-membership-inactive"
+                    className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${cjMembership === "inactive" ? "bg-amber-600 text-white shadow-sm" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
+                  >
+                    <span>Non più qualificati</span>
+                    <Badge variant="secondary" className={cjMembership === "inactive" ? "bg-white/20 text-white" : ""}>{membershipInactiveCount}</Badge>
+                  </button>
+                </div>
+                <p className={`text-xs leading-relaxed ${cjMembership === "inactive" ? "text-amber-800 dark:text-amber-200" : "text-muted-foreground"}`}>
+                  {cjMembership === "inactive"
+                    ? "Qui trovi clienti senza una SIM attiva eleggibile: una perdita DRMS o manuale può farli uscire se non resta un’altra SIM valida. Le SIM annullate nelle vendite sono escluse a monte da entrambe le schede."
+                    : "Clienti con almeno una SIM attiva eleggibile per la Customer Journey. Le SIM annullate nelle vendite sono escluse a monte."}
+                </p>
+              </section>
+            )}
 
             {/* Filtri condivisi tra Schede e Reportistica standard. Le coorti
                 hanno filtri locali per non restringere lo storico con il perimetro esterno. */}
@@ -1546,6 +1621,12 @@ export default function CustomerJourneyPage() {
               </div>
             )}
 
+            <div
+              role={view === "schede" ? "tabpanel" : undefined}
+              id={view === "schede" ? "cj-membership-panel" : undefined}
+              aria-labelledby={view === "schede" ? (cjMembership === "active" ? "cj-membership-active" : "cj-membership-inactive") : undefined}
+              data-testid={view === "schede" ? "cj-membership-panel" : undefined}
+            >
             {view === "report" ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1618,12 +1699,15 @@ export default function CustomerJourneyPage() {
             ) : sorted.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
-                  <RouteIcon className="h-10 w-10 mx-auto mb-3 opacity-40" />
-                  <p className="font-medium">Nessuna customer journey</p>
-                  <p className="text-sm mt-1">
-                    Le journey si aprono dalle nuove attivazioni mobile
-                    {triggerDateLabel ? ` dal ${triggerDateLabel}.` : "."}
-                    {isAdmin && " Usa “Rigenera da BiSuite” per elaborare le vendite."}
+                  {cjMembership === "inactive" ? <AlertTriangle className="mx-auto mb-3 h-9 w-9 text-amber-600/70" /> : <RouteIcon className="h-10 w-10 mx-auto mb-3 opacity-40" />}
+                  <p className="font-medium">{cjMembership === "inactive" ? "Nessun cliente non più qualificato" : "Nessun cliente attivo in CJ"}</p>
+                  <p className="mx-auto mt-1 max-w-xl text-sm">
+                    {hasActiveFilters
+                      ? "Nessun cliente di questa scheda corrisponde ai filtri selezionati. Prova ad ampliare il perimetro o azzerare i filtri."
+                      : cjMembership === "inactive"
+                        ? "Tutti i clienti visibili hanno almeno una SIM attiva eleggibile."
+                        : `Le journey si aprono dalle nuove attivazioni mobile${triggerDateLabel ? ` dal ${triggerDateLabel}` : ""}.`}
+                    {cjMembership === "active" && !hasActiveFilters && isAdmin && " Usa “Rigenera da BiSuite” per elaborare le vendite."}
                   </p>
                 </CardContent>
               </Card>
@@ -1656,6 +1740,7 @@ export default function CustomerJourneyPage() {
                 <VirtualJourneyGrid journeys={sorted} onSelect={setSelectedId} />
               </>
             )}
+            </div>
           </>
         ) : (
           <>

@@ -40,3 +40,9 @@ La reportistica deve consentire di scegliere il mese di apertura delle CJ e un m
 **Why:** l'utente ha precisato «Le sim annullate dalle vendite non devono comparire proprio nella cj», correggendo l'inclusione delle annullate di origine BiSuite tra le SIM cadute.
 
 **How to apply:** verificare lo stato della vendita di origine, non dedurre l'esclusione dal solo stato economico `annullato`. Se manca ogni altra SIM eleggibile nelle vendite, il cliente non fa parte della coorte CJ.
+
+**Schede clienti separate:** i clienti attivi in CJ e i non più qualificati devono avere schede/elenchi distinti e conteggi separati, anche nella consultazione dei clienti delle coorti. Gli elenchi operativi non devono mescolarli.
+
+**Why:** l'utente ha chiesto «i non più qualificati vanno separati dai clienti attivi in cj e mostrati in schede separate».
+
+**How to apply:** l'appartenenza dipende da almeno una SIM eleggibile ancora valida, non dalla presenza di prodotti cross-sell. Un'altra SIM valida mantiene il cliente fra gli attivi. La separazione degli elenchi non modifica il denominatore fisso del confronto storico delle coorti.

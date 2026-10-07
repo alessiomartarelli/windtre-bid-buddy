@@ -47,6 +47,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
   const [employee, setEmployee] = useState(ALL);
   const [purchasedOnly, setPurchasedOnly] = useState(false);
   const [expanded, setExpanded] = useState<string[]>([]);
+  const [cohortClientMembership, setCohortClientMembership] = useState<"active" | "inactive">("active");
 
   const data = query.data;
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
@@ -128,6 +129,15 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       .filter(({ customer, events }) => !purchasedOnly || events.some(e => e.kind === "vendita" && e.active))
       .sort((a, b) => a.customer.cliente.localeCompare(b.customer.cliente, "it"));
   }, [scoped.customers, scoped.events, purchasedOnly]);
+  const activeCohortClients = useMemo(
+    () => customersWithEvents.filter(({ customer }) => customer.mobileActive),
+    [customersWithEvents],
+  );
+  const inactiveCohortClients = useMemo(
+    () => customersWithEvents.filter(({ customer }) => !customer.mobileActive),
+    [customersWithEvents],
+  );
+  const selectedCohortClients = cohortClientMembership === "active" ? activeCohortClients : inactiveCohortClients;
 
   const exportWorkbook = () => {
     const workbook = XLSX.utils.book_new();
@@ -152,14 +162,16 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(clean(monthly as unknown as Record<string, unknown>[])), "Mesi osservati");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(clean(inverse as unknown as Record<string, unknown>[])), "Coorti");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(clean(employeeComparison as unknown as Record<string, unknown>[])), "Confronto addetti");
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(customersWithEvents.map(({ customer }) => ({
+    const customerExportRows = (clients: typeof customersWithEvents) => clients.map(({ customer }) => ({
       Cliente: customer.cliente, Journey: customer.journeyId, Coorte: customer.cohort, Apertura: customer.opener,
       Negozio: customer.pdv, "SIM attiva": customer.mobileActive ? "Sì" : "No",
       "Bonus generato totale": customer.generated, "Riconosciuto totale incl. presunto": customer.confirmed,
       "Generato non allocato (data mancante)": customer.unallocatedGenerated,
       "Saldo riconosciuto senza mese ricostruibile": customer.unallocatedConfirmed,
       "Tipo cliente": typeByJourney.get(customer.journeyId) ?? "",
-    }))), "Clienti");
+    }));
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(customerExportRows(activeCohortClients)), "Clienti attivi");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(customerExportRows(inactiveCohortClients)), "Non più qualificati");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(scoped.events.map(e => ({
       Cliente: e.cliente, Journey: e.journeyId, Coorte: e.cohort, Mese: e.month, Tipo: e.kind,
       Prodotto: e.product, Venditore: e.seller, Apertura: e.opener, Negozio: e.pdv,
@@ -319,9 +331,28 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
         </table></div>}
       </section>
       <section className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold">Clienti della coorte</h3><p className="text-xs text-muted-foreground">{customersWithEvents.length} clienti · inclusi quelli senza riacquisti validi</p></div><Badge variant="outline">Denominatore {summary.clients}</Badge></div>
-        <div className="divide-y divide-border">
-          {customersWithEvents.map(({ customer, events }) => {
+        <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold">Clienti della coorte</h3><p className="text-xs text-muted-foreground">Elenco separato per qualificazione attuale · inclusi quelli senza riacquisti validi</p></div><Badge variant="outline">Denominatore {summary.clients}</Badge></div>
+        <div className="space-y-3 p-3 sm:p-4">
+          <div role="tablist" aria-label="Stato dei clienti della coorte" className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/35 p-1 sm:inline-flex">
+            <button type="button" role="tab" id="cohort-clients-active" aria-selected={cohortClientMembership === "active"} aria-controls="cohort-clients-panel" tabIndex={cohortClientMembership === "active" ? 0 : -1} onClick={() => setCohortClientMembership("active")} onKeyDown={event => { if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); setCohortClientMembership("inactive"); document.getElementById("cohort-clients-inactive")?.focus(); } }} data-testid="cohort-clients-active" className={`flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${cohortClientMembership === "active" ? "bg-indigo-600 text-white shadow-sm" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}>
+              Attivi in CJ <Badge variant="secondary" className={cohortClientMembership === "active" ? "bg-white/20 text-white" : ""}>{activeCohortClients.length}</Badge>
+            </button>
+            <button type="button" role="tab" id="cohort-clients-inactive" aria-selected={cohortClientMembership === "inactive"} aria-controls="cohort-clients-panel" tabIndex={cohortClientMembership === "inactive" ? 0 : -1} onClick={() => setCohortClientMembership("inactive")} onKeyDown={event => { if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); setCohortClientMembership("active"); document.getElementById("cohort-clients-active")?.focus(); } }} data-testid="cohort-clients-inactive" className={`flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${cohortClientMembership === "inactive" ? "bg-amber-600 text-white shadow-sm" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}>
+              Non più qualificati <Badge variant="secondary" className={cohortClientMembership === "inactive" ? "bg-white/20 text-white" : ""}>{inactiveCohortClients.length}</Badge>
+            </button>
+          </div>
+          <p className={`text-xs leading-relaxed ${cohortClientMembership === "inactive" ? "text-amber-800 dark:text-amber-200" : "text-muted-foreground"}`}>
+            {cohortClientMembership === "inactive"
+              ? "Nessuna SIM attiva eleggibile oggi. Una perdita DRMS o manuale può rendere il cliente non qualificato se non resta una SIM attiva alternativa. Le SIM annullate nelle vendite sono escluse a monte da entrambe le schede."
+              : "Almeno una SIM attiva eleggibile oggi. Le SIM annullate nelle vendite sono escluse a monte da entrambe le schede."}
+          </p>
+        </div>
+        <div role="tabpanel" id="cohort-clients-panel" aria-labelledby={cohortClientMembership === "active" ? "cohort-clients-active" : "cohort-clients-inactive"} data-testid="cohort-clients-panel" className="divide-y divide-border border-t border-border">
+          {selectedCohortClients.length === 0 ? <div className="px-4 py-10 text-center">
+            <Users className={`mx-auto mb-2 h-7 w-7 ${cohortClientMembership === "inactive" ? "text-amber-600/70" : "text-indigo-600/70"}`} />
+            <p className="text-sm font-medium">{cohortClientMembership === "inactive" ? "Nessun cliente non più qualificato" : "Nessun cliente attivo"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Nessun cliente corrisponde ai filtri e alla selezione di acquisto correnti.</p>
+          </div> : selectedCohortClients.map(({ customer, events }) => {
             const isExpanded = expanded.includes(customer.journeyId);
             return <div key={customer.journeyId}>
               <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:px-4">

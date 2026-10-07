@@ -15,6 +15,13 @@ The gettone Analisi view uses the SAME function for its dal–al range, so the t
 compares the **hidden insertion** date. Asked whether to switch to the visible openedAt, the user
 explicitly chose to **keep the SIM insertion-date semantics**. Do NOT "fix" this to `openedAt`.
 
+For the separate **Non più qualificati** panel, use the oldest eligible SIM insertion
+date within the original journey window, even when that SIM is no longer active.
+Do not silently replace it with the opening date or exclude every inactive client.
+
+**Why:** nonqualified clients must remain independently consultable under the same
+insertion-date filters; an active-SIM-only date derivation would hide the entire panel.
+
 ## Type-chip counters (Tutti / Privati / Business)
 The chips ARE the customer-type filter, so their badge counts must be derived from the set with
 **all other filters applied (search/PDV/addetto/stato + insert-date range) but NOT the type filter**.
