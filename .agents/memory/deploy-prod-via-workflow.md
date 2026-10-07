@@ -64,3 +64,10 @@ are also validation commands, so restore them afterward with
 `setValidationCommand({name, command})` (not subject to the workflow limit).
 The `deploy-prod.sh` quality gate calls the test scripts directly, so removing
 the workflow/validation registrations does NOT weaken the gate.
+
+Per verificare una correzione nel bundle pubblicato, cercare marcatori di
+versione o stringhe/regex caratteristiche, non il nome originale dell'helper.
+**Why:** la build minifica i nomi delle funzioni; cercare il nome originale
+ha dato un falso negativo anche con il codice corretto già pubblicato.
+**How to apply:** controlli post-deploy sul bundle, da affiancare a verifiche
+dei dati o del comportamento effettivo.
