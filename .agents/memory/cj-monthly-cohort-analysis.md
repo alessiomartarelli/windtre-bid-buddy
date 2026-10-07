@@ -13,6 +13,10 @@ La reportistica deve consentire di scegliere il mese di apertura delle CJ e un m
 
 **Why:** l'utente ha scelto esplicitamente la data di vendita/inserimento per identificare l'attività del mese osservato.
 
+**Lettura addetti confermata:** mantenere separate entrambe le viste: addetto che ha aperto la CJ e addetto che ha effettuato le vendite successive.
+
+**Why:** l'utente ha scelto esplicitamente «Entrambe le letture, separate». Un'unica attribuzione nasconderebbe il lavoro commerciale di chi prosegue la vendita sui clienti acquisiti da colleghi.
+
 **Why:** il totale maturato di una coorte non basta a capire da quali mesi provenga il risultato né chi abbia effettuato le vendite successive. L'utente chiede anche la lettura inversa: riconoscimenti del mese suddivisi per mese di apertura dei clienti.
 
-**How to apply:** separare sempre mese apertura, mese vendita e mese riconoscimento economico. Chiarire l'attribuzione agli addetti prima di trasformare questa esigenza in sviluppo; non ampliare il valore alle commissioni DRMS o interpretarlo come utile netto.
+**How to apply:** separare sempre mese apertura, mese vendita e mese riconoscimento economico. Non sommare i risultati delle due viste addetti. La ripartizione degli incrementi economici tra venditori multipli resta da definire prima dello sviluppo; non ampliare il valore alle commissioni DRMS o interpretarlo come utile netto.
