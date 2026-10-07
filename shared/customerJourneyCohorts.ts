@@ -7,6 +7,8 @@ import type { CjEconomicState } from "./schema";
 
 export interface CjCohortRow extends CjReportRow {
   itemId: string;
+  simContract?: string | null;
+  operativeDecisionAt?: string | null;
   economicHistory: { month: string; state: CjEconomicState; source: "drms" | "manuale" | "presunto" }[];
   historyIncomplete: boolean;
 }

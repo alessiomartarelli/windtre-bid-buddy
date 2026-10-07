@@ -21,6 +21,8 @@ test("cohort API: competence reconstruction, tenant/operator isolation and empty
     });
     await pool.query(`UPDATE customer_journey_items SET codice_contratto = 'COHORT-FIS'
       WHERE journey_id = $1 AND driver = 'fisso'`, [j]);
+    await pool.query(`UPDATE customer_journey_items SET codice_contratto = 'COHORT-SIM',
+      state_updated_at = '2026-09-01' WHERE journey_id = $1 AND driver = 'mobile'`, [j]);
     const drms = {
       SEQ_ID: "COHORT-SEQ", NATURA: "CONTRATTUALE", TIPO_FONIA: "FISSO",
       COMPETENZA: "2026-09", CODICE_CONTRATTO: "COHORT-FIS",
@@ -45,9 +47,17 @@ test("cohort API: competence reconstruction, tenant/operator isolation and empty
     assert.equal("cf" in fixed, false);
     assert.equal("codiceContratto" in fixed, false);
     assert.equal("importo" in fixed.economicHistory[0], false);
+    const mobile = result.body.rows.find(r => r.driver === "mobile");
+    assert.equal(mobile.simContract, "COHORT-SIM");
+    assert.equal(mobile.operativeDecisionAt, null, "automatic timestamps are not manual decision dates");
+    assert.equal("simContract" in fixed, false);
     const m = buildCjCohortModel(result.body.rows);
     assert.equal(m.events.find(e => e.kind === "vendita").month, "2026-08");
     assert.equal(m.events.find(e => e.kind === "riconoscimento").confirmed, 20);
+    await pool.query(`UPDATE customer_journey_items SET state='ko',state_manual=true,
+      state_updated_at='2026-08-05' WHERE journey_id=$1 AND driver='mobile'`, [j]);
+    const afterManual = await get(owner);
+    assert.equal(afterManual.body.rows.find(r => r.driver === "mobile").operativeDecisionAt.slice(0, 10), "2026-08-05");
     assert.equal((await get(other)).body.rows.length, 0);
     await setRole(pool, owner.profileId, "operatore", ["Marco"]);
     const operator = await get(owner);

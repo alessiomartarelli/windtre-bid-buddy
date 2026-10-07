@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { buildCjCohortModel, summarizeCjCohort } from "@shared/customerJourneyCohorts";
 import type { CjCohortData, CjCohortEvent } from "@shared/customerJourneyCohorts";
+import { buildCjProgression } from "@shared/customerJourneyProgression";
+import CohortProgression from "./CohortProgression";
 
 interface CohortReportProps {
   triggerDate?: string;
@@ -72,6 +74,11 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     );
     return { customers, events };
   }, [model, cohortMonth, observationMonth, shop, customerType, typeByJourney, attribution, employee, search]);
+
+  const progression = useMemo(() => {
+    const customerIds = new Set(scoped.customers.map(customer => customer.journeyId));
+    return buildCjProgression(rows.filter(row => customerIds.has(row.journeyId)), scoped.customers);
+  }, [rows, scoped.customers]);
 
   const summary = useMemo(() => summarizeCjCohort(scoped.customers, scoped.events), [scoped.customers, scoped.events]);
   const employeeComparison = useMemo(() => {
@@ -168,6 +175,36 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       { Diagnostica: "Elementi ambigui", Valore: data?.ambiguousItems ?? 0 },
       { Diagnostica: "Report limitato al perimetro autorizzato", Valore: data?.operatorScoped ? "Sì" : "No" },
     ]), "Diagnostica");
+    const progressionMonths = cohortMonth === ALL ? [] : progression.months.map(row => ({
+      Mese: row.month, "Denominatore fisso": row.clients, "Clienti con SIM valide oggi": row.activeClients,
+      "Clienti non più qualificati": row.inactiveClients, "Clienti con almeno una pista": row.withProducts,
+      "Percentuale su denominatore": row.percentage, "0 piste": row.bins[0], "1 pista": row.bins[1],
+      "2 piste": row.bins[2], "3 piste": row.bins[3], "4 piste": row.bins[4], "5 o più piste": row.bins[5],
+      "Delta 0 piste": row.deltas?.[0] ?? "", "Delta 1 pista": row.deltas?.[1] ?? "",
+      "Delta 2 piste": row.deltas?.[2] ?? "", "Delta 3 piste": row.deltas?.[3] ?? "",
+      "Delta 4 piste": row.deltas?.[4] ?? "", "Delta 5 o più piste": row.deltas?.[5] ?? "",
+      "Prima pista": row.firstProduct, "Da una a due o più": row.fromOneToMore,
+      "Clienti avanzati": row.advanced, "SIM cadute nel mese": row.droppedSims, "Mese parziale": row.isPartial ? "Sì" : "No",
+    }));
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(progressionMonths), "Progressione coorte");
+    const droppedSheet = progression.dropped.map(sim => ({
+      Cliente: sim.cliente, Journey: sim.journeyId, Coorte: sim.cohort, Negozio: sim.pdv,
+      Venditore: sim.seller, "Contratto SIM": sim.contract, Prodotto: sim.product, Stato: sim.state,
+      "Stato economico": sim.economicState ?? "", "Mese perdita": sim.month ?? "",
+      Fonte: sim.source, "Cliente uscito da CJ": sim.exited ? "Sì" : "No", "SIM caduta oggi": sim.currentlyDropped ? "Sì" : "No",
+    }));
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(droppedSheet), "SIM cadute oggi");
+    const fallsSheet = progression.falls.map(sim => ({
+      Cliente: sim.cliente, Journey: sim.journeyId, Coorte: sim.cohort, Negozio: sim.pdv,
+      Venditore: sim.seller, "Contratto SIM": sim.contract, Prodotto: sim.product, "Mese perdita": sim.month ?? "",
+      Fonte: sim.source, "Stato SIM oggi": sim.currentlyDropped ? "Caduta" : "Recuperata",
+      "Cliente uscito da CJ": sim.exited ? "Sì" : "No",
+    }));
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(fallsSheet), "Cadute documentate");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(progression.exitedCustomers.map(customer => ({
+      Cliente: customer.cliente, Journey: customer.journeyId, Coorte: customer.cohort, Negozio: customer.pdv,
+      "Addetto apertura": customer.opener, "SIM valide oggi": "No",
+    }))), "Usciti da CJ");
     XLSX.writeFile(workbook, `coorti_customer_journey_${cohortMonth === ALL ? "tutte" : cohortMonth}.xlsx`);
   };
 
@@ -239,9 +276,10 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-200"><AlertTriangle className="h-4 w-4" />Metodo, qualità e perimetro dello storico</h3>
       <ul className="mt-2 grid gap-1.5 text-xs leading-relaxed text-muted-foreground sm:grid-cols-2">
-        <li>Storico commerciale ricalcolato sui contratti validi oggi; il denominatore include anche journey inattive ma eleggibili.</li>
+        <li>Gli stock commerciali sono ricalcolati sugli stati validi oggi, non sono fotografie storiche di chiusura mensile; il denominatore include journey inattive ma eleggibili.</li>
         <li>La finestra commerciale è solare T0–T6. Le competenze DRMS usano il mese di competenza, mai la data di caricamento.</li>
-        <li>Le decisioni manuali sono collocate nel mese dell'ultima decisione manuale; l'eventuale storia precedente mancante resta segnalata come incompleta, senza dedurla da date di aggiornamento.</li>
+        <li>Una perdita mensile usa solo la competenza DRMS o una decisione manuale esplicita. Date non ricostruibili restano separate; mai dedotte da data di aggiornamento.</li>
+        <li>Per la progressione, il mese di osservazione e il filtro venditore evento non cambiano la coorte né la sequenza delle vendite.</li>
         <li>Una pista ripetuta genera zero bonus marginale. Gli euro esposti non sono commissioni individuali.</li>
         <li>Presunto e confermato sono separati. Storici manuali mancanti, upload legacy e abbinamenti ambigui sono incompleti: non vengono inferiti.</li>
         <li>{model.undatedSales} vendite prive di mese d’inserimento non sono collocate nelle tabelle mensili.</li>
@@ -265,6 +303,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
 
     {scoped.customers.length === 0 && <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Nessun cliente corrisponde ai filtri selezionati. Modifica i filtri per consultare la coorte.</CardContent></Card>}
     {scoped.customers.length > 0 && <>
+      <CohortProgression progression={progression} cohortSelected={cohortMonth !== ALL} onOpenJourney={onOpenJourney} />
       <CohortTable title="Andamento per mese osservato" caption="Scomposizione mensile della coorte selezionata. Il mese osservato può essere una vendita (inserimento) o una competenza economica." rows={monthly.map(r => ({ key: r.month, label: monthName(r.month), ...r }))} showPending={false} />
       <CohortTable title="Composizione inversa per coorte" caption="Per ogni mese di apertura: contributi osservati nel periodo filtrato, non troncati dai filtri generali. Lo stock pendente è attuale, non un flusso." rows={inverse.map(r => ({ key: r.cohort, label: monthName(r.cohort), ...r }))} />
       <section className="overflow-hidden rounded-xl border border-border bg-card">

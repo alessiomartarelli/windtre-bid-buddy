@@ -28,3 +28,9 @@ La reportistica deve consentire di scegliere il mese di apertura delle CJ e un m
 **Why:** l'utente ha rifiutato il solo totale attuale dei clienti con un prodotto, chiedendo «le differenze tra un mese e l'altro dello stesso periodo customer journey». Non basta confrontare coorti diverse o mostrare un mese isolato.
 
 **How to apply:** distinguere la distribuzione cumulativa dai nuovi acquisti del mese e dalle transizioni tra livelli. Dichiarare se il confronto è ricalcolato sulla validità attuale anziché una fotografia storica degli stati.
+
+**Uscite dalla coorte:** affiancare numero e identità delle SIM cadute al numero e all'elenco dei clienti senza più alcuna SIM eleggibile valida. Un cliente con altre SIM valide resta qualificato; chi esce resta nel denominatore della coorte, separato da chi ha zero prodotti aggiuntivi.
+
+**Why:** l'utente ha chiesto di sapere «quante SIM sono cadute e quali» e «quali clienti non sono più nella customer journey». Le due quantità non sono equivalenti e rimuovere gli usciti dal denominatore nasconde l'abbandono.
+
+**How to apply:** distinguere perdite correnti e perdite documentate poi recuperate. Non attribuire una caduta al mese di un aggiornamento tecnico. Esplicitare la copertura sulle sole schede conservate se precedenti riconciliazioni ne hanno eliminate altre.

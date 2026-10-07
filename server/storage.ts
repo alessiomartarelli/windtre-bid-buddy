@@ -1613,6 +1613,8 @@ export class DatabaseStorage implements IStorage {
       economicState: customerJourneyItems.economicState,
       economicStateManual: customerJourneyItems.economicStateManual,
       economicStateUpdatedAt: customerJourneyItems.economicStateUpdatedAt,
+      stateManual: customerJourneyItems.stateManual,
+      stateUpdatedAt: customerJourneyItems.stateUpdatedAt,
     }).from(customerJourneyItems).where(and(
       eq(customerJourneyItems.organizationId, orgId), inArray(customerJourneyItems.id, ids),
     ));
@@ -1659,7 +1661,13 @@ export class DatabaseStorage implements IStorage {
         economicHistory = date ? [{ month: date, state: "pagato", source: "presunto" }] : [];
         historyIncomplete = !date;
       }
-      return { ...r, itemId: it.id, economicHistory, historyIncomplete };
+      return {
+        ...r, itemId: it.id, economicHistory, historyIncomplete,
+        ...(r.driver === "mobile" ? {
+          simContract: it.codiceContratto ?? null,
+          operativeDecisionAt: it.stateManual ? it.stateUpdatedAt?.toISOString() ?? null : null,
+        } : {}),
+      };
     });
     return {
       rows, legacyUploads: summary.legacyUploads.length,

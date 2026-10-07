@@ -74,6 +74,7 @@ uri = "file://screenshots/prisma-light-desktop.png"
 type = "image"
 title = "Prisma Light — Desktop"
 description = "Dashboard Gara Reale con tema Prisma Light attivo: hero editoriale, pannello incentivi, mini KPI, avanzamento mese, PDV in evidenza e focus piste su dati live."
+logical_id = "c91f9fa1-08db-4f9d-9852-dbc3abf71b9a"
 
 [[outputs]]
 id = "t7jUZp3yniHbP8KNN_hkD"
@@ -81,6 +82,7 @@ uri = "file://screenshots/prisma-light-mobile-full.png"
 type = "image"
 title = "Prisma Light — contenuto corretto"
 description = "La vista Prisma termina dopo i pannelli del mockup; la sezione standard Piste in gara e gli altri dettagli operativi non vengono più mostrati."
+logical_id = "88f5e87e-b4e0-4fe5-b3d8-1197dbaea72b"
 
 [[outputs]]
 id = "bkVmIW4al_wnnDLCJUXl6"
@@ -88,6 +90,7 @@ uri = "file://screenshots/auth-mobile-night.jpg"
 type = "image"
 title = "Accesso mobile — nuova resa"
 description = "Anteprima reale a 375px: sfondo notte sfumato, card traslucida e campi ad alto contrasto."
+logical_id = "d6e8309c-d3d7-4817-b344-edcb5d5c6818"
 
 [[outputs]]
 id = "71C9VE_drF0_OYBFVVTDR"
@@ -95,6 +98,7 @@ uri = "file://screenshots/auth-mobile-night-refined.jpg"
 type = "image"
 title = "Accesso mobile — versione rifinita"
 description = "Anteprima reale a 375px della seconda iterazione: vetro più leggero, gerarchia più netta e messaggio di accesso autorizzato discreto."
+logical_id = "3d1f9855-04db-4aa7-8624-bfc47dceb3be"
 
 [[outputs]]
 id = "XudOcivYKQx5AiNP3dy1a"
@@ -102,10 +106,27 @@ uri = "file://screenshots/auth-tablet-landscape-1024.jpg"
 type = "image"
 title = "Accesso su tablet orizzontale"
 description = "Anteprima reale a 1024×768: layout ampio, senza overflow e con controlli touch da 44px."
+logical_id = "a3b27177-76da-4d36-aed8-4c0169f66c89"
 
 [[outputs]]
 id = "-NjzADTrgXOh1Sz-uoNTz"
 uri = "file://exports/report-vendite-phone-phone-2026-08-29-2215-corretto.html"
-type = "text"
+type = "html"
 title = "Report Vendite Phone&Phone corretto"
 description = "Report del 29 agosto 2026 con le piste Vodafone/Fastweb valorizzate correttamente e senza i vecchi indicatori P.IVA."
+logical_id = "afd62e12-78d8-4a04-8de4-8a5e059ca8bc"
+content_type = "text/html"
+
+[[outputs]]
+id = "ewEYmc_3JwoY2Nl8UchLu"
+uri = "file://reports/cms-cj-luglio-2026-sim-cadute-2026-10-07.xlsx"
+type = "table"
+title = "CMS — SIM cadute e clienti usciti dalla CJ di luglio"
+description = "Dati di produzione al 7 ottobre: 21 SIM annullate e 16 clienti senza SIM valida. Elenchi nominativi, contratti, negozi e riepilogo; CMS Evo esclusa. Solo schede ancora conservate."
+logical_id = "674361fa-17ba-4240-96b2-646c02131169"
+content_hash = "sha256:88f190d884d4550286599a1cc4eaeed70387f04838c3139a16c99f56443d7e45"
+size = 36615
+mtime_ms = 1791384547682
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/674361fa-17ba-4240-96b2-646c02131169/46e90265-65b6-460f-aeab-26b3cb71cb99"
+storage_version_token = "1791384561396168"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
