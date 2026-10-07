@@ -11,4 +11,4 @@
 set -euo pipefail
 
 echo "[cj-validity-gettone-parity-tests] running suite ..."
-exec node --import tsx --test tests/customer-journey-validity-gettone-parity.test.mjs
+exec node --import tsx --test tests/customer-journey-validity-gettone-parity.test.mjs tests/customer-journey-window-eligibility.test.mjs

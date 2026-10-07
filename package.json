@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test:cj-window-eligibility": "node --import tsx --test tests/customer-journey-window-eligibility.test.mjs",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

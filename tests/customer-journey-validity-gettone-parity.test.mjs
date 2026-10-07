@@ -187,7 +187,7 @@ test('parità: dataset combinato (tutti i rami limite insieme)', () => {
     contract({ driver: 'energia', state: 'attivato', eventDate: '2026-07-20T00:00:00.000Z' }), // valida
     contract({ driver: 'energia', state: 'attivato', eventDate: '2026-07-25T00:00:00.000Z' }), // duplicato
     contract({ driver: 'assicurazioni', state: 'ko', eventDate: '2026-07-22T00:00:00.000Z' }), // ko => fuori
-    contract({ driver: 'telefono', state: 'attivato', eventDate: '2026-09-01T00:00:00.000Z' }), // valida (oltre T6 ok)
+    contract({ driver: 'telefono', state: 'attivato', eventDate: '2026-09-01T00:00:00.000Z' }), // valida (T2)
     contract({ driver: 'protetti', state: 'attivato', eventDate: '2026-08-10T00:00:00.000Z' }), // valida
   ];
   const r = assertParity(contracts, { openedAt: '2026-07-03T00:00:00.000Z', triggerSaleId: 'S1' }, 'combinato');

@@ -205,3 +205,55 @@ test('scheda cliente: vendita trigger senza SIM (triggerSaleId) → T0 resta sul
 test('scheda cliente: vendita trigger senza SIM (triggerBisuiteId) → T0 resta sul trigger, SIM successiva "Non conta"', async () => {
   await runDirtyTriggerScenario({ via: 'bisuiteId' });
 });
+
+test('scheda e analisi: stesso mese prima della SIM, T6 incluso, T7 ed escluse non contribuiscono', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cj_window_ui', fullName: 'CJ Window UI' });
+  const browser = await launchBrowser();
+  try {
+    const pdv = 'PDV Window Test';
+    const saleId = uniq('TRIGGER');
+    const journeyId = await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CJWIN').toUpperCase(), nome: 'Cliente Finestra CJ',
+      pdv, openedAt: '2026-07-20T10:00:00Z', triggerSaleId: saleId,
+    });
+    const insert = (driver, date, descrizione, extra = {}) => addJourneyItem(pool, session.orgId, journeyId, {
+      driver, pdv, dataInserimento: date, descrizione, state: 'attivato', ...extra,
+    });
+    const excluded = await insert('mobile', '2026-07-01', 'Professional Data 100', { categoria: 'TIED IVA', bisuiteSaleId: saleId });
+    const sim = await insert('mobile', '2026-07-20T10:00:00Z', 'Voce 100 GB', { categoria: 'TIED CF', bisuiteSaleId: saleId });
+    const before = await insert('fisso', '2026-07-05', 'Superfibra');
+    const t6 = await insert('energia', '2027-01-31T23:59:59.999Z', 'Luce');
+    const t7 = await insert('telefono', '2027-02-01T00:00:00Z', 'Smartphone storico');
+    await pool.query(`UPDATE customer_journey_items SET economic_state='pagato' WHERE journey_id=$1`, [journeyId]);
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/customer-journey`, { waitUntil: 'networkidle' });
+    await page.getByTestId(`card-journey-${journeyId}`).click();
+    await page.getByTestId('card-timeline').waitFor({ state: 'visible' });
+    assert.equal((await page.getByTestId(`timeline-validity-${sim}`).innerText()).trim(), 'Attivante');
+    assert.equal((await page.getByTestId(`timeline-validity-${excluded}`).innerText()).trim(), 'SIM esclusa');
+    for (const id of [before, t6]) assert.equal((await page.getByTestId(`timeline-validity-${id}`).innerText()).trim(), 'Conta');
+    assert.equal((await page.getByTestId(`timeline-validity-${t7}`).innerText()).trim(), 'Non conta');
+    assert.equal(await page.getByTestId('driver-fisso').getAttribute('data-status'), 'valido');
+    assert.equal(await page.getByTestId('driver-energia').getAttribute('data-status'), 'valido');
+    assert.notEqual(await page.getByTestId('driver-telefono').getAttribute('data-status'), 'valido');
+    assert.equal((await page.getByTestId(`text-negozio-driver-validi-${pdv}`).innerText()).trim(), 'SIM+2',
+      'per-store label must exclude data SIMs and outside-window products too');
+    // The historical contract still has its economic state, independent of validity.
+    const economic = await pool.query(`SELECT economic_state FROM customer_journey_items WHERE id=$1`, [t7]);
+    assert.equal(economic.rows[0].economic_state, 'pagato');
+    await page.getByTestId('button-back').click();
+    await page.getByTestId('tab-report').click();
+    await page.getByTestId('button-report-tab-analisi').click();
+    await page.getByTestId(`row-gettone-${pdv}`).waitFor({ state: 'visible' });
+    assert.equal((await page.getByTestId(`text-gettone-sim-${pdv}`).innerText()).trim(), '1');
+    assert.match(await page.getByTestId(`text-gettone-fatturato-${pdv}`).innerText(), /30/);
+    assert.match(await page.getByTestId('text-gettone-fatturato-maturato').innerText(), /30/);
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});

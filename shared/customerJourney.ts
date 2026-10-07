@@ -57,6 +57,9 @@ export interface CjDriverSummary {
 // pagina "Reportistica" per aggregare per negozio / addetto / ragione sociale.
 // L'isolamento per operatore (solo i propri item) è applicato lato server.
 export interface CjReportRow {
+  categoria?: string | null;
+  tipologia?: string | null;
+  descrizione?: string | null;
   journeyId: string;
   customerKey: string;
   customerType: string;
@@ -75,7 +78,7 @@ export interface CjReportRow {
   openedAt: string | null;
   // Data evento dell'item (data attivazione, fallback data inserimento), ISO
   // string o null. Serve a stabilire se il contratto rientra nella finestra del
-  // gettone (dal mese di T0 in poi).
+  // gettone (mesi solari T0–T6 inclusi).
   eventDate: string | null;
   // Data di INSERIMENTO dell'item (`dataInserimento`), ISO string o null.
   // Distinta da `eventDate`/`openedAt` (che usano l'attivazione): l'analisi
@@ -255,6 +258,7 @@ export type CjReconcileResult = {
 
 export const CJ_T0_SHIFT_NOTIFICATION_STATUS = "cj_t0_shift" as const;
 export const CJ_GETTONE_TABLE: number[] = [0, 20, 30, 40, 100, 120];
+export const CJ_WINDOW_MONTHS = 6;
 
 // I 5 driver NON-mobile che concorrono al gettone (la mobile è il trigger,
 // non conta come pista cross-sell).
@@ -334,14 +338,14 @@ export function monthOfIso(iso: string | null | undefined): number | null {
 }
 
 // Una pista cross-sell rientra nella finestra del gettone se il suo contratto è
-// del mese di T0 (apertura journey) o successivo. I contratti dei mesi
-// precedenti NON contano. In assenza di T0 o di data evento (dato non
+// nel mese solare T0 o nei sei mesi successivi inclusi. I contratti fuori
+// T0–T6 NON contano. In assenza di T0 o di data evento (dato non
 // collocabile) non si penalizza: la pista conta comunque.
 export function pisteInWindow(eventDate: string | null, t0Month: number | null): boolean {
   if (t0Month == null) return true;
   const m = monthOfIso(eventDate);
   if (m == null) return true;
-  return m >= t0Month;
+  return m >= t0Month && m <= t0Month + CJ_WINDOW_MONTHS;
 }
 
 // Sintesi per-journey usata dall'analisi gettoni. Una riga per cliente.
@@ -388,6 +392,14 @@ export interface CjGettoneJourney {
  * riga report porta già il driver aggregato.
  */
 export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
+  const grouped = new Map<string, CjReportRow[]>();
+  for (const r of rows) {
+    const list = grouped.get(r.journeyId) ?? [];
+    list.push(r);
+    grouped.set(r.journeyId, list);
+  }
+  const t0ByJourney = new Map(Array.from(grouped, ([id, list]) =>
+    [id, cjT0Month(list.find(r => r.openedAt)?.openedAt ?? null, list)]));
   const map = new Map<string, {
     cliente: string; customerType: string;
     mobilePdv: string; mobileAddetto: string;
@@ -401,10 +413,6 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     // Candidati pista: driver non-mobile attivi con la loro data evento.
     // Il conteggio distinto in-finestra avviene dopo aver fissato T0.
     candidates: { driver: CjDriver; eventDate: string | null; pagato: boolean }[];
-    // Mesi degli item (mobile attivi e tutti) per il fallback di T0 quando
-    // `openedAt` è assente.
-    mobileMonths: number[];
-    allMonths: number[];
   }>();
   for (const r of rows) {
     let e = map.get(r.journeyId);
@@ -413,7 +421,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
         cliente: r.cliente, customerType: r.customerType,
         mobilePdv: "", mobileAddetto: "", anyPdv: "", anyAddetto: "",
         openedAt: r.openedAt ?? null, insertedAt: null, simAttive: 0,
-        candidates: [], mobileMonths: [], allMonths: [],
+        candidates: [],
       };
       map.set(r.journeyId, e);
     }
@@ -423,14 +431,11 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     // attivazione mobile, quindi il valore è univoco.
     e.anyPdv = minNonEmpty(e.anyPdv, r.pdv);
     e.anyAddetto = minNonEmpty(e.anyAddetto, r.addetto);
-    const eventMonth = monthOfIso(r.eventDate ?? null);
-    if (eventMonth != null) e.allMonths.push(eventMonth);
-    if (r.driver === "mobile") {
+    if (r.driver === "mobile" && isCjMobileEligible(r) && pisteInWindow(r.eventDate, t0ByJourney.get(r.journeyId) ?? null)) {
       e.mobilePdv = minNonEmpty(e.mobilePdv, r.pdv);
       e.mobileAddetto = minNonEmpty(e.mobileAddetto, r.addetto);
       if (isCjItemActive(r)) {
         e.simAttive += 1;
-        if (eventMonth != null) e.mobileMonths.push(eventMonth);
         // Coorte per data inserimento: teniamo la SIM mobile attiva più
         // vecchia (confronto per sola data UTC).
         const ins = r.insertedAt ?? null;
@@ -459,12 +464,9 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     .filter(([, e]) => e.simAttive >= 1)
     .map(([journeyId, e]) => {
       // T0 = mese di apertura journey; fallback alla prima SIM mobile attiva,
-      // poi al primo evento in assoluto. Solo i contratti dal mese di T0 in poi
+      // poi al primo evento in assoluto. Solo i mesi solari T0–T6 inclusi
       // contano come pista cross-sell.
-      const t0Month =
-        monthOfIso(e.openedAt) ??
-        (e.mobileMonths.length ? Math.min(...e.mobileMonths) : null) ??
-        (e.allMonths.length ? Math.min(...e.allMonths) : null);
+      const t0Month = t0ByJourney.get(journeyId) ?? null;
       const activeDrivers = new Set<CjDriver>();
       const paidDrivers = new Set<CjDriver>();
       for (const c of e.candidates) {
@@ -733,13 +735,22 @@ export function gettoneDetailByKey(
  * il riepilogo conta come singolo driver. L'ordine segue `CJ_DRIVER_ORDER`.
  */
 export function summarizeDrivers(
-  items: ({ driver: CjDriver } & CjStatePair)[],
+  items: CjSummaryItem[],
+  t0Month: number | null = null,
 ): CjDriverSummary[] {
   return CJ_DRIVER_ORDER.map((driver) => {
-    const driverItems = items.filter((it) => it.driver === driver);
+    const driverItems = items.filter((it) => it.driver === driver && cjSummaryItemInScope(it, t0Month));
     const activated = driverItems.some((it) => isCjItemActive(it));
     return { driver, activated, count: driverItems.length };
   });
+}
+
+type CjSummaryItem = CjStatePair & {
+  driver: CjDriver; eventDate?: string | null;
+  categoria?: string | null; tipologia?: string | null; descrizione?: string | null;
+};
+function cjSummaryItemInScope(it: CjSummaryItem, t0Month: number | null): boolean {
+  return (it.driver !== "mobile" || isCjMobileEligible(it)) && pisteInWindow(it.eventDate ?? null, t0Month);
 }
 
 /**
@@ -748,8 +759,8 @@ export function summarizeDrivers(
  * - se `myAddetti` è valorizzato (operatore) e l'addetto dell'item NON è fra i
  *   miei ⇒ candidato `altrui`;
  * - altrimenti se il contratto è nel periodo della journey (mese >= T0, stessa
- *   regola del gettone `pisteInWindow`) ⇒ candidato `periodo`;
- * - altrimenti (mese anteriore a T0) ⇒ candidato `precedente`.
+ *   regola del gettone `pisteInWindow`, fino a T6 incluso) ⇒ candidato `periodo`;
+ * - altrimenti (fuori T0–T6) ⇒ candidato `precedente` (nome storico della fase).
  * Precedenza per il singolo driver (una sola pastiglia): periodo > altrui >
  * precedente — se ho attivato io qualcosa nel periodo vince il verde.
  * `myAddetti == null` (admin/super_admin) ⇒ nessun concetto di "altrui".
@@ -788,11 +799,11 @@ export function classifyDriverPhase(
  * pastiglie driver per fase di attivazione.
  */
 export function summarizeDriversWithPhase(
-  items: ({ driver: CjDriver } & CjStatePair & { eventDate: string | null; addetto: string | null })[],
+  items: (CjSummaryItem & { eventDate: string | null; addetto: string | null })[],
   opts: { t0Month: number | null; myAddetti: string[] | null },
 ): CjDriverSummary[] {
   return CJ_DRIVER_ORDER.map((driver) => {
-    const driverItems = items.filter((it) => it.driver === driver);
+    const driverItems = items.filter((it) => it.driver === driver && cjSummaryItemInScope(it, opts.t0Month));
     const activated = driverItems.some((it) => isCjItemActive(it));
     const phase = activated ? classifyDriverPhase(driverItems, opts) : null;
     return { driver, activated, count: driverItems.length, phase };
@@ -834,6 +845,33 @@ export function driverFromCategory(categoria: string | null | undefined): CjDriv
  */
 export function isMobileActivationCategory(categoria: string | null | undefined): boolean {
   return MOBILE_CATEGORIES.has(normCat(categoria));
+}
+
+// Classificazione esclusivamente CJ, indipendente dalle piste/punteggi Gara.
+// DATI/DATA devono indicare un'offerta dati, non i giga inclusi in una voce.
+export function isCjMobileEligible(article: {
+  driver?: string; categoria?: string | null; tipologia?: string | null; descrizione?: string | null;
+}): boolean {
+  if (article.driver != null && article.driver !== "mobile") return false;
+  if (article.driver !== "mobile" && !isMobileActivationCategory(article.categoria)) return false;
+  const tipo = normCat(article.tipologia).replace(/[_-]+/g, " ");
+  const desc = normCat(article.descrizione).replace(/[_-]+/g, " ");
+  if (/\b(?:TOURIST|TURISTICHE|TURISTICA|TURISTICO)\b/.test(`${tipo} ${desc}`)) return false;
+  if (tipo === "ALTRE GA NON TURISTICHE") return false;
+  if (/\bSIM\s+(?:PER\s+)?ALLARM[EI]\b|\bALLARM[EI]\s+SIM\b/.test(`${tipo} ${desc}`)) return false;
+  if (/\bDATI\b|\bDATA\b/.test(tipo) && !/\bVOCE\b/.test(tipo)) return false;
+  if (/\b(?:SIM|RICARICABILE|OFFERTA|PROFESSIONAL|SUPER|CUBE)\s+(?:SOLO\s+)?(?:DATI|DATA)\b|\b(?:DATI|DATA)\s+(?:EASYPAY|IVA|ONLY)\b/.test(desc)) return false;
+  return true;
+}
+
+export function cjT0Month(openedAt: string | null, items: (CjStatePair & {
+  driver: string; eventDate: string | null;
+  categoria?: string | null; tipologia?: string | null; descrizione?: string | null;
+})[]): number | null {
+  const months = (rows: typeof items) => rows.map(it => monthOfIso(it.eventDate)).filter((m): m is number => m != null);
+  const mobile = months(items.filter(it => it.driver === "mobile" && isCjMobileEligible(it) && isCjItemActive(it)));
+  const all = months(items);
+  return monthOfIso(openedAt) ?? (mobile.length ? Math.min(...mobile) : null) ?? (all.length ? Math.min(...all) : null);
 }
 
 /** Sotto-tipo energia dalla tipologia: 'gas' | 'luce' | null. */

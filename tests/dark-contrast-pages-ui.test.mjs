@@ -134,13 +134,14 @@ test('Task #482 — contrasto scuro su Dashboard Gara, CdG e Customer Journey co
     // Questa org ha anche vendite BiSuite seminate (per la Dashboard): il GET
     // della lista CJ farebbe partire l'auto-reconcile, che deriva le journey
     // dalle vendite e POTA quelle non derivabili (la nostra, seminata a mano).
-    // Marchiamo il watermark come già allineato così il reconcile non scatta.
+    // Marchiamo watermark ed eleggibilità come già allineati così il reconcile
+    // non scatta neppure durante l'upgrade della classificazione delle SIM.
     await pool.query(
       `INSERT INTO organization_config (organization_id, config, config_version)
-         VALUES ($1, jsonb_build_object('customerJourneyReconciledAt', to_jsonb(now())), '2.0')
+         VALUES ($1, jsonb_build_object('customerJourneyReconciledAt', to_jsonb(now()), 'customerJourneyEligibilityVersion', 1), '2.0')
        ON CONFLICT (organization_id)
          DO UPDATE SET config = COALESCE(organization_config.config, '{}'::jsonb)
-                         || jsonb_build_object('customerJourneyReconciledAt', to_jsonb(now()))`,
+                         || jsonb_build_object('customerJourneyReconciledAt', to_jsonb(now()), 'customerJourneyEligibilityVersion', 1)`,
       [session.orgId],
     );
     const journeyId = await seedJourney(pool, session.orgId, {

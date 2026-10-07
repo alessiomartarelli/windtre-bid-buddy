@@ -10,7 +10,7 @@ import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions, retargetCaringSavedRules } from "../shared/bisuiteMapping";
 import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanitizeGrantableModules, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, CJ_ECONOMIC_STATES, type CjItemState, type CjEconomicState, type CjDriver, insertBrandSchema } from "@shared/schema";
-import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
+import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers, cjT0Month } from "@shared/customerJourney";
 import { ACCENT_PRESET_IDS, DASHBOARD_STYLE_IDS, SALES_STYLE_IDS, SCHEME_IDS, THEME_IDS } from "@shared/uiPrefs";
 import { AVATAR_MAX_BYTES } from "@shared/avatar";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
@@ -4281,7 +4281,11 @@ export async function registerRoutes(
       // Un driver è "attivato" se ha almeno un item in stato non KO e non
       // stornato. L'energia distingue gas/luce ma per il riepilogo conta come
       // singolo driver attivabile.
-      const drivers = summarizeDrivers(items.map((it) => ({ driver: it.driver as CjDriver, state: it.state as CjItemState, economicState: it.economicState })));
+      const summaryItems = items.map((it) => ({
+        ...it, driver: it.driver as CjDriver, state: it.state as CjItemState,
+        eventDate: (it.dataAttivazione ?? it.dataInserimento)?.toISOString() ?? null,
+      }));
+      const drivers = summarizeDrivers(summaryItems, cjT0Month(journey.openedAt?.toISOString() ?? null, summaryItems));
 
       res.json({ journey, items, drivers });
     } catch (error) {

@@ -1,5 +1,5 @@
 import type { CustomerJourney, CustomerJourneyItem } from "@shared/schema";
-import { isCjItemActive, isMobileActivationCategory, monthOfIso, pisteInWindow } from "../../../shared/customerJourney";
+import { isCjItemActive, isCjMobileEligible, cjT0Month, CJ_WINDOW_MONTHS, pisteInWindow } from "../../../shared/customerJourney";
 
 // === Logica pura del tracciamento temporale Customer Journey (Task #185) ===
 // Estratta dal componente React (`CustomerJourney.tsx`) per poterla testare a
@@ -39,7 +39,7 @@ export function itemEventDate(it: CustomerJourneyItem): Date | null {
 
 // Indice mese assoluto (anno*12 + mese) per ordinare/diffare i mesi.
 export function monthIndex(d: Date): number {
-  return d.getFullYear() * 12 + d.getMonth();
+  return d.getUTCFullYear() * 12 + d.getUTCMonth();
 }
 
 export function monthIndexLabel(mi: number): string {
@@ -72,6 +72,7 @@ export interface TimelineRow {
 }
 
 export interface TimelineModel {
+  items?: CustomerJourneyItem[];
   // Se true: nessun contratto con data ⇒ la timeline mostra lo stato vuoto.
   empty: boolean;
   t0Date: Date | null;
@@ -99,7 +100,7 @@ export function computeTimeline(
   const t0Date =
     toDateOrNull(journey.openedAt) ??
     withDate
-      .filter((d) => d.it.driver === "mobile")
+      .filter((d) => d.it.driver === "mobile" && isCjMobileEligible(d.it) && isCjItemActive(d.it))
       .sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date ??
     [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date ??
     null;
@@ -107,6 +108,7 @@ export function computeTimeline(
   if (!t0Date || withDate.length === 0) {
     return {
       empty: true,
+      items,
       t0Date: null,
       t0mi: 0,
       t6mi: 0,
@@ -119,7 +121,7 @@ export function computeTimeline(
   }
 
   const t0mi = monthIndex(t0Date);
-  const t6mi = t0mi + 6;
+  const t6mi = t0mi + CJ_WINDOW_MONTHS;
   const eventMis = withDate.map((d) => monthIndex(d.date));
   const startMi = Math.min(t0mi, ...eventMis);
   const endMi = Math.max(t6mi, ...eventMis);
@@ -129,17 +131,16 @@ export function computeTimeline(
   // Item che ha aperto la journey (T0). La vendita trigger può contenere più
   // articoli (SIM + fisso + smartphone nello stesso scontrino BiSuite): il T0
   // va sulla SIM mobile attivante di quella vendita, MAI sul fisso/telefono.
-  // Precedenza (stessa regola del server, che apre la journey solo su una
-  // categoria mobile attivante): attivante della vendita trigger → qualsiasi
-  // mobile della vendita trigger → altro articolo della vendita trigger →
-  // prima attivazione mobile per data → primo mobile per data → primo evento
-  // in assoluto.
+  // Precedenza (il server apre la journey solo su una SIM ammessa):
+  // SIM ammessa della vendita trigger → articolo non-mobile della vendita
+  // trigger (dati legacy) → prima SIM ammessa per data → primo non-mobile.
+  // Le SIM escluse non possono essere scelte neppure nei fallback.
   const t0ItemId = (() => {
     const inTriggerSale = (it: CustomerJourneyItem): boolean =>
       (!!journey.triggerSaleId && it.bisuiteSaleId === journey.triggerSaleId) ||
       (journey.triggerBisuiteId != null && it.bisuiteId === journey.triggerBisuiteId);
     const isActivatingMobile = (it: CustomerJourneyItem): boolean =>
-      it.driver === "mobile" && isMobileActivationCategory(it.categoria);
+      it.driver === "mobile" && isCjMobileEligible(it);
     // Ordine deterministico (data evento ASC, poi id): il server restituisce
     // gli item per data_inserimento DESC e a parità di data l'ordine è
     // indefinito, quindi non ci si può affidare a items[0]. Gli item senza
@@ -155,15 +156,12 @@ export function computeTimeline(
     // Grazie all'ordinamento sopra è il PRIMO per data evento, non items[0].
     const byTrigger =
       triggerItems.find(isActivatingMobile) ??
-      triggerItems.find((it) => it.driver === "mobile") ??
-      triggerItems[0];
+      triggerItems.find(it => it.driver !== "mobile");
     if (byTrigger) return byTrigger.id;
-    const byDate = [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const byDate = [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime() || String(a.it.id).localeCompare(String(b.it.id)));
     const firstActivating = byDate.find((d) => isActivatingMobile(d.it));
     if (firstActivating) return firstActivating.it.id;
-    const firstMobile = byDate.find((d) => d.it.driver === "mobile");
-    if (firstMobile) return firstMobile.it.id;
-    return byDate[0]?.it.id;
+    return byDate.find(d => d.it.driver !== "mobile")?.it.id;
   })();
 
   // Una riga per contratto, ordinata per data evento.
@@ -171,6 +169,7 @@ export function computeTimeline(
 
   return {
     empty: false,
+    items,
     t0Date,
     t0mi,
     t6mi,
@@ -188,10 +187,10 @@ export function computeTimeline(
 //   - "attivante": la SIM mobile che ha aperto la journey (T0). È il trigger,
 //     non una pista cross-sell.
 //   - "valida": pista cross-sell che conta (driver non-mobile, stato attivo,
-//     contratto dal mese di T0 in poi, primo del suo driver in finestra).
+//     contratto nei mesi solari T0–T6 inclusi, primo del suo driver in finestra).
 //   - "non_pista": SIM mobile aggiuntiva (non è una pista cross-sell).
 //   - "stato_non_valido": stato ko/annullato/stornato.
-//   - "fuori_periodo": contratto di un mese precedente a T0.
+//   - "fuori_periodo": contratto di un mese precedente a T0 o successivo a T6.
 //   - "driver_duplicato": pista già conteggiata per quel driver (es. 2ª
 //     fornitura energia o 2º contratto stesso driver in finestra).
 export type CjItemValidityKind =
@@ -200,6 +199,7 @@ export type CjItemValidityKind =
   | "non_pista"
   | "stato_non_valido"
   | "fuori_periodo"
+  | "sim_esclusa"
   | "driver_duplicato";
 
 export interface CjItemValidity {
@@ -208,10 +208,10 @@ export interface CjItemValidity {
   counts: boolean;
 }
 
-// Calcola la validità di ogni item mostrato nella timeline (gli item con data).
+// Calcola la validità di tutti gli item, anche quelli senza data.
 // Usa ESATTAMENTE il criterio del gettone condiviso (`buildGettoneJourneys`):
-// piste = driver non-mobile distinti attivi con data evento nel mese di T0 o
-// successivo (`pisteInWindow`, mesi UTC via `monthOfIso`). Il mese di T0 segue la
+// piste = driver non-mobile distinti attivi nei mesi solari T0–T6 inclusi
+// (`pisteInWindow`, mesi UTC). Il mese di T0 segue la
 // stessa precedenza del gettone: apertura journey, poi prima SIM mobile ATTIVA,
 // poi primo evento in assoluto. La SIM mobile che apre la journey (trigger
 // mostrato dalla timeline) è "attivante", non una pista cross-sell.
@@ -224,31 +224,32 @@ export function computeItemValidity(
 
   // Mesi (UTC) per il fallback di T0, raccolti come nel gettone: dalle SIM
   // mobile ATTIVE e da tutti gli eventi datati.
-  const mobileMonths: number[] = [];
-  const allMonths: number[] = [];
-  for (const { it, date } of model.rows) {
-    const m = monthOfIso(isoOf(date));
-    if (m == null) continue;
-    allMonths.push(m);
-    if (it.driver === "mobile" && isCjItemActive(it)) {
-      mobileMonths.push(m);
-    }
-  }
-  const t0Month =
-    monthOfIso(isoOf(toDateOrNull(journey.openedAt))) ??
-    (mobileMonths.length ? Math.min(...mobileMonths) : null) ??
-    (allMonths.length ? Math.min(...allMonths) : null);
+  const allItems = model.items ?? model.rows.map(r => r.it);
+  const t0Month = cjT0Month(isoOf(toDateOrNull(journey.openedAt)),
+    allItems.map(it => ({ ...it, eventDate: isoOf(itemEventDate(it)) })));
 
   // Driver già conteggiati come pista in finestra: il primo (per data, perché
   // `model.rows` è ordinato) vince, gli altri dello stesso driver sono
   // "driver_duplicato" (es. gas + luce = una pista sola).
   const counted = new Set<string>();
-  for (const { it, date } of model.rows) {
+  const validityRows = [
+    ...model.rows,
+    ...allItems.filter(it => !itemEventDate(it)).map(it => ({ it, date: null })),
+  ];
+  for (const { it, date } of validityRows) {
+    if (it.driver === "mobile" && !isCjMobileEligible(it)) {
+      out.set(it.id, { kind: "sim_esclusa", counts: false });
+      continue;
+    }
     // "Attivante" SOLO se l'item T0 è la SIM mobile trigger. Se per dati sporchi
     // o fallback il T0 della timeline è un contratto non-mobile, NON va escluso:
     // deve cadere nella normale classificazione pista come nel gettone (che
     // esclude solo i driver mobile), così le label non possono divergere dal
     // conteggio.
+    if (it.driver === "mobile" && !pisteInWindow(isoOf(date), t0Month)) {
+      out.set(it.id, { kind: "fuori_periodo", counts: false });
+      continue;
+    }
     if (it.id === model.t0ItemId && it.driver === "mobile") {
       out.set(it.id, { kind: "attivante", counts: false });
       continue;
@@ -283,6 +284,7 @@ export const CJ_VALIDITY_LABELS: Record<CjItemValidityKind, string> = {
   stato_non_valido: "Non conta",
   fuori_periodo: "Non conta",
   driver_duplicato: "Non conta",
+  sim_esclusa: "SIM esclusa",
 };
 
 // Spiegazione estesa del perché un contratto conta o no (tooltip della scheda).
@@ -291,7 +293,8 @@ export const CJ_VALIDITY_REASONS: Record<CjItemValidityKind, string> = {
   valida: "Pista cross-sell valida: conta per la journey e per il gettone.",
   non_pista: "SIM mobile aggiuntiva: non è una pista cross-sell.",
   stato_non_valido: "Stato ko/annullato/stornato: non conta per il gettone.",
-  fuori_periodo: "Contratto di un mese precedente all'attivazione SIM: non conta per il gettone.",
+  fuori_periodo: "Contratto fuori dai mesi solari T0–T6 inclusi: non conta per il gettone.",
+  sim_esclusa: "SIM dati, Tourist o allarme: esclusa da apertura, coorte e conteggi SIM della Customer Journey.",
   driver_duplicato: "Pista dello stesso tipo già conteggiata per questo cliente.",
 };
 
@@ -309,7 +312,7 @@ export function cjT6Deadline(openedAt: string | Date | null | undefined): Date |
   const y = t0.getUTCFullYear();
   const m = t0.getUTCMonth();
   // Giorno 0 del mese (m+7) = ultimo giorno del mese (m+6) = mese di T6.
-  return new Date(Date.UTC(y, m + 7, 0, 23, 59, 59, 999));
+  return new Date(Date.UTC(y, m + CJ_WINDOW_MONTHS + 1, 0, 23, 59, 59, 999));
 }
 
 // Giorni residui (interi) fino alla scadenza T6.

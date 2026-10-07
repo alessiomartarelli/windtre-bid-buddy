@@ -2298,6 +2298,10 @@ function CustomerJourneyTimeline({
   return (
     <Card data-testid="card-timeline">
       <CardHeader>
+        <CardDescription>
+          Contano i prodotti dei mesi solari T0–T6 inclusi, anche prima della SIM nello stesso mese.
+          SIM dati, Tourist e SIM allarme sono escluse. Lo storico fuori periodo resta visibile.
+        </CardDescription>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <CardTitle className="text-base">Tracciamento temporale</CardTitle>
           <div className="flex flex-wrap gap-x-3 gap-y-1.5" data-testid="timeline-legend">
@@ -2471,7 +2475,8 @@ function JourneyBreakdown({
   const validity = computeItemValidity(model, journey);
   const drvValidiLabel = (negItems: CustomerJourneyItem[]): string => {
     const simCount = negItems.filter(
-      (it) => it.driver === "mobile" && isCjItemActive(it),
+      (it) => it.driver === "mobile" && isCjItemActive(it)
+        && ["attivante", "non_pista"].includes(validity.get(it.id)?.kind ?? ""),
     ).length;
     const validPiste = negItems.filter(
       (it) => validity.get(it.id)?.counts,

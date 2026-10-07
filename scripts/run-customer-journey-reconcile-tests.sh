@@ -26,4 +26,4 @@ for i in $(seq 1 30); do
 done
 
 # --import tsx: la suite importa la logica pura del gettone da shared/customerJourney.ts.
-exec node --import tsx --test tests/customer-journey-reconcile.test.mjs
+exec node --import tsx --test tests/customer-journey-reconcile.test.mjs tests/customer-journey-eligibility-reconcile.test.mjs

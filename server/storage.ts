@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, cjDrmsOutcomeRuns, type CjDrmsOutcomeRun, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
+import { driverFromCategory, isCjMobileEligible, cjT0Month, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
 import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
 
 // Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
@@ -1400,6 +1400,9 @@ export class DatabaseStorage implements IStorage {
     const rows = await db.select({
       journeyId: customerJourneyItems.journeyId,
       driver: customerJourneyItems.driver,
+      categoria: customerJourneyItems.categoria,
+      tipologia: customerJourneyItems.tipologia,
+      descrizione: customerJourneyItems.descrizione,
       state: customerJourneyItems.state,
       economicState: customerJourneyItems.economicState,
       dataAttivazione: customerJourneyItems.dataAttivazione,
@@ -1407,13 +1410,14 @@ export class DatabaseStorage implements IStorage {
       addetto: customerJourneyItems.addetto,
     }).from(customerJourneyItems)
       .where(inArray(customerJourneyItems.journeyId, journeyIds));
-    type PhaseItem = { driver: CjDriver; state: CjItemState; economicState: string | null; eventDate: string | null; addetto: string | null };
+    type PhaseItem = { driver: CjDriver; state: CjItemState; economicState: string | null; eventDate: string | null; addetto: string | null; categoria: string | null; tipologia: string | null; descrizione: string | null };
     const byJourney = new Map<string, PhaseItem[]>();
     for (const r of rows) {
       const list = byJourney.get(r.journeyId) ?? [];
       const evt = r.dataAttivazione ?? r.dataInserimento ?? null;
       list.push({
         driver: r.driver as CjDriver,
+        categoria: r.categoria, tipologia: r.tipologia, descrizione: r.descrizione,
         state: r.state as CjItemState,
         economicState: r.economicState ?? null,
         eventDate: evt ? evt.toISOString() : null,
@@ -1426,7 +1430,7 @@ export class DatabaseStorage implements IStorage {
       const items = byJourney.get(id) ?? [];
       if (opts) {
         const openedAt = opts.openedAt?.get(id) ?? null;
-        const t0Month = monthOfIso(openedAt ? openedAt.toISOString() : null);
+        const t0Month = cjT0Month(openedAt ? openedAt.toISOString() : null, items);
         out.set(id, summarizeDriversWithPhase(items, { t0Month, myAddetti }));
       } else {
         out.set(id, summarizeDrivers(items));
@@ -1540,6 +1544,9 @@ export class DatabaseStorage implements IStorage {
       ragioneSociale: customerJourneys.ragioneSociale,
       nominativo: customerJourneys.nominativo,
       openedAt: customerJourneys.openedAt,
+      categoria: customerJourneyItems.categoria,
+      tipologia: customerJourneyItems.tipologia,
+      descrizione: customerJourneyItems.descrizione,
       pdvDestinazione: customerJourneyItems.pdvDestinazione,
       pdvOrigine: customerJourneyItems.pdvOrigine,
       addetto: customerJourneyItems.addetto,
@@ -1561,6 +1568,7 @@ export class DatabaseStorage implements IStorage {
       const v = r.importo != null ? parseFloat(String(r.importo)) : NaN;
       return {
         journeyId: r.journeyId,
+        categoria: r.categoria, tipologia: r.tipologia, descrizione: r.descrizione,
         customerKey: r.customerKey,
         customerType: r.customerType,
         cliente,
@@ -1832,7 +1840,7 @@ export class DatabaseStorage implements IStorage {
         if (!driver) continue;
 
         // Trigger journey: nuova attivazione mobile dalla data configurata.
-        if (driver === "mobile" && isMobileActivationCategory(categoria)
+        if (driver === "mobile" && isCjMobileEligible({ categoria, tipologia, descrizione: art?.descrizione })
             && !isAnnullata && saleDate && saleDate >= triggerDate) {
           // Tie-break deterministico a parità di data (l'ordine di lettura
           // delle vendite non è garantito): vince il bisuiteId più basso.
@@ -2070,6 +2078,9 @@ export class DatabaseStorage implements IStorage {
         SET config = ((COALESCE(organization_config.config, '{}'::jsonb) - 'customerJourneyReconciledAt')
                       || ${salesSnapshotAt ? sql`jsonb_build_object('customerJourneyReconciledAt', ${salesSnapshotAt.toISOString()}::text)` : sql`'{}'::jsonb`}),
             updated_at = now()`);
+    await tx.execute(sql`UPDATE organization_config
+      SET config = config || '{"customerJourneyEligibilityVersion":1}'::jsonb
+      WHERE organization_id = ${orgId}`);
 
     return {
       journeys: journeyCount,
@@ -2153,7 +2164,9 @@ export class DatabaseStorage implements IStorage {
     const lastSync = await this.getLastBisuiteSync(orgId);
     if (!lastSync) return { reconciled: false }; // nessuna vendita: niente da fare
     const watermark = await this.getCustomerJourneyReconciledAt(orgId);
-    if (watermark && lastSync.getTime() <= watermark.getTime()) {
+    const cfg = await this.getOrgConfig(orgId);
+    const eligibilityCurrent = (cfg?.config as any)?.customerJourneyEligibilityVersion === 1;
+    if (eligibilityCurrent && watermark && lastSync.getTime() <= watermark.getTime()) {
       return { reconciled: false }; // già allineato
     }
     await this.reconcileCustomerJourneys(orgId);

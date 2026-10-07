@@ -861,7 +861,8 @@ test('summarizeDriversWithPhase: activated + phase per driver, null se assente',
   const byDriver = Object.fromEntries(out.map((d) => [d.driver, d]));
   assert.equal(byDriver.mobile.activated, true);
   assert.equal(byDriver.mobile.phase, 'periodo');
-  assert.equal(byDriver.fisso.phase, 'precedente');
+  assert.equal(byDriver.fisso.activated, false, 'historical contracts stay visible but do not activate drivers');
+  assert.equal(byDriver.fisso.phase, null);
   assert.equal(byDriver.energia.activated, false);
   assert.equal(byDriver.energia.phase, null, 'driver non attivato => phase null');
 });
