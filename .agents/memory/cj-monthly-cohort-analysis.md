@@ -46,3 +46,9 @@ La reportistica deve consentire di scegliere il mese di apertura delle CJ e un m
 **Why:** l'utente ha chiesto «i non più qualificati vanno separati dai clienti attivi in cj e mostrati in schede separate».
 
 **How to apply:** l'appartenenza dipende da almeno una SIM eleggibile ancora valida, non dalla presenza di prodotti cross-sell. Un'altra SIM valida mantiene il cliente fra gli attivi. La separazione degli elenchi non modifica il denominatore fisso del confronto storico delle coorti.
+
+**Vista principale essenziale:** mostrare una tabella con i livelli di prodotti aggiuntivi oltre alla SIM sulle righe e i mesi sulle colonne, seguita da clienti con almeno un prodotto e percentuale della coorte. Le analisi economiche e gli elenchi approfonditi restano secondari e chiusi inizialmente.
+
+**Why:** l'utente ha segnalato troppe informazioni nelle coorti e fornito come riferimento una semplice tabella «Evoluzione della coorte di luglio».
+
+**How to apply:** preservare il confronto cumulativo a coorte fissa senza riportare nella vista principale KPI, movimenti economici o diagnostica estesa. I non più qualificati non diventano clienti con zero prodotti.

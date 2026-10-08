@@ -32,6 +32,12 @@ test("CJ membership panels separate cards, date filters, navigation and Excel", 
       driver: "mobile", categoria: "UNTIED", dataInserimento: "2026-07-07",
     });
     await pool.query(`UPDATE customer_journey_items SET economic_state='annullato' WHERE id=$1`, [lost]);
+    await addJourneyItem(pool, session.orgId, active, {
+      driver: "fisso", dataInserimento: "2026-07-20",
+    });
+    await addJourneyItem(pool, session.orgId, active, {
+      driver: "energia", dataInserimento: "2026-08-10",
+    });
     const context = await newAuthedContext(browser, session);
     const page = await context.newPage();
     await page.goto(`${BASE}/customer-journey`, { waitUntil: "networkidle" });
@@ -62,6 +68,24 @@ test("CJ membership panels separate cards, date filters, navigation and Excel", 
     await card(exited).waitFor({ state: "visible" });
     await page.getByRole("button", { name: "Reportistica", exact: true }).click();
     await page.getByRole("button", { name: "Coorti mensili", exact: true }).click();
+    const evolution = page.getByTestId("cohort-evolution-table");
+    await evolution.getByRole("heading", { name: /Evoluzione della coorte di luglio 2026/ }).waitFor();
+    assert.match(await evolution.innerText(), /Fine luglio/i);
+    assert.match(await evolution.innerText(), /Fine agosto/i);
+    const evolutionRow = label => evolution.getByRole("row").filter({
+      has: page.getByRole("rowheader", { name: label, exact: true }),
+    });
+    assert.deepEqual(await evolutionRow("1 prodotto").getByRole("cell").allTextContents(),
+      ["1", ...Array((await evolutionRow("1 prodotto").getByRole("cell").count()) - 1).fill("0")]);
+    const twoProductCells = await evolutionRow("2 prodotti").getByRole("cell").allTextContents();
+    assert.equal(twoProductCells[0], "0");
+    assert.ok(twoProductCells.slice(1).every(value => value === "1"));
+    assert.ok((await evolutionRow("% della coorte").getByRole("cell").allTextContents()).every(value => value === "50,0%"));
+    const advanced = page.getByTestId("cohort-advanced-details");
+    assert.equal(await advanced.getAttribute("open"), null, "financial analytics are collapsed initially");
+    assert.equal(await page.getByTestId("cohort-clients-panel").isVisible(), false);
+    await evolution.screenshot({ path: "/tmp/cj-cohort-evolution.png" });
+    await advanced.locator("summary").click();
     const panel = page.getByTestId("cohort-clients-panel");
     await page.getByTestId("cohort-clients-active").click();
     await panel.getByText("Cliente attivo", { exact: true }).waitFor();
@@ -72,10 +96,17 @@ test("CJ membership panels separate cards, date filters, navigation and Excel", 
     const cohortDownloadPending = page.waitForEvent("download");
     await page.getByTestId("cohort-report").getByTestId("export").click();
     const cohortBook = XLSX.read(fs.readFileSync(await (await cohortDownloadPending).path()), { type: "buffer" });
+    assert.equal(cohortBook.SheetNames[0], "Evoluzione coorte");
+    const evolutionExport = XLSX.utils.sheet_to_json(cohortBook.Sheets["Evoluzione coorte"]);
+    assert.equal(evolutionExport[1]["Fine luglio 2026"], 1);
+    assert.equal(evolutionExport[2]["Fine agosto 2026"], 1);
+    assert.equal(evolutionExport.at(-1)["Fine settembre 2026"], "50,0%");
     assert.match(JSON.stringify(XLSX.utils.sheet_to_json(cohortBook.Sheets["Clienti attivi"])), /Cliente attivo/);
     assert.doesNotMatch(JSON.stringify(XLSX.utils.sheet_to_json(cohortBook.Sheets["Clienti attivi"])), /Cliente uscito/);
     assert.match(JSON.stringify(XLSX.utils.sheet_to_json(cohortBook.Sheets["Non più qualificati"])), /Cliente uscito/);
     await page.setViewportSize({ width: 375, height: 812 });
+    await advanced.locator("summary").click();
+    await evolution.scrollIntoViewIfNeeded();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     await page.screenshot({ path: "/tmp/cj-membership-mobile.png" });
     await context.close();

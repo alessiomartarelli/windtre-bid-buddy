@@ -1,6 +1,6 @@
 import { Children } from "react";
 import type { ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, CircleHelp, Users } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CjProgression } from "@shared/customerJourneyProgression";
@@ -11,77 +11,53 @@ const monthName = (value: string | null) => {
   return new Date(year, month - 1, 1).toLocaleDateString("it-IT", { month: "long", year: "numeric" });
 };
 const number = (value: number) => value.toLocaleString("it-IT");
-const signed = (value: number) => `${value > 0 ? "+" : ""}${number(value)}`;
-const binLabels = ["0 piste", "1 pista", "2 piste", "3 piste", "4 piste", "5 o più"];
 
 interface CohortProgressionProps {
   progression: CjProgression;
   cohortSelected: boolean;
+  cohortMonth: string;
   onOpenJourney: (id: string) => void;
 }
 
-export default function CohortProgression({ progression, cohortSelected, onOpenJourney }: CohortProgressionProps) {
+export default function CohortProgression({ progression, cohortSelected, cohortMonth, onOpenJourney }: CohortProgressionProps) {
+  const hasFivePlus = progression.months.some(row => (row.bins[5] ?? 0) > 0);
+  const todayLabel = new Date().toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+  const periodLabel = (row: CjProgression["months"][number]) =>
+    row.isPartial ? `Al ${todayLabel}` : `Fine ${new Date(Number(row.month.slice(0, 4)), Number(row.month.slice(5, 7)) - 1, 1).toLocaleDateString("it-IT", { month: "long" })}`;
   return <div className="space-y-4" data-testid="cj-progression">
-    <section className="overflow-hidden rounded-xl border border-primary/20 bg-card">
-      <div className="flex flex-col gap-3 border-b border-border bg-primary/[0.035] p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
-        <div>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border-primary/30 bg-primary/5">CONFRONTO A COORTE FISSA</Badge>
-            <span className="text-xs text-muted-foreground">acquisti cumulativi per mese</span>
-          </div>
-          <h3 className="text-lg font-semibold tracking-tight">La stessa clientela, mese dopo mese</h3>
-          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-            Distribuzione cumulativa dei clienti per piste distinte acquistate. Il denominatore resta fisso e include chi oggi non ha più SIM valide; le uscite sono indicate separatamente.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 rounded-lg border border-border bg-background/70 px-3 py-2 text-xs text-muted-foreground">
-          <Users className="h-4 w-4 text-primary" />
-          I conteggi non sono volumi di contratti
-        </div>
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm" data-testid="cohort-evolution-table">
+      <div className="border-b border-border px-4 py-4 sm:px-6">
+        <h3 className="text-lg font-semibold tracking-tight">{cohortSelected ? `Evoluzione della coorte di ${monthName(cohortMonth)}` : "Evoluzione della coorte"}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">I conteggi includono i prodotti validi dei clienti ancora qualificati; la coorte mantiene il denominatore fisso, inclusi i non più qualificati.</p>
       </div>
-
-      {!cohortSelected ? <div className="m-4 flex gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/[0.035] p-4 sm:m-5">
-        <CircleHelp className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-        <div><p className="text-sm font-medium">Seleziona un solo mese di coorte</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Il confronto cumulativo è significativo su una clientela acquisita nello stesso mese. Seleziona un mese nel filtro “Mese coorte”; le SIM attualmente cadute restano consultabili qui sotto.</p></div>
-      </div> : progression.months.length === 0 ? <p className="p-6 text-sm text-muted-foreground">Non ci sono mesi confrontabili per questa coorte.</p> : <>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-left text-xs">
-            <thead className="bg-muted/40 text-muted-foreground">
-              <tr>
-                <th className="sticky left-0 z-10 bg-muted/90 px-3 py-3 font-medium">Mese</th>
-                <th className="px-3 py-3 font-medium">Clienti fissi</th>
-                <th className="px-3 py-3 font-medium">Clienti con SIM valida oggi</th>
-                {binLabels.map(label => <th key={label} className="px-3 py-3 font-medium">{label}</th>)}
-                <th className="px-3 py-3 font-medium">Prima pista</th>
-                <th className="px-3 py-3 font-medium">Da 1 a 2+</th>
-                <th className="px-3 py-3 font-medium">SIM cadute nel mese</th>
-              </tr>
-            </thead>
-            <tbody>{progression.months.map((row, index) => <tr key={row.month} className={`border-t border-border ${row.isPartial ? "bg-primary/[0.035]" : ""}`}>
-              <td className="sticky left-0 bg-card px-3 py-3 font-medium capitalize">{monthName(row.month)}{row.isPartial && <span className="ml-1 text-[10px] font-normal text-muted-foreground">· parziale</span>}</td>
-              <td className="px-3 py-3 tabular-nums">{number(row.clients)}<span className="ml-1 text-muted-foreground">fissi</span></td>
-              <td className="px-3 py-3 tabular-nums">{number(row.activeClients)}<span className="ml-1 text-muted-foreground">attivi</span><span className="block text-[10px] text-muted-foreground">{number(row.inactiveClients)} non più qualificati</span></td>
-              {row.bins.map((count, bin) => <td key={bin} className="px-3 py-3 tabular-nums">
-                <span className="font-medium">{number(count)}</span>
-                {row.deltas && <span className={`ml-1 whitespace-nowrap text-[10px] ${row.deltas[bin] > 0 ? "text-emerald-700 dark:text-emerald-300" : row.deltas[bin] < 0 ? "text-rose-700 dark:text-rose-300" : "text-muted-foreground"}`}>
-                  ({signed(row.deltas[bin])})
-                </span>}
-              </td>)}
-              <td className="px-3 py-3 tabular-nums">{number(row.firstProduct)}</td>
-              <td className="px-3 py-3 tabular-nums">{number(row.fromOneToMore)}</td>
-              <td className="px-3 py-3 tabular-nums">{number(row.droppedSims)}</td>
-            </tr>)}</tbody>
-          </table>
-        </div>
-        <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
-          <span>Tra parentesi: differenza rispetto al mese precedente.</span>
-          <span>Clienti con almeno una pista: {progression.months.at(-1)?.withProducts ?? 0} · {progression.months.at(-1)?.percentage.toLocaleString("it-IT", { maximumFractionDigits: 1 }) ?? "0"}% del denominatore.</span>
-          <span>Clienti avanzati nell’ultimo mese: {progression.months.at(-1)?.advanced ?? 0}.</span>
-        </div>
-      </>}
+      {!cohortSelected || progression.months.length === 0 ? <p className="p-6 text-sm text-muted-foreground">Non ci sono mesi confrontabili per questa coorte.</p> : <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] text-left text-sm">
+          <thead className="bg-muted/45 text-muted-foreground"><tr>
+            <th scope="col" className="sticky left-0 z-10 min-w-[220px] bg-muted/95 px-4 py-3 font-medium">Prodotti aggiuntivi oltre alla SIM</th>
+            {progression.months.map(row => <th scope="col" key={row.month} className="whitespace-nowrap px-4 py-3 text-right font-medium capitalize">{periodLabel(row)}</th>)}
+          </tr></thead>
+          <tbody>
+            {[0, 1, 2, 3, 4, ...(hasFivePlus ? [5] : [])].map(bin => <tr key={bin} className="border-t border-border">
+              <th scope="row" className="sticky left-0 bg-card px-4 py-3 font-medium">{bin === 5 ? "5 o più prodotti" : `${bin} ${bin === 1 ? "prodotto" : "prodotti"}`}</th>
+              {progression.months.map(row => <td key={row.month} className="px-4 py-3 text-right tabular-nums">{(row.bins[bin] ?? 0).toLocaleString("it-IT")}</td>)}
+            </tr>)}
+            <tr className="border-t border-border bg-muted/25 font-semibold">
+              <th scope="row" className="sticky left-0 bg-muted/50 px-4 py-3">Clienti con almeno 1 prodotto</th>
+              {progression.months.map(row => <td key={row.month} className="px-4 py-3 text-right tabular-nums">{row.withProducts.toLocaleString("it-IT")}</td>)}
+            </tr>
+            <tr className="border-t border-border font-semibold">
+              <th scope="row" className="sticky left-0 bg-card px-4 py-3">% della coorte</th>
+              {progression.months.map(row => <td key={row.month} className="px-4 py-3 text-right tabular-nums">{row.percentage.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td>)}
+            </tr>
+          </tbody>
+        </table>
+      </div>}
     </section>
-
+    <details className="group rounded-xl border border-border bg-card" data-testid="cohort-progression-details">
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-muted-foreground marker:hidden hover:text-foreground">
+        <span className="inline-flex items-center gap-2"><span className="transition-transform group-open:rotate-90">›</span> Dettagli della progressione e clienti non più qualificati</span>
+      </summary>
+      <div className="space-y-4 border-t border-border p-3 sm:p-4">
     <div className="grid gap-4 xl:grid-cols-2">
       <DetailTable
         title={`SIM attualmente cadute · ${number(progression.dropped.length)}`}
@@ -137,6 +113,8 @@ export default function CohortProgression({ progression, cohortSelected, onOpenJ
     <p className="rounded-lg bg-muted/40 px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
       Metodo: gli stock commerciali sono ricalcolati sugli stati validi oggi, non sono fotografie di chiusura mensile. La data della perdita mensile deriva solo da competenza DRMS o decisione manuale esplicita; i casi senza data restano separati. Una SIM caduta non equivale a un cliente uscito se nel journey rimane un’altra SIM eleggibile valida. Il perimetro è quello delle schede conservate: eventuali schede già eliminate da precedenti riconciliazioni non possono essere ricostruite da questo storico.
     </p>
+      </div>
+    </details>
   </div>;
 }
 

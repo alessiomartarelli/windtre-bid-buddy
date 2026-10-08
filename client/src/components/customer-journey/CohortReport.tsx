@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import {
@@ -39,6 +39,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     staleTime: 60_000,
   });
   const [cohortMonth, setCohortMonth] = useState(ALL);
+  const defaultCohortChosen = useRef(false);
   const [observationMonth, setObservationMonth] = useState(ALL);
   const [shop, setShop] = useState(ALL);
   const [customerType, setCustomerType] = useState(ALL);
@@ -53,7 +54,14 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
   const model = useMemo(() => buildCjCohortModel(rows, triggerDate), [rows, triggerDate]);
   const typeByJourney = useMemo(() => new Map(rows.map(r => [r.journeyId, r.customerType])), [rows]);
-  const cohortMonths = useMemo(() => [...new Set(model.customers.map(c => c.cohort))].sort().reverse(), [model.customers]);
+  const cohortMonths = useMemo(() => [...new Set(model.customers.map(c => c.cohort))].sort(), [model.customers]);
+  const historicalCohortMonths = useMemo(() => cohortMonths.filter(month => month <= new Date().toISOString().slice(0, 7)), [cohortMonths]);
+  useEffect(() => {
+    if (!defaultCohortChosen.current && historicalCohortMonths.length > 0) {
+      defaultCohortChosen.current = true;
+      setCohortMonth(historicalCohortMonths[0]);
+    }
+  }, [cohortMonth, historicalCohortMonths]);
   const observationMonths = useMemo(() => [...new Set(model.events.map(e => e.month))].sort().reverse(), [model.events]);
   const shops = useMemo(() => [...new Set([...model.customers.map(c => c.pdv), ...model.events.map(e => e.pdv)].filter(Boolean))].sort((a, b) => a.localeCompare(b, "it")), [model]);
   const employees = useMemo(() => [...new Set(attribution === "opener" ? model.customers.map(c => c.opener) : model.events.map(e => e.seller))].filter(Boolean).sort((a, b) => a.localeCompare(b, "it")), [attribution, model]);
@@ -141,6 +149,28 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
 
   const exportWorkbook = () => {
     const workbook = XLSX.utils.book_new();
+    const evolutionRows: Array<Record<string, string | number>> = [
+      ...[0, 1, 2, 3, 4, ...(progression.months.some(row => (row.bins[5] ?? 0) > 0) ? [5] : [])].map(bin => ({
+        "Prodotti aggiuntivi oltre alla SIM": bin === 5 ? "5 o più prodotti" : `${bin} ${bin === 1 ? "prodotto" : "prodotti"}`,
+        ...Object.fromEntries(progression.months.map(row => [
+          row.isPartial ? `Al ${new Date().toLocaleDateString("it-IT")}` : `Fine ${monthName(row.month)}`,
+          row.bins[bin] ?? 0,
+        ])),
+      })),
+      ...[
+        { label: "Clienti con almeno 1 prodotto", value: (row: typeof progression.months[number]) => row.withProducts },
+        { label: "% della coorte", value: (row: typeof progression.months[number]) => `${row.percentage.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` },
+      ].map(({ label, value }) => ({
+        "Prodotti aggiuntivi oltre alla SIM": label,
+        ...Object.fromEntries(progression.months.map(row => [
+          row.isPartial ? `Al ${new Date().toLocaleDateString("it-IT")}` : `Fine ${monthName(row.month)}`,
+          value(row),
+        ])),
+      })),
+    ];
+    const evolutionSheet = XLSX.utils.json_to_sheet(evolutionRows);
+    evolutionSheet["!cols"] = [{ wch: 36 }, ...progression.months.map(() => ({ wch: 23 }))];
+    XLSX.utils.book_append_sheet(workbook, evolutionSheet, "Evoluzione coorte");
     const summaryRows = [
       { Indicatore: "Clienti in coorte (denominatore)", Valore: summary.clients },
       { Indicatore: "Clienti con riacquisto valido", Valore: summary.repurchased },
@@ -251,20 +281,35 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div className="max-w-3xl">
           <div className="mb-2 flex flex-wrap items-center gap-2"><Badge variant="outline" className="border-primary/30 bg-primary/5">STORICO COMMERCIALE</Badge><span className="text-xs text-muted-foreground">Coorti mensili · finestra solare T0–T6</span></div>
-          <h2 className="text-2xl font-semibold tracking-tight">Coorti mensili</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Segui ogni mese di apertura e osserva vendite e riconoscimenti nel tempo. Questi filtri sono indipendenti dai filtri generali della pagina e mantengono visibili le storie complete.</p>
+          <h2 className="text-2xl font-semibold tracking-tight">Evoluzione delle coorti</h2>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="w-full sm:w-56">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="primary-cohort-month">Mese di acquisizione</label>
+            <Select value={cohortMonth} onValueChange={setCohortMonth}>
+              <SelectTrigger id="primary-cohort-month" className="w-full" data-testid="select-cohort-month"><SelectValue placeholder="Seleziona coorte" /></SelectTrigger>
+              <SelectContent>
+                {cohortMonth === ALL && <SelectItem value={ALL}>Seleziona coorte</SelectItem>}
+                {cohortMonths.map(m => <SelectItem key={m} value={m}>{monthName(m)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="outline" onClick={() => query.refetch()} disabled={query.isFetching}><RefreshCw className={`mr-2 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />Aggiorna</Button>
           <Button onClick={exportWorkbook} disabled={!scoped.customers.length} data-testid="export"><ArrowDownToLine className="mr-2 h-4 w-4" />Esporta Excel</Button>
         </div>
       </div>
     </section>
 
+    {data.operatorScoped && <p className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">Perimetro operatore: sono visibili solo gli elementi autorizzati; il report è parziale.</p>}
+    <CohortProgression progression={progression} cohortSelected={cohortMonth !== ALL} cohortMonth={cohortMonth === ALL ? "" : cohortMonth} onOpenJourney={onOpenJourney} />
+    <details className="group rounded-xl border border-border bg-card" data-testid="cohort-advanced-details">
+      <summary className="cursor-pointer list-none px-4 py-3 font-semibold hover:bg-muted/30">
+        <span className="inline-flex items-center gap-2"><span className="transition-transform group-open:rotate-90">›</span> Dettagli e filtri avanzati</span>
+      </summary>
+      <div className="space-y-5 border-t border-border p-3 sm:p-5">
     <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><CalendarDays className="h-4 w-4 text-primary" />Filtri dello storico coorti</div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <div><label className="mb-1 block text-xs text-muted-foreground">Mese coorte</label><Select value={cohortMonth} onValueChange={setCohortMonth}><SelectTrigger className={selectClass} data-testid="cohort-month"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutte le coorti</SelectItem>{cohortMonths.map(m => <SelectItem key={m} value={m}>{monthName(m)}</SelectItem>)}</SelectContent></Select></div>
         <div><label className="mb-1 block text-xs text-muted-foreground">Mese osservazione</label><Select value={observationMonth} onValueChange={setObservationMonth}><SelectTrigger className={selectClass} data-testid="observation-month"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutti i mesi</SelectItem>{observationMonths.map(m => <SelectItem key={m} value={m}>{monthName(m)}</SelectItem>)}</SelectContent></Select></div>
         <div><label className="mb-1 block text-xs text-muted-foreground">Negozio apertura</label><Select value={shop} onValueChange={setShop}><SelectTrigger className={selectClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutti i negozi</SelectItem>{shops.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
         <div><label className="mb-1 block text-xs text-muted-foreground">Tipo cliente</label><Select value={customerType} onValueChange={setCustomerType}><SelectTrigger className={selectClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutti i tipi</SelectItem><SelectItem value="privato">Privato</SelectItem><SelectItem value="azienda">Azienda</SelectItem></SelectContent></Select></div>
@@ -315,7 +360,6 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
 
     {scoped.customers.length === 0 && <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Nessun cliente corrisponde ai filtri selezionati. Modifica i filtri per consultare la coorte.</CardContent></Card>}
     {scoped.customers.length > 0 && <>
-      <CohortProgression progression={progression} cohortSelected={cohortMonth !== ALL} onOpenJourney={onOpenJourney} />
       <CohortTable title="Andamento per mese osservato" caption="Scomposizione mensile della coorte selezionata. Il mese osservato può essere una vendita (inserimento) o una competenza economica." rows={monthly.map(r => ({ key: r.month, label: monthName(r.month), ...r }))} showPending={false} />
       <CohortTable title="Composizione inversa per coorte" caption="Per ogni mese di apertura: contributi osservati nel periodo filtrato, non troncati dai filtri generali. Lo stock pendente è attuale, non un flusso." rows={inverse.map(r => ({ key: r.cohort, label: monthName(r.cohort), ...r }))} />
       <section className="overflow-hidden rounded-xl border border-border bg-card">
@@ -378,6 +422,8 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
         </div>
       </section>
     </>}
+      </div>
+    </details>
   </div>;
 }
 
