@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { exportCjDiagnosticsExcel } from "@/lib/customerJourneyDiagnosticsExport";
 import { CJ_SIM_REASONS, reconcileCjMobile, type CjMobileSource } from "@shared/customerJourneyDiagnostics";
 import { economicStateLabel, type CjGettoneJourney, type CjListFilters, type CjReportRow } from "@shared/customerJourney";
 
@@ -18,7 +19,14 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
     [query.data, rows, selected, filters, from, to]);
   return (
     <Card data-testid="cj-sim-diagnostics">
-      <CardHeader><CardTitle className="text-base">SIM, esclusioni ed esiti economici</CardTitle></CardHeader>
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <CardTitle className="text-base">SIM, esclusioni ed esiti economici</CardTitle>
+        <Button variant="outline" size="sm" data-testid="cj-sim-diagnostics-export"
+          disabled={query.isPending || query.isError || query.isFetching || !query.data}
+          onClick={() => exportCjDiagnosticsExcel(d, filters, from, to)}>
+          Scarica diagnostica Excel
+        </Button>
+      </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
           Clienti selezionati per prima SIM valida inserita nel periodo. I volumi cumulativi e gli esiti riguardano
