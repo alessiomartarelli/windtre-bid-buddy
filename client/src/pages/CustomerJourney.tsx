@@ -1655,7 +1655,7 @@ export default function CustomerJourneyPage() {
                     data-testid="report-tab-coorti"
                   >
                     <Calendar className="h-4 w-4 mr-2" />
-                    Coorti mensili
+                    Evoluzione clienti
                   </Button>
                 </div>
                 {reportTab === "analisi" ? (

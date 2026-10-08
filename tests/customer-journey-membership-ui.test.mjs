@@ -67,9 +67,9 @@ test("CJ membership panels separate cards, date filters, navigation and Excel", 
     await page.getByTestId("button-back").click();
     await card(exited).waitFor({ state: "visible" });
     await page.getByRole("button", { name: "Reportistica", exact: true }).click();
-    await page.getByRole("button", { name: "Coorti mensili", exact: true }).click();
+    await page.getByRole("button", { name: "Evoluzione clienti", exact: true }).click();
     const evolution = page.getByTestId("cohort-evolution-table");
-    await evolution.getByRole("heading", { name: /Evoluzione della coorte di luglio 2026/ }).waitFor();
+    await evolution.getByRole("heading", { name: /Evoluzione dei clienti di luglio 2026/ }).waitFor();
     assert.match(await evolution.innerText(), /Fine luglio/i);
     assert.match(await evolution.innerText(), /Fine agosto/i);
     const evolutionRow = label => evolution.getByRole("row").filter({
@@ -80,7 +80,7 @@ test("CJ membership panels separate cards, date filters, navigation and Excel", 
     const twoProductCells = await evolutionRow("2 prodotti").getByRole("cell").allTextContents();
     assert.equal(twoProductCells[0], "0");
     assert.ok(twoProductCells.slice(1).every(value => value === "1"));
-    assert.ok((await evolutionRow("% della coorte").getByRole("cell").allTextContents()).every(value => value === "50,0%"));
+    assert.ok((await evolutionRow("% dei clienti").getByRole("cell").allTextContents()).every(value => value === "50,0%"));
     const advanced = page.getByTestId("cohort-advanced-details");
     assert.equal(await advanced.getAttribute("open"), null, "financial analytics are collapsed initially");
     assert.equal(await page.getByTestId("cohort-clients-panel").isVisible(), false);
@@ -96,8 +96,8 @@ test("CJ membership panels separate cards, date filters, navigation and Excel", 
     const cohortDownloadPending = page.waitForEvent("download");
     await page.getByTestId("cohort-report").getByTestId("export").click();
     const cohortBook = XLSX.read(fs.readFileSync(await (await cohortDownloadPending).path()), { type: "buffer" });
-    assert.equal(cohortBook.SheetNames[0], "Evoluzione coorte");
-    const evolutionExport = XLSX.utils.sheet_to_json(cohortBook.Sheets["Evoluzione coorte"]);
+    assert.equal(cohortBook.SheetNames[0], "Evoluzione clienti");
+    const evolutionExport = XLSX.utils.sheet_to_json(cohortBook.Sheets["Evoluzione clienti"]);
     assert.equal(evolutionExport[1]["Fine luglio 2026"], 1);
     assert.equal(evolutionExport[2]["Fine agosto 2026"], 1);
     assert.equal(evolutionExport.at(-1)["Fine settembre 2026"], "50,0%");

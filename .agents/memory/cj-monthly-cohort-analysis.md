@@ -52,3 +52,9 @@ La reportistica deve consentire di scegliere il mese di apertura delle CJ e un m
 **Why:** l'utente ha segnalato troppe informazioni nelle coorti e fornito come riferimento una semplice tabella «Evoluzione della coorte di luglio».
 
 **How to apply:** preservare il confronto cumulativo a coorte fissa senza riportare nella vista principale KPI, movimenti economici o diagnostica estesa. I non più qualificati non diventano clienti con zero prodotti.
+
+**Terminologia approvata:** usare «Evoluzione clienti» nelle diciture visibili e negli export invece di «Coorti mensili»; per il gruppo mensile usare «clienti di [mese]» o «mese di acquisizione».
+
+**Why:** l'utente ha scelto esplicitamente questo nome per rendere la sezione più chiara, senza modifiche ai calcoli.
+
+**How to apply:** mantenere la terminologia tecnica interna quando utile; non reintrodurre «coorti» nei titoli o nei testi rivolti all'utente.

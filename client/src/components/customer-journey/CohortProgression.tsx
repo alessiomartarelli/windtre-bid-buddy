@@ -27,10 +27,10 @@ export default function CohortProgression({ progression, cohortSelected, cohortM
   return <div className="space-y-4" data-testid="cj-progression">
     <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm" data-testid="cohort-evolution-table">
       <div className="border-b border-border px-4 py-4 sm:px-6">
-        <h3 className="text-lg font-semibold tracking-tight">{cohortSelected ? `Evoluzione della coorte di ${monthName(cohortMonth)}` : "Evoluzione della coorte"}</h3>
-        <p className="mt-1 text-xs text-muted-foreground">I conteggi includono i prodotti validi dei clienti ancora qualificati; la coorte mantiene il denominatore fisso, inclusi i non più qualificati.</p>
+        <h3 className="text-lg font-semibold tracking-tight">{cohortSelected ? `Evoluzione dei clienti di ${monthName(cohortMonth)}` : "Evoluzione clienti"}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">I conteggi includono i prodotti validi dei clienti ancora qualificati; il gruppo clienti mantiene il denominatore fisso, inclusi i non più qualificati.</p>
       </div>
-      {!cohortSelected || progression.months.length === 0 ? <p className="p-6 text-sm text-muted-foreground">Non ci sono mesi confrontabili per questa coorte.</p> : <div className="overflow-x-auto">
+      {!cohortSelected || progression.months.length === 0 ? <p className="p-6 text-sm text-muted-foreground">Non ci sono mesi confrontabili per questo gruppo clienti.</p> : <div className="overflow-x-auto">
         <table className="w-full min-w-[620px] text-left text-sm">
           <thead className="bg-muted/45 text-muted-foreground"><tr>
             <th scope="col" className="sticky left-0 z-10 min-w-[220px] bg-muted/95 px-4 py-3 font-medium">Prodotti aggiuntivi oltre alla SIM</th>
@@ -46,7 +46,7 @@ export default function CohortProgression({ progression, cohortSelected, cohortM
               {progression.months.map(row => <td key={row.month} className="px-4 py-3 text-right tabular-nums">{row.withProducts.toLocaleString("it-IT")}</td>)}
             </tr>
             <tr className="border-t border-border font-semibold">
-              <th scope="row" className="sticky left-0 bg-card px-4 py-3">% della coorte</th>
+              <th scope="row" className="sticky left-0 bg-card px-4 py-3">% dei clienti</th>
               {progression.months.map(row => <td key={row.month} className="px-4 py-3 text-right tabular-nums">{row.percentage.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td>)}
             </tr>
           </tbody>
@@ -97,7 +97,7 @@ export default function CohortProgression({ progression, cohortSelected, cohortM
       </div>
       {progression.exitedCustomers.length === 0 ? <p className="p-5 text-sm text-muted-foreground">Nessun cliente uscito dal perimetro CJ attuale.</p> : <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-xs">
-          <thead className="bg-muted/40 text-muted-foreground"><tr>{["Cliente", "Coorte", "Negozio", "Addetto apertura", "Journey"].map(h => <th key={h} className="px-3 py-3 font-medium">{h}</th>)}</tr></thead>
+          <thead className="bg-muted/40 text-muted-foreground"><tr>{["Cliente", "Mese di acquisizione", "Negozio", "Addetto apertura", "Journey"].map(h => <th key={h} className="px-3 py-3 font-medium">{h}</th>)}</tr></thead>
           <tbody>{progression.exitedCustomers.map(customer => <tr key={customer.journeyId} className="border-t border-border">
             <td className="px-3 py-3 font-medium">{customer.cliente}</td><td className="whitespace-nowrap px-3 py-3 capitalize">{monthName(customer.cohort)}</td>
             <td className="px-3 py-3">{customer.pdv}</td><td className="px-3 py-3">{customer.opener}</td>
