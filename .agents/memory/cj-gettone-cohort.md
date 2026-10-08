@@ -8,6 +8,12 @@ mobile-SIM-driven journey. Keep acquisition-cohort analysis distinct from
 the flow of SIM sales in a calendar month.
 
 Rules (decided):
+- Le vendite SIM annullate possono essere mostrate nel solo dettaglio diagnostico degli scarti BiSuite, mai nei clienti partecipanti o nelle SIM valide CJ.
+  **Why:** il confronto con le vendite mensili deve spiegare gli scarti senza cambiare la regola che esclude le SIM annullate dalla CJ.
+  **How to apply:** separare il flusso mensile BiSuite dalla selezione dei clienti; le esclusioni sono una partizione senza doppio conteggio, non un ampliamento della coorte.
+- Il gettone calcolato con esiti positivi espliciti e quello comprensivo di smartphone presunti restano valori distinti; nessuno dei due prova il pagamento effettivo del gettone CJ.
+  **Why:** un esito economico del contratto o una spunta manuale non dimostra un bonifico del gettone; il valore storico include anche liquidazioni presunte.
+  **How to apply:** etichettare il presunto e distinguere esiti DRMS, stato economico manuale e spunta manuale del gettone in ogni analisi economica.
 - **Cohort = only journeys with ≥1 ACTIVE mobile SIM.** Exclude journeys whose
   mobile is ko/stornato/annullato or that have no mobile at all. The whole
   analysis is "what cross-sell happened on top of a real new SIM activation",

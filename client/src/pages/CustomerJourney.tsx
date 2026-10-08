@@ -62,6 +62,7 @@ import {
   exportJourneyListPdf, exportJourneyListExcel,
 } from "@/lib/customerJourneyExport";
 import CohortReport from "@/components/customer-journey/CohortReport";
+import SimDiagnostics from "@/components/customer-journey/SimDiagnostics";
 
 interface DriverSummary {
   driver: string;
@@ -580,6 +581,12 @@ export default function CustomerJourneyPage() {
     queryKey: ["/api/customer-journeys/report"],
     enabled: !selectedId,
   });
+  // Keep the read-only sales diagnostic aligned when the existing report refreshes.
+  useEffect(() => {
+    if (reportQuery.dataUpdatedAt) {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report-mobile-sources"] });
+    }
+  }, [reportQuery.dataUpdatedAt]);
 
   // Caricata per TUTTI i ruoli (non solo admin): il floor dell'Analisi gettoni
   // alla data trigger deve valere anche per gli operatori, altrimenti vedrebbero
@@ -1343,7 +1350,7 @@ export default function CustomerJourneyPage() {
                     className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${cjMembership === "active" ? "bg-indigo-600 text-white shadow-sm" : "text-muted-foreground hover:bg-background hover:text-foreground"}`}
                   >
                     <span>Attivi in CJ</span>
-                    <Badge variant="secondary" className={cjMembership === "active" ? "bg-white/20 text-white" : ""}>{membershipActiveCount}</Badge>
+                    <Badge variant="secondary" className={cjMembership === "active" ? "bg-black/15 text-white" : ""}>{membershipActiveCount}</Badge>
                   </button>
                   <button
                     type="button"
@@ -1660,6 +1667,9 @@ export default function CustomerJourneyPage() {
                 </div>
                 {reportTab === "analisi" ? (
                   <AnalisiView
+                    diagnosticRows={reportRows}
+                    diagnosticSelected={gettoneJourneys}
+                    diagnosticFilters={activeFilters}
                     isLoading={reportQuery.isLoading}
                     totals={gettoneTot}
                     groups={gettoneGroups}
@@ -2021,6 +2031,9 @@ function AnalisiViewImpl({
   extraProdotti,
   onExtraProdottiChange,
   onOpenJourney,
+  diagnosticRows,
+  diagnosticSelected,
+  diagnosticFilters,
 }: {
   isLoading: boolean;
   totals: CjGettoneTotals;
@@ -2037,6 +2050,9 @@ function AnalisiViewImpl({
   extraProdotti: number;
   onExtraProdottiChange: (v: number) => void;
   onOpenJourney: (journeyId: string) => void;
+  diagnosticRows: CjReportRow[];
+  diagnosticSelected: CjGettoneJourney[];
+  diagnosticFilters: CjListFilters;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   if (isLoading) {
@@ -2144,16 +2160,19 @@ function AnalisiViewImpl({
         </CardContent>
       </Card>
 
+      <SimDiagnostics rows={diagnosticRows} selected={diagnosticSelected} filters={diagnosticFilters}
+        from={dateFrom} to={dateTo} onOpenJourney={onOpenJourney} />
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Card data-testid="card-gettone-sim">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <RouteIcon className="h-3.5 w-3.5" /> SIM attivate
+              <RouteIcon className="h-3.5 w-3.5" /> SIM valide cumulative
             </p>
             <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-sim">
               {totals.simAttivate}
             </p>
+            <p className="text-xs text-muted-foreground">T0–T6, incluse le SIM successive</p>
           </CardContent>
         </Card>
         <Card data-testid="card-gettone-clienti">
@@ -2182,7 +2201,7 @@ function AnalisiViewImpl({
         <Card data-testid="card-gettone-fatturato">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Wallet className="h-3.5 w-3.5" /> Fatturato stimato
+              <Wallet className="h-3.5 w-3.5" /> Gettone stimato
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-fatturato">
               {fmtEuro(totals.fatturato)}
@@ -2190,18 +2209,18 @@ function AnalisiViewImpl({
             <p className="text-xs text-muted-foreground">gettone su tutte le piste attive</p>
           </CardContent>
         </Card>
-        <Card data-testid="card-gettone-fatturato-maturato" title="Gettone sulle sole piste con esito DRMS “pagato”">
+        <Card data-testid="card-gettone-fatturato-maturato" title="Gettone calcolato con esiti positivi DRMS/manuali e smartphone presunti; non prova di pagamento">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <BadgeCheck className="h-3.5 w-3.5" /> Fatturato maturato
+              <BadgeCheck className="h-3.5 w-3.5" /> Gettone incl. presunti
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-fatturato-maturato">
               {fmtEuro(totals.fatturatoMaturato)}
             </p>
             <p className="text-xs text-muted-foreground" data-testid="text-gettone-fatturato-maturato-pct">
               {totals.fatturato > 0
-                ? `${fmtPct((totals.fatturatoMaturato / totals.fatturato) * 100)} dello stimato · DRMS pagato + smartphone presunti`
-                : "DRMS pagato + smartphone presunti"}
+                ? `${fmtPct((totals.fatturatoMaturato / totals.fatturato) * 100)} dello stimato · esiti positivi DRMS/manuali + smartphone presunti`
+                : "Esiti positivi DRMS/manuali + smartphone presunti"}
             </p>
           </CardContent>
         </Card>
@@ -2252,7 +2271,7 @@ function AnalisiViewImpl({
                   <TableHead className="text-right">Clienti</TableHead>
                   <TableHead className="text-right">+prodotti</TableHead>
                   <TableHead className="text-right">Stimato</TableHead>
-                  <TableHead className="text-right">Maturato</TableHead>
+                  <TableHead className="text-right">Incl. presunti</TableHead>
                   <TableHead className="text-right">Potenziale</TableHead>
                 </TableRow>
               </TableHeader>
@@ -2308,7 +2327,7 @@ function AnalisiViewImpl({
                                   <TableHead className="text-right">Piste attive</TableHead>
                                   <TableHead className="text-right">% saturazione</TableHead>
                                   <TableHead className="text-right">Stimato</TableHead>
-                                  <TableHead className="text-right">Maturato</TableHead>
+                                  <TableHead className="text-right">Incl. presunti</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>

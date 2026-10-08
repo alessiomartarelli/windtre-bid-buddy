@@ -165,10 +165,21 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
     );
     // Verifica le intestazioni della sotto-tabella.
     const detailText = await detail.innerText();
-    for (const h of ['Cliente', 'SIM attive', 'Piste attive', '% saturazione', 'Stimato', 'Maturato']) {
+    for (const h of ['Cliente', 'SIM attive', 'Piste attive', '% saturazione', 'Stimato', 'Incl. presunti']) {
       assert.ok(detailText.includes(h), `detail table must include header "${h}"`);
     }
     assert.ok(detailText.includes('2/5'), 'detail row shows 2/5 piste attive');
+    const diagnostics = page.getByTestId('cj-sim-diagnostics');
+    await diagnostics.waitFor({ state: 'visible' });
+    assert.ok((await diagnostics.innerText()).includes('SIM valide nel periodo'));
+    assert.ok((await diagnostics.innerText()).includes('Gettone calcolato su piste con esito positivo esplicito'));
+    assert.ok((await diagnostics.innerText()).includes('non una prova di bonifico'));
+    await page.setViewportSize({ width: 375, height: 812 });
+    assert.ok(await diagnostics.evaluate(el => el.getBoundingClientRect().width <= 375), 'diagnostic card fits mobile');
+    await diagnostics.getByRole('button', { name: 'Mostra contratti e articoli' }).click();
+    assert.ok((await diagnostics.innerText()).includes('Esiti SIM dei clienti selezionati'));
+    await diagnostics.getByRole('button', { name: 'Nascondi contratti e articoli' }).click();
+    await page.setViewportSize({ width: 1280, height: 720 });
 
     // Richiudi la riga: la sotto-tabella sparisce.
     await marioRow.click();
@@ -219,7 +230,7 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
       '40%', 'negozio detail row shows 40% saturation (2/5 piste)',
     );
     const milanoDetailText = await milanoDetail.innerText();
-    for (const h of ['Cliente', 'SIM attive', 'Piste attive', '% saturazione', 'Stimato', 'Maturato']) {
+    for (const h of ['Cliente', 'SIM attive', 'Piste attive', '% saturazione', 'Stimato', 'Incl. presunti']) {
       assert.ok(milanoDetailText.includes(h), `negozio detail table must include header "${h}"`);
     }
     assert.ok(milanoDetailText.includes('2/5'), 'negozio detail row shows 2/5 piste attive');

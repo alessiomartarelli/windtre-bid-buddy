@@ -244,6 +244,10 @@ args = "cj-items-order-db-tests"
 task = "workflow.run"
 args = "cj-drms-running-ui-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-sim-diagnostics-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -831,6 +835,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-customer-journey-driver-filter-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-sim-diagnostics-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-sim-diagnostics-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

@@ -58,6 +58,12 @@ export interface CjDriverSummary {
 // L'isolamento per operatore (solo i propri item) è applicato lato server.
 export interface CjReportRow {
   itemId?: string;
+  bisuiteSaleId?: string | null;
+  bisuiteArticleId?: number | null;
+  codiceContratto?: string | null;
+  economicStateManual?: boolean;
+  drmsOutcomeState?: CjEconomicState | null;
+  gettoneConfirmed?: boolean;
   categoria?: string | null;
   tipologia?: string | null;
   descrizione?: string | null;

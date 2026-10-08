@@ -18,7 +18,9 @@ Le vendite senza CF/P.IVA in prod sono clienti anonimi (codiceEsterno "0", quasi
   "Rigenera"): se il secondo cresce, c'è davvero perdita di contratti.
 - Il reconcile è la fonte di verità derivata dalle vendite locali: journey/item non derivabili
   vengono potati (per org, sotto lock). Lezione per i test: NON seminare journey a mano in un'org
-  che ha anche bisuite_sales, oppure marca il watermark come allineato prima di caricare la lista.
+   che ha anche bisuite_sales, oppure marca watermark ed eleggibilità come allineati prima di caricare la lista.
+- **Why:** un watermark recente non basta se la fixture dichiara una versione di ammissibilità obsoleta: l'upgrade avvia comunque il reconcile e pota i clienti manuali.
+  **How to apply:** per test puramente visuali che mescolano vendite e journey manuali, allineare anche la versione di ammissibilità corrente, senza disattivare il reconcile nell'app.
 - Il watermark va catturato PRIMA della SELECT delle vendite (race con fetch concorrente).
 - Verifica rapida post-deploy senza aspettare il fetch delle 22:00: `scripts/verify-cj-later-purchases-prod.mts`
   via tunnel (stesso reconcile dello scheduler + SELECT luglio→acquisti successivi). Baseline 4 set 2026:

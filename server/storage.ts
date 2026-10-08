@@ -5,6 +5,7 @@ import { driverFromCategory, isCjMobileEligible, cjT0Month, energiaSubtype, pars
 import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
 import type { CjCohortData, CjCohortRow } from "@shared/customerJourneyCohorts";
 import { CJ_PRESUMED_PAID_DRIVERS } from "@shared/customerJourney";
+import type { CjMobileSource } from "@shared/customerJourneyDiagnostics";
 
 // Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
 type DbExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -198,6 +199,7 @@ export interface IStorage {
   getCustomerJourneyValues(journeyIds: string[]): Promise<Map<string, number>>;
   getCustomerJourneyItemFacets(journeyIds: string[], addettiFilter?: string[] | null): Promise<Map<string, CjJourneyFacets>>;
   getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null): Promise<CjReportRow[]>;
+  getCustomerJourneyMobileSources(orgId: string, addettiFilter?: string[] | null): Promise<CjMobileSource[]>;
   getCustomerJourneyCohortRows(orgId: string, addettiFilter?: string[] | null): Promise<CjCohortData>;
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
@@ -1542,6 +1544,12 @@ export class DatabaseStorage implements IStorage {
     }
     const rows = await db.select({
       itemId: customerJourneyItems.id,
+      bisuiteSaleId: customerJourneyItems.bisuiteSaleId,
+      bisuiteArticleId: customerJourneyItems.bisuiteArticleId,
+      codiceContratto: customerJourneyItems.codiceContratto,
+      economicStateManual: customerJourneyItems.economicStateManual,
+      drmsOutcomeState: customerJourneyItems.drmsOutcomeState,
+      gettoneConfirmed: customerJourneyItems.gettoneConfirmed,
       journeyId: customerJourneys.id,
       customerKey: customerJourneys.customerKey,
       customerType: customerJourneys.customerType,
@@ -1574,6 +1582,10 @@ export class DatabaseStorage implements IStorage {
       const v = r.importo != null ? parseFloat(String(r.importo)) : NaN;
       return {
         itemId: r.itemId,
+        bisuiteSaleId: r.bisuiteSaleId, bisuiteArticleId: r.bisuiteArticleId,
+        codiceContratto: r.codiceContratto, economicStateManual: r.economicStateManual,
+        drmsOutcomeState: r.drmsOutcomeState as CjEconomicState | null,
+        gettoneConfirmed: r.gettoneConfirmed,
         journeyId: r.journeyId,
         categoria: r.categoria, tipologia: r.tipologia, descrizione: r.descrizione,
         customerKey: r.customerKey,
@@ -1592,6 +1604,44 @@ export class DatabaseStorage implements IStorage {
         insertedAt: r.dataInserimento ? r.dataInserimento.toISOString() : null,
       };
     });
+  }
+
+  async getCustomerJourneyMobileSources(orgId: string, addettiFilter?: string[] | null): Promise<CjMobileSource[]> {
+    const allowed = addettiFilter?.map(a => a.trim().toLowerCase()).filter(Boolean);
+    if (allowed != null && allowed.length === 0) return [];
+    // Project only the fields needed by diagnostics; never return raw sale data.
+    const sales = await db.select({
+      id: bisuiteSales.id, bisuiteId: bisuiteSales.bisuiteId, date: bisuiteSales.dataVendita,
+      pdv: bisuiteSales.nomeNegozio, addetto: bisuiteSales.nomeAddetto,
+      stato: bisuiteSales.stato, cliente: bisuiteSales.nomeCliente,
+      articles: sql<any[]>`${bisuiteSales.rawData}->'articoli'`,
+      identity: sql<any>`${bisuiteSales.rawData}->'cliente'`,
+      rawAddetto: sql<string>`${bisuiteSales.rawData}->'addetto'->>'nominativo'`,
+      rawPdv: sql<string>`${bisuiteSales.rawData}->'attivita'->>'nominativo'`,
+    }).from(bisuiteSales).where(and(eq(bisuiteSales.organizationId, orgId),
+      allowed == null ? undefined : inArray(sql`lower(trim(COALESCE(${bisuiteSales.rawData}->'addetto'->>'nominativo', ${bisuiteSales.nomeAddetto})))`, allowed)));
+    const result: CjMobileSource[] = [];
+    for (const s of sales) {
+      const c = s.identity ?? {};
+      const cf = String(c.codiceFiscale || "").trim().toUpperCase();
+      const piva = String(c.piva || "").trim().toUpperCase();
+      const business = ["GIURIDICA", "PROFESSIONISTA"].includes(String(c.clienteTipo || "").trim().toUpperCase());
+      const customerKey = business && piva ? piva : cf || piva;
+      const customerType = business && piva || !cf && piva ? "azienda" : "privato";
+      for (const a of Array.isArray(s.articles) ? s.articles : []) {
+        if (driverFromCategory(a?.categoria?.nome) !== "mobile") continue;
+        result.push({
+          saleId: s.id, bisuiteId: s.bisuiteId, articleId: a.id != null ? Number(a.id) : null,
+          categoria: a.categoria?.nome ?? "", tipologia: a.tipologia?.nome ?? "",
+          descrizione: a.descrizione ?? "", insertedAt: s.date?.toISOString() ?? null,
+          customerKey, customerType, cliente: s.cliente || [c.nome, c.cognome].filter(Boolean).join(" "),
+          pdv: (s.rawPdv ?? s.pdv ?? "").trim(), addetto: (s.rawAddetto ?? s.addetto ?? "").trim(),
+          cancelled: String(s.stato || "").toUpperCase().includes("ANNULL"),
+          contract: parseVenditaInfo(a.dettaglio).codiceContratto ?? "",
+        });
+      }
+    }
+    return result;
   }
 
   async getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined> {

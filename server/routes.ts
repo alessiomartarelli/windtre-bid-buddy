@@ -4248,6 +4248,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/customer-journeys/report-mobile-sources", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const filter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
+      const sources = await storage.getCustomerJourneyMobileSources(profile.organizationId, filter);
+      res.set("Cache-Control", "private, no-store");
+      res.json(sources);
+    } catch (error) {
+      console.error("CJ mobile sources error:", error);
+      res.status(500).json({ error: "Errore nel recupero del dettaglio SIM" });
+    }
+  });
+
   app.get("/api/customer-journeys/report", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
