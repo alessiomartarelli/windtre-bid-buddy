@@ -817,7 +817,7 @@ export function summarizeDriversWithPhase(
   });
 }
 
-const MOBILE_CATEGORIES = new Set([
+export const MOBILE_CATEGORIES = new Set([
   "UNTIED", "TIED CF", "TIED IVA", "ALTRE GA", "ADD-ON GA", "VERY MOBILE",
 ]);
 const FISSO_CATEGORIES = new Set([

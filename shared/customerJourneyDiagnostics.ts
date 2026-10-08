@@ -36,6 +36,14 @@ export const CJ_SIM_REASONS = {
   cohort: "Cliente fuori dal periodo di acquisizione selezionato",
 } as const;
 export type CjSimReason = keyof typeof CJ_SIM_REASONS;
+export type CjSimDetail = { source: CjMobileSource; row?: CjReportRow; reason: CjSimReason };
+export interface CjSimSourcePage {
+  counts: Record<CjSimReason, number>;
+  sourceTotal: number;
+  details: CjSimDetail[];
+  page: number;
+  pageSize: number;
+}
 
 export function inCjInsertPeriod(date: string | null, from: string, to: string): boolean {
   if (!date) return !from && !to;
@@ -56,9 +64,8 @@ export function matchesDiagnosticFilters(
 }
 
 /** Read-only partition. One source article, one reason; linked rows use report facets. */
-export function reconcileCjMobile(
-  sources: CjMobileSource[], rows: CjReportRow[], selected: CjGettoneJourney[],
-  filters: CjListFilters, from: string, to: string,
+export function createCjMobileClassifier(
+  rows: CjReportRow[], selected: CjGettoneJourney[], filters: CjListFilters, from: string, to: string,
 ) {
   const selectedIds = new Set(selected.map(j => j.journeyId));
   const linked = new Map(rows.filter(r => r.bisuiteSaleId && r.bisuiteArticleId != null)
@@ -71,17 +78,12 @@ export function reconcileCjMobile(
   }
   const t0 = new Map(Array.from(grouped, ([id, list]) =>
     [id, cjT0Month(list.find(r => r.openedAt)?.openedAt ?? null, list)]));
-  const valid = (r: CjReportRow) => isCjMobileEligible(r) && isCjItemActive(r)
-    && pisteInWindow(r.eventDate, t0.get(r.journeyId) ?? null);
-  const details: { source: CjMobileSource; row?: CjReportRow; reason: CjSimReason }[] = [];
-  const counts = Object.fromEntries(Object.keys(CJ_SIM_REASONS).map(k => [k, 0])) as Record<CjSimReason, number>;
-  for (const source of sources) {
-    if (!inCjInsertPeriod(source.insertedAt, from, to)) continue;
+  return (source: CjMobileSource): CjSimDetail | null => {
+    if (!inCjInsertPeriod(source.insertedAt, from, to)) return null;
     const row = source.articleId == null ? undefined : linked.get(`${source.saleId}:${source.articleId}`);
     const facet = row ?? { ...source, state: "inserito" as const, economicState: source.cancelled ? "annullato" as const : null };
-    if (!matchesDiagnosticFilters(facet, filters)) continue;
+    if (!matchesDiagnosticFilters(facet, filters)) return null;
     let reason: CjSimReason;
-    // Priority is explicit, so overlapping exclusions never inflate the total.
     if (source.cancelled) reason = "cancelled";
     else if (!isCjMobileEligible(source)) {
       const text = `${source.tipologia} ${source.descrizione}`.toUpperCase().replace(/[_-]+/g, " ");
@@ -95,8 +97,54 @@ export function reconcileCjMobile(
     else if (!pisteInWindow(row.eventDate, t0.get(row.journeyId) ?? null)) reason = "window";
     else if (!selectedIds.has(row.journeyId)) reason = "cohort";
     else reason = "admitted";
-    counts[reason]++;
-    details.push({ source, row, reason });
+    return { source, row, reason };
+  };
+}
+
+/** Exact counts, bounded detail memory, and one classification context for all DB batches. */
+export async function paginateCjMobileSources(
+  batches: AsyncIterable<CjMobileSource[]>, rows: CjReportRow[], selected: CjGettoneJourney[],
+  filters: CjListFilters, from: string, to: string, page: number, pageSize: number, includeDetail: boolean,
+): Promise<CjSimSourcePage> {
+  const classify = createCjMobileClassifier(rows, selected, filters, from, to);
+  const counts = Object.fromEntries(Object.keys(CJ_SIM_REASONS).map(k => [k, 0])) as Record<CjSimReason, number>;
+  const details: CjSimDetail[] = [];
+  let sourceTotal = 0;
+  for await (const sources of batches) {
+    for (const source of sources) {
+      const detail = classify(source);
+      if (!detail) continue;
+      counts[detail.reason]++;
+      if (includeDetail && sourceTotal >= page * pageSize && details.length < pageSize) details.push(detail);
+      sourceTotal++;
+    }
+  }
+  return { counts, sourceTotal, details, page, pageSize };
+}
+
+export function reconcileCjMobile(
+  sources: CjMobileSource[], rows: CjReportRow[], selected: CjGettoneJourney[],
+  filters: CjListFilters, from: string, to: string,
+) {
+  const selectedIds = new Set(selected.map(j => j.journeyId));
+  const grouped = new Map<string, CjReportRow[]>();
+  for (const r of rows) {
+    if (!matchesDiagnosticFilters(r, filters)) continue;
+    const list = grouped.get(r.journeyId) ?? [];
+    list.push(r); grouped.set(r.journeyId, list);
+  }
+  const t0 = new Map(Array.from(grouped, ([id, list]) =>
+    [id, cjT0Month(list.find(r => r.openedAt)?.openedAt ?? null, list)]));
+  const valid = (r: CjReportRow) => isCjMobileEligible(r) && isCjItemActive(r)
+    && pisteInWindow(r.eventDate, t0.get(r.journeyId) ?? null);
+  const details: CjSimDetail[] = [];
+  const classify = createCjMobileClassifier(rows, selected, filters, from, to);
+  const counts = Object.fromEntries(Object.keys(CJ_SIM_REASONS).map(k => [k, 0])) as Record<CjSimReason, number>;
+  for (const source of sources) {
+    const detail = classify(source);
+    if (!detail) continue;
+    counts[detail.reason]++;
+    details.push(detail);
   }
   const mobile = rows.filter(r => selectedIds.has(r.journeyId) && r.driver === "mobile"
     && matchesDiagnosticFilters(r, filters) && isCjMobileEligible(r)

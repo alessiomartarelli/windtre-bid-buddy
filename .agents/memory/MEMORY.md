@@ -82,3 +82,4 @@
 - [Punteggio pista Fisso P.IVA](fisso-piva-punti.md) — nella pista Fisso: consumer 1 punto, ogni linea P.IVA 1,5; FRITZ associato aggiunge 1 punto.
 - [Auth profile propagation](auth-profile-no-304.md) — useAuth ha istanze indipendenti: profilo no-store/200 e deduplica eventi globali, o gli effect dipendenti da oggetti entrano in cicli di rimontaggio.
 - [Impianto OK è solo gettone](impianto-ok-gettone.md) — Impianto OK Luce/Gas va escluso da pezzi, premi e punti Assicurazioni e mostrato separatamente come gettone extra.
+- [Diagnostica CJ in sola lettura](cj-diagnostics-read-only.md) — consultazione ed export devono mostrare le discrepanze, senza riconciliazioni implicite.

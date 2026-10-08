@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { exportCjDiagnosticsExcel } from "@/lib/customerJourneyDiagnosticsExport";
-import { CJ_SIM_REASONS, reconcileCjMobile, type CjMobileSource } from "@shared/customerJourneyDiagnostics";
 import { economicStateLabel, type CjGettoneJourney, type CjListFilters, type CjReportRow } from "@shared/customerJourney";
+import { CJ_SIM_REASONS, reconcileCjMobile, type CjMobileSource, type CjSimSourcePage } from "@shared/customerJourneyDiagnostics";
 
 const EMPTY_SOURCES: CjMobileSource[] = [];
 const euro = (n: number) => n.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
@@ -13,10 +13,32 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
   rows: CjReportRow[]; selected: CjGettoneJourney[]; filters: CjListFilters;
   from: string; to: string; onOpenJourney: (id: string) => void;
 }) {
-  const query = useQuery<CjMobileSource[]>({ queryKey: ["/api/customer-journeys/report-mobile-sources"] });
   const [showDetail, setShowDetail] = useState(false);
-  const d = useMemo(() => reconcileCjMobile(query.data ?? EMPTY_SOURCES, rows, selected, filters, from, to),
-    [query.data, rows, selected, filters, from, to]);
+  const context = JSON.stringify({ filters, from, to });
+  // Keep page selection tied to its filter context; changed filters immediately show page one.
+  const [pagination, setPagination] = useState({ context, page: 0 });
+  const page = pagination.context === context ? pagination.page : 0;
+  const params = new URLSearchParams({ filters: JSON.stringify(filters), from, to });
+  const load = async (detail: boolean, signal?: AbortSignal): Promise<CjSimSourcePage> => {
+    const response = await fetch(`/api/customer-journeys/report-mobile-sources?${params}&detail=${detail ? 1 : 0}&page=${detail ? page : 0}`,
+      { credentials: "include", signal });
+    if (!response.ok) throw new Error("Dettaglio SIM non disponibile");
+    return response.json();
+  };
+  const query = useQuery<CjSimSourcePage>({
+    queryKey: ["/api/customer-journeys/report-mobile-sources", context, "summary"],
+    queryFn: ({ signal }) => load(false, signal),
+  });
+  const detailQuery = useQuery<CjSimSourcePage>({
+    queryKey: ["/api/customer-journeys/report-mobile-sources", context, "detail", page],
+    queryFn: ({ signal }) => load(true, signal), enabled: showDetail,
+  });
+  const d = useMemo(() => reconcileCjMobile(EMPTY_SOURCES, rows, selected, filters, from, to),
+    [rows, selected, filters, from, to]);
+  const sourceTotal = query.data?.sourceTotal ?? 0;
+  const discrepancy = d.period - (query.data?.counts.admitted ?? 0);
+  const pageSize = 50;
+  const totalPages = Math.max(1, Math.ceil(Math.max(sourceTotal, d.mobile.length, d.confirmed.length) / pageSize));
   return (
     <Card data-testid="cj-sim-diagnostics">
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -76,20 +98,20 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
           <p className="text-xs text-muted-foreground">Tutte le categorie mobile CJ, incluse offerte escluse e vendite annullate; un solo motivo per articolo.
             Priorità: vendita annullata, esclusione commerciale, identità, aggancio, esito negativo, KO, finestra, coorte.
             Gli articoli non agganciati hanno lo stato di origine “inserito” (o annullato) e nessun esito CJ.</p>
-          {query.isPending ? <p className="text-sm">Caricamento dettaglio vendite…</p> : query.isError ? (
+          {query.isPending ? <p className="text-sm">Caricamento riepilogo vendite…</p> : query.isError ? (
             <div role="alert" className="text-sm text-destructive">Dettaglio SIM non disponibile; nessun totale vendite è stato stimato.
               <Button variant="outline" size="sm" onClick={() => query.refetch()}>Riprova</Button>
             </div>
           ) : <>
-            <p className="text-sm font-semibold mt-2">Articoli nel perimetro: {d.sourceTotal}</p>
+            <p className="text-sm font-semibold mt-2">Articoli nel perimetro: {sourceTotal}</p>
             <dl className="grid gap-x-5 gap-y-1 sm:grid-cols-2 text-sm">
               {Object.entries(CJ_SIM_REASONS).map(([key, label]) => <div key={key} className="flex justify-between gap-2">
-                <dt>{label}</dt><dd className="font-semibold">{d.counts[key as keyof typeof CJ_SIM_REASONS]}</dd>
+                <dt>{label}</dt><dd className="font-semibold">{query.data?.counts[key as keyof typeof CJ_SIM_REASONS]}</dd>
               </div>)}
             </dl>
-            <p className={d.discrepancy ? "text-sm text-destructive mt-2" : "text-xs text-muted-foreground mt-2"}>
-              Discrepanza SIM CJ nel periodo − articoli ammessi BiSuite: {d.discrepancy}.
-              {d.discrepancy !== 0 && " I due flussi non coincidono: controlla gli agganci o le date. Nessuna correzione automatica eseguita."}
+            <p className={discrepancy ? "text-sm text-destructive mt-2" : "text-xs text-muted-foreground mt-2"}>
+              Discrepanza SIM CJ nel periodo − articoli ammessi BiSuite: {discrepancy}.
+              {discrepancy !== 0 && " I due flussi non coincidono: controlla gli agganci o le date. Nessuna correzione automatica eseguita."}
             </p>
           </>}
         </div>
@@ -97,15 +119,27 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
           {showDetail ? "Nascondi contratti e articoli" : "Mostra contratti e articoli"}
         </Button>
         {showDetail && <div className="space-y-3 max-h-[32rem] overflow-y-auto">
+          <div className="flex flex-wrap items-center gap-2" aria-label="Pagine dettaglio SIM">
+            <Button size="sm" variant="outline" disabled={page === 0 || detailQuery.isFetching}
+              onClick={() => setPagination({ context, page: page - 1 })}>Precedente</Button>
+            <span className="text-xs">Pagina {page + 1} di {totalPages} · massimo 50 righe per sezione</span>
+            <Button size="sm" variant="outline" disabled={page + 1 >= totalPages || detailQuery.isFetching}
+              onClick={() => setPagination({ context, page: page + 1 })}>Successiva</Button>
+          </div>
           <h3 className="text-sm font-semibold">Articoli del periodo e motivo</h3>
-          {d.details.map(({ source: s, row, reason }, index) => <div key={`${s.saleId}:${s.articleId}:${index}`} className="rounded-md border p-3 text-xs space-y-1">
+          {detailQuery.isPending && <p className="text-sm">Caricamento pagina…</p>}
+          {detailQuery.isError && <div role="alert" className="text-sm text-destructive">
+            Pagina non disponibile. <Button size="sm" variant="outline" onClick={() => detailQuery.refetch()}>Riprova</Button>
+          </div>}
+          {detailQuery.isSuccess && !detailQuery.data.details.length && <p className="text-xs text-muted-foreground">Nessun articolo in questa pagina.</p>}
+          {detailQuery.data?.details.map(({ source: s, row, reason }, index) => <div key={`${s.saleId}:${s.articleId}:${index}`} className="rounded-md border p-3 text-xs space-y-1">
             <p className="font-semibold">{s.cliente || "Senza identità"} · Vendita {s.bisuiteId} · Articolo {s.articleId ?? "senza ID"}</p>
             <p className="break-words">{s.descrizione || s.tipologia} · {s.insertedAt?.slice(0, 10) || "senza data"} · {row?.pdv ?? s.pdv} · {row?.addetto ?? s.addetto}</p>
             <p>{CJ_SIM_REASONS[reason]} · Contratto: {row?.codiceContratto || s.contract || "non disponibile"}</p>
             {row && <Button size="sm" variant="link" onClick={() => onOpenJourney(row.journeyId)}>Apri scheda cliente</Button>}
           </div>)}
           <h3 className="text-sm font-semibold">Esiti SIM dei clienti selezionati, incluse successive e negative</h3>
-          {d.mobile.filter(r => r.driver === "mobile").map((r, index) => <div key={r.itemId ?? index} className="rounded-md border p-3 text-xs space-y-1">
+          {d.mobile.slice(page * pageSize, (page + 1) * pageSize).map((r, index) => <div key={r.itemId ?? index} className="rounded-md border p-3 text-xs space-y-1">
             <p className="font-semibold">{r.cliente} · Contratto {r.codiceContratto || "non disponibile"}</p>
             <p className="break-words">{r.descrizione} · {r.insertedAt?.slice(0, 10) || "senza data"}</p>
             <p>DRMS: {economicStateLabel(r.drmsOutcomeState)} · Stato utilizzato: {economicStateLabel(r.economicState)}
@@ -114,7 +148,7 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
             <Button size="sm" variant="link" onClick={() => onOpenJourney(r.journeyId)}>Apri scheda cliente</Button>
           </div>)}
           <h3 className="text-sm font-semibold">Gettoni calcolati per cliente</h3>
-          {d.confirmed.map(j => <div key={j.journeyId} className="rounded-md border p-3 text-xs">
+          {d.confirmed.slice(page * pageSize, (page + 1) * pageSize).map(j => <div key={j.journeyId} className="rounded-md border p-3 text-xs">
             <p>{j.cliente}: esiti positivi {euro(j.real)} · inclusi presunti {euro(j.includingPresumed)}</p>
             <Button size="sm" variant="link" onClick={() => onOpenJourney(j.journeyId)}>Apri scheda cliente</Button>
           </div>)}

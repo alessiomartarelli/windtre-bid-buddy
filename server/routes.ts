@@ -10,7 +10,8 @@ import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions, retargetCaringSavedRules } from "../shared/bisuiteMapping";
 import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanitizeGrantableModules, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, CJ_ECONOMIC_STATES, type CjItemState, type CjEconomicState, type CjDriver, insertBrandSchema } from "@shared/schema";
-import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers, cjT0Month } from "@shared/customerJourney";
+import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers, cjT0Month, buildGettoneJourneys, filterGettoneByDate, filterGettoneByInsertDate, type CjListFilters } from "@shared/customerJourney";
+import { matchesDiagnosticFilters, paginateCjMobileSources } from "@shared/customerJourneyDiagnostics";
 import { ACCENT_PRESET_IDS, DASHBOARD_STYLE_IDS, SALES_STYLE_IDS, SCHEME_IDS, THEME_IDS } from "@shared/uiPrefs";
 import { AVATAR_MAX_BYTES } from "@shared/avatar";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
@@ -4253,7 +4254,36 @@ export async function registerRoutes(
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
       const filter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
-      const sources = await storage.getCustomerJourneyMobileSources(profile.organizationId, filter);
+      const date = (value: unknown) => typeof value === "string" && (
+        value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value)
+        && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value
+      );
+      const from = req.query.from ?? "", to = req.query.to ?? "";
+      const page = Number(req.query.page ?? 0);
+      const detail = req.query.detail ?? "0";
+      if (!date(from) || !date(to) || (from && to && from > to)
+        || !Number.isSafeInteger(page) || page < 0 || !["0", "1"].includes(detail)) {
+        return res.status(400).json({ error: "Periodo o pagina non validi" });
+      }
+      let filters: CjListFilters;
+      try {
+        filters = JSON.parse(req.query.filters ?? '{"typeFilter":"tutti","pdvFilter":[],"addettoFilter":"tutti","stateFilter":"tutti","search":""}');
+        if (!filters || !["tutti", "privato", "azienda"].includes(filters.typeFilter)
+          || !Array.isArray(filters.pdvFilter) || !filters.pdvFilter.every(v => typeof v === "string")
+          || !["addettoFilter", "stateFilter", "search"].every(k => typeof (filters as any)[k] === "string")) throw new Error();
+      } catch {
+        return res.status(400).json({ error: "Filtri non validi" });
+      }
+      const rows = await storage.getCustomerJourneyReportRows(profile.organizationId, filter, true);
+      const triggerDate = await storage.getCustomerJourneyTriggerDate(profile.organizationId);
+      const selected = filterGettoneByInsertDate(filterGettoneByDate(
+        buildGettoneJourneys(rows.filter(r => matchesDiagnosticFilters(r, filters))),
+        formatCjTriggerDate(triggerDate), null,
+      ), from || null, to || null);
+      const sources = await paginateCjMobileSources(
+        storage.getCustomerJourneyMobileSourceBatches(profile.organizationId, filter, from, to),
+        rows, selected, filters, from, to, page, 50, detail === "1",
+      );
       res.set("Cache-Control", "private, no-store");
       res.json(sources);
     } catch (error) {

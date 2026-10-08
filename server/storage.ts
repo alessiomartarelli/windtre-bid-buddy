@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, cjDrmsOutcomeRuns, type CjDrmsOutcomeRun, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { driverFromCategory, isCjMobileEligible, cjT0Month, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
+import { MOBILE_CATEGORIES, driverFromCategory, isCjMobileEligible, cjT0Month, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
 import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
 import type { CjCohortData, CjCohortRow } from "@shared/customerJourneyCohorts";
 import { CJ_PRESUMED_PAID_DRIVERS } from "@shared/customerJourney";
@@ -198,8 +198,8 @@ export interface IStorage {
   getCustomerJourneyItems(journeyId: string): Promise<CustomerJourneyItem[]>;
   getCustomerJourneyValues(journeyIds: string[]): Promise<Map<string, number>>;
   getCustomerJourneyItemFacets(journeyIds: string[], addettiFilter?: string[] | null): Promise<Map<string, CjJourneyFacets>>;
-  getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null): Promise<CjReportRow[]>;
-  getCustomerJourneyMobileSources(orgId: string, addettiFilter?: string[] | null): Promise<CjMobileSource[]>;
+  getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null, readOnly?: boolean): Promise<CjReportRow[]>;
+  getCustomerJourneyMobileSourceBatches(orgId: string, addettiFilter: string[] | null, from: string, to: string): AsyncIterable<CjMobileSource[]>;
   getCustomerJourneyCohortRows(orgId: string, addettiFilter?: string[] | null): Promise<CjCohortData>;
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
@@ -1529,8 +1529,9 @@ export class DatabaseStorage implements IStorage {
   async getCustomerJourneyReportRows(
     orgId: string,
     addettiFilter?: string[] | null,
+    readOnly = false,
   ): Promise<CjReportRow[]> {
-    await this.reconcileCustomerJourneysIfStale(orgId);
+    if (!readOnly) await this.reconcileCustomerJourneysIfStale(orgId);
     let cond;
     if (addettiFilter != null) {
       const lower = addettiFilter.map((a) => a.toLowerCase().trim()).filter(Boolean);
@@ -1606,20 +1607,37 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getCustomerJourneyMobileSources(orgId: string, addettiFilter?: string[] | null): Promise<CjMobileSource[]> {
+  async *getCustomerJourneyMobileSourceBatches(
+    orgId: string, addettiFilter: string[] | null, from: string, to: string,
+  ): AsyncGenerator<CjMobileSource[]> {
     const allowed = addettiFilter?.map(a => a.trim().toLowerCase()).filter(Boolean);
-    if (allowed != null && allowed.length === 0) return [];
+    if (allowed != null && allowed.length === 0) return;
+    const categories = sql.join([...MOBILE_CATEGORIES].map(c => sql`${c}`), sql`, `);
+    // Same trim/uppercase normalization as driverFromCategory, before materializing JSON.
+    const mobileArticles = sql`SELECT article FROM jsonb_array_elements(
+      CASE WHEN jsonb_typeof(${bisuiteSales.rawData}->'articoli') = 'array'
+        THEN ${bisuiteSales.rawData}->'articoli' ELSE '[]'::jsonb END
+    ) WITH ORDINALITY AS a(article, ordinal)
+      WHERE upper(trim(article->'categoria'->>'nome')) IN (${categories}) ORDER BY ordinal`;
+    let after: string | undefined;
+    while (true) {
     // Project only the fields needed by diagnostics; never return raw sale data.
     const sales = await db.select({
       id: bisuiteSales.id, bisuiteId: bisuiteSales.bisuiteId, date: bisuiteSales.dataVendita,
       pdv: bisuiteSales.nomeNegozio, addetto: bisuiteSales.nomeAddetto,
       stato: bisuiteSales.stato, cliente: bisuiteSales.nomeCliente,
-      articles: sql<any[]>`${bisuiteSales.rawData}->'articoli'`,
+      articles: sql<any[]>`(SELECT jsonb_agg(article) FROM (${mobileArticles}) mobile)`,
       identity: sql<any>`${bisuiteSales.rawData}->'cliente'`,
       rawAddetto: sql<string>`${bisuiteSales.rawData}->'addetto'->>'nominativo'`,
       rawPdv: sql<string>`${bisuiteSales.rawData}->'attivita'->>'nominativo'`,
     }).from(bisuiteSales).where(and(eq(bisuiteSales.organizationId, orgId),
-      allowed == null ? undefined : inArray(sql`lower(trim(COALESCE(${bisuiteSales.rawData}->'addetto'->>'nominativo', ${bisuiteSales.nomeAddetto})))`, allowed)));
+      from ? sql`${bisuiteSales.dataVendita} >= ${from}::timestamp` : undefined,
+      to ? sql`${bisuiteSales.dataVendita} < ${to}::timestamp + interval '1 day'` : undefined,
+      after ? sql`${bisuiteSales.id} > ${after}` : undefined,
+      sql`EXISTS (${mobileArticles})`,
+      allowed == null ? undefined : inArray(sql`lower(trim(COALESCE(${bisuiteSales.rawData}->'addetto'->>'nominativo', ${bisuiteSales.nomeAddetto})))`, allowed),
+    )).orderBy(bisuiteSales.id).limit(500);
+    if (!sales.length) return;
     const result: CjMobileSource[] = [];
     for (const s of sales) {
       const c = s.identity ?? {};
@@ -1641,7 +1659,10 @@ export class DatabaseStorage implements IStorage {
         });
       }
     }
-    return result;
+    yield result;
+    if (sales.length < 500) return;
+    after = sales[sales.length - 1].id;
+    }
   }
 
   async getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined> {
