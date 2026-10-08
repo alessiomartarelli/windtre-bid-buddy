@@ -4,7 +4,8 @@ description: Business rules for the Customer Journey "Analisi gettoni" report �
 ---
 
 The Reportistica "Analisi gettoni" sub-view counts cross-sell potential per
-mobile-SIM-driven journey, filtered by SIM activation date (`openedAt`).
+mobile-SIM-driven journey. Keep acquisition-cohort analysis distinct from
+the flow of SIM sales in a calendar month.
 
 Rules (decided):
 - **Cohort = only journeys with ≥1 ACTIVE mobile SIM.** Exclude journeys whose
@@ -35,3 +36,18 @@ were made explicit.
 cohort filter (`simAttive ≥ 1`) and keep `simAttivate`/`clienti` as distinct
 metrics. Gettone is pure client logic over the already-isolated
 `/api/customer-journeys/report` rows — do not add a separate endpoint.
+
+## Reconciliation with monthly sales
+
+An audit comparing sales with a client-acquisition cohort must distinguish
+SIM sold in the selected month from subsequent SIM bought by those clients.
+Do not interpret the cohort's cumulative SIM count as monthly sales volume.
+
+**Why:** checking the live report against BiSuite showed that later purchases
+contribute correctly to the selected clients' total, making a direct comparison
+with the month's sales misleading even when no eligible article is missing.
+
+**How to apply:** reconcile monthly sale articles and exclusions first, then
+show later purchases separately. Also distinguish a gettone calculated from
+contracts with positive DRMS outcomes from proof that the gettone itself was
+paid; presumed smartphone liquidation is not payment confirmation.
