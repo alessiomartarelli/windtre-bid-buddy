@@ -11,7 +11,6 @@ import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDef
 import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanitizeGrantableModules, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, CJ_ECONOMIC_STATES, type CjItemState, type CjEconomicState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers, cjT0Month, buildGettoneJourneys, filterGettoneByDate, filterGettoneByInsertDate, type CjListFilters } from "@shared/customerJourney";
-import { matchesDiagnosticFilters, paginateCjMobileSources } from "@shared/customerJourneyDiagnostics";
 import { ACCENT_PRESET_IDS, DASHBOARD_STYLE_IDS, SALES_STYLE_IDS, SCHEME_IDS, THEME_IDS } from "@shared/uiPrefs";
 import { AVATAR_MAX_BYTES } from "@shared/avatar";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
@@ -4274,17 +4273,20 @@ export async function registerRoutes(
       } catch {
         return res.status(400).json({ error: "Filtri non validi" });
       }
-      const rows = await storage.getCustomerJourneyReportRows(profile.organizationId, filter, true);
-      const triggerDate = await storage.getCustomerJourneyTriggerDate(profile.organizationId);
-      const selected = filterGettoneByInsertDate(filterGettoneByDate(
-        buildGettoneJourneys(rows.filter(r => matchesDiagnosticFilters(r, filters))),
-        formatCjTriggerDate(triggerDate), null,
-      ), from || null, to || null);
-      const sources = await paginateCjMobileSources(
-        storage.getCustomerJourneyMobileSourceBatches(profile.organizationId, filter, from, to),
-        rows, selected, filters, from, to, page, 50, detail === "1",
-      );
       res.set("Cache-Control", "private, no-store");
+      const version = req.query.version;
+      if (version != null && (typeof version !== "string" || !/^[a-f0-9]{64}$/.test(version))) {
+        return res.status(400).json({ error: "Versione diagnostica non valida" });
+      }
+      const sources = await storage.getCustomerJourneySimDiagnosticPage(
+        profile.organizationId, filter, filters, from, to, page, detail === "1",
+      );
+      if (version != null && version !== sources.version) {
+        return res.status(409).json({
+          code: "CJ_DIAGNOSTICS_CHANGED",
+          error: "I dati vendite o CJ sono cambiati. Ricarica la diagnostica prima di continuare.",
+        });
+      }
       res.json(sources);
     } catch (error) {
       console.error("CJ mobile sources error:", error);

@@ -1,42 +1,76 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { exportCjDiagnosticsExcel } from "@/lib/customerJourneyDiagnosticsExport";
 import { economicStateLabel, type CjGettoneJourney, type CjListFilters, type CjReportRow } from "@shared/customerJourney";
-import { CJ_SIM_REASONS, reconcileCjMobile, type CjMobileSource, type CjSimSourcePage } from "@shared/customerJourneyDiagnostics";
+import { CJ_SIM_REASONS, type CjSimDiagnosticPage } from "@shared/customerJourneyDiagnostics";
 
-const EMPTY_SOURCES: CjMobileSource[] = [];
+class DiagnosticVersionChanged extends Error {}
 const euro = (n: number) => n.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 
-export default function SimDiagnostics({ rows, selected, filters, from, to, onOpenJourney }: {
+export default function SimDiagnostics({ filters, from, to, onOpenJourney }: {
   rows: CjReportRow[]; selected: CjGettoneJourney[]; filters: CjListFilters;
   from: string; to: string; onOpenJourney: (id: string) => void;
 }) {
   const [showDetail, setShowDetail] = useState(false);
+  const [generation, setGeneration] = useState(0);
   const context = JSON.stringify({ filters, from, to });
-  // Keep page selection tied to its filter context; changed filters immediately show page one.
-  const [pagination, setPagination] = useState({ context, page: 0 });
-  const page = pagination.context === context ? pagination.page : 0;
-  // Commit the new context too: returning to earlier filters must not resurrect their old page.
-  if (pagination.context !== context) setPagination({ context, page: 0 });
+  const [pagination, setPagination] = useState({ context, version: "", page: 0 });
   const params = new URLSearchParams({ filters: JSON.stringify(filters), from, to });
-  const load = async (detail: boolean, signal?: AbortSignal): Promise<CjSimSourcePage> => {
-    const response = await fetch(`/api/customer-journeys/report-mobile-sources?${params}&detail=${detail ? 1 : 0}&page=${detail ? page : 0}`,
+  const load = async (detail: boolean, page: number, version: string | undefined, signal?: AbortSignal): Promise<CjSimDiagnosticPage> => {
+    const requestParams = new URLSearchParams(params);
+    if (version) requestParams.set("version", version);
+    const response = await fetch(`/api/customer-journeys/report-mobile-sources?${requestParams}&detail=${detail ? 1 : 0}&page=${page}`,
       { credentials: "include", signal });
+    if (response.status === 409) throw new DiagnosticVersionChanged("I dati vendite o CJ sono cambiati.");
     if (!response.ok) throw new Error("Dettaglio SIM non disponibile");
     return response.json();
   };
-  const query = useQuery<CjSimSourcePage>({
-    queryKey: ["/api/customer-journeys/report-mobile-sources", context, "summary"],
-    queryFn: ({ signal }) => load(false, signal),
+  const query = useQuery<CjSimDiagnosticPage>({
+    queryKey: ["/api/customer-journeys/report-mobile-sources", context, generation, "summary"],
+    queryFn: ({ signal }) => load(false, 0, undefined, signal),
+    staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false, refetchOnMount: "always",
   });
-  const detailQuery = useQuery<CjSimSourcePage>({
-    queryKey: ["/api/customer-journeys/report-mobile-sources", context, "detail", page],
-    queryFn: ({ signal }) => load(true, signal), enabled: showDetail,
+  const version = query.data?.version;
+  const page = pagination.context === context && pagination.version === version ? pagination.page : 0;
+  // Commit changed contexts: returning to previous filters must not resurrect page two.
+  if (pagination.context !== context || (version && pagination.version !== version)) {
+    setPagination({ context, version: version ?? "", page: 0 });
+  }
+  const detailQuery = useQuery<CjSimDiagnosticPage>({
+    queryKey: ["/api/customer-journeys/report-mobile-sources", context, generation, "detail", version, page],
+    queryFn: ({ signal }) => load(true, page, version, signal), enabled: showDetail && !!version && !query.isFetching,
+    retry: false,
+    // A revisited page must validate its version rather than silently reuse cached rows.
+    staleTime: 0, refetchOnMount: "always",
   });
-  const d = useMemo(() => reconcileCjMobile(EMPTY_SOURCES, rows, selected, filters, from, to),
-    [rows, selected, filters, from, to]);
+  const reload = () => {
+    setPagination({ context, version: "", page: 0 });
+    setGeneration(v => v + 1);
+  };
+  const d = query.data?.diagnostics;
+  if (detailQuery.error instanceof DiagnosticVersionChanged) {
+    return <Card data-testid="cj-sim-diagnostics">
+      <CardHeader><CardTitle className="text-base">SIM, esclusioni ed esiti economici</CardTitle></CardHeader>
+      <CardContent><div role="alert" className="space-y-3 text-sm">
+        <p>I dati vendite o CJ sono cambiati durante la consultazione. Ricarica la diagnostica per vedere riepilogo e pagine coerenti. Nessuna riconciliazione è stata avviata.</p>
+        <Button variant="outline" size="sm" onClick={reload}>Ricarica diagnostica</Button>
+      </div></CardContent>
+    </Card>;
+  }
+  if (!d || query.isFetching || query.isError) {
+    return <Card data-testid="cj-sim-diagnostics">
+      <CardHeader>
+        <CardTitle className="text-base">SIM, esclusioni ed esiti economici</CardTitle>
+        <Button variant="outline" size="sm" data-testid="cj-sim-diagnostics-export" disabled>Scarica diagnostica Excel</Button>
+      </CardHeader>
+      <CardContent>
+      {query.isError ? <div role="alert">Dettaglio SIM non disponibile.
+        <Button variant="outline" size="sm" onClick={reload}>Riprova</Button>
+      </div> : <p className="text-sm">Caricamento diagnostica SIM…</p>}
+    </CardContent></Card>;
+  }
   const sourceTotal = query.data?.sourceTotal ?? 0;
   const discrepancy = d.period - (query.data?.counts.admitted ?? 0);
   const pageSize = 50;
@@ -46,7 +80,7 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-base">SIM, esclusioni ed esiti economici</CardTitle>
         <Button variant="outline" size="sm" data-testid="cj-sim-diagnostics-export"
-          disabled={query.isPending || query.isError || query.isFetching || !query.data}
+          disabled={detailQuery.isFetching || detailQuery.isError}
           onClick={() => exportCjDiagnosticsExcel(d, filters, from, to)}>
           Scarica diagnostica Excel
         </Button>
@@ -100,11 +134,7 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
           <p className="text-xs text-muted-foreground">Tutte le categorie mobile CJ, incluse offerte escluse e vendite annullate; un solo motivo per articolo.
             Priorità: vendita annullata, esclusione commerciale, identità, aggancio, esito negativo, KO, finestra, coorte.
             Gli articoli non agganciati hanno lo stato di origine “inserito” (o annullato) e nessun esito CJ.</p>
-          {query.isPending ? <p className="text-sm">Caricamento riepilogo vendite…</p> : query.isError ? (
-            <div role="alert" className="text-sm text-destructive">Dettaglio SIM non disponibile; nessun totale vendite è stato stimato.
-              <Button variant="outline" size="sm" onClick={() => query.refetch()}>Riprova</Button>
-            </div>
-          ) : <>
+          <>
             <p className="text-sm font-semibold mt-2">Articoli nel perimetro: {sourceTotal}</p>
             <dl className="grid gap-x-5 gap-y-1 sm:grid-cols-2 text-sm">
               {Object.entries(CJ_SIM_REASONS).map(([key, label]) => <div key={key} className="flex justify-between gap-2">
@@ -115,10 +145,10 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
               Discrepanza SIM CJ nel periodo − articoli ammessi BiSuite: {discrepancy}.
               {discrepancy !== 0 && " I due flussi non coincidono: controlla gli agganci o le date. Nessuna correzione automatica eseguita."}
             </p>
-          </>}
+          </>
         </div>
         <Button variant="outline" size="sm" onClick={() => {
-          setPagination({ context, page: 0 });
+          setPagination({ context, version: version!, page: 0 });
           setShowDetail(v => !v);
         }} aria-expanded={showDetail}>
           {showDetail ? "Nascondi contratti e articoli" : "Mostra contratti e articoli"}
@@ -126,10 +156,10 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
         {showDetail && <div data-testid="cj-sim-detail" className="space-y-3 max-h-[32rem] overflow-y-auto">
           <div className="flex flex-wrap items-center gap-2" aria-label="Pagine dettaglio SIM">
             <Button size="sm" variant="outline" disabled={page === 0 || detailQuery.isFetching}
-              onClick={() => setPagination({ context, page: page - 1 })}>Precedente</Button>
+              onClick={() => setPagination({ context, version: version!, page: page - 1 })}>Precedente</Button>
             <span className="text-xs">Pagina {page + 1} di {totalPages} · massimo 50 righe per sezione</span>
             <Button size="sm" variant="outline" disabled={page + 1 >= totalPages || detailQuery.isFetching}
-              onClick={() => setPagination({ context, page: page + 1 })}>Successiva</Button>
+              onClick={() => setPagination({ context, version: version!, page: page + 1 })}>Successiva</Button>
           </div>
           <h3 className="text-sm font-semibold">Articoli del periodo e motivo</h3>
           {detailQuery.isPending && <p className="text-sm">Caricamento pagina…</p>}
@@ -137,7 +167,7 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
             Pagina non disponibile. <Button size="sm" variant="outline" onClick={() => detailQuery.refetch()}>Riprova</Button>
           </div>}
           {detailQuery.isSuccess && !detailQuery.data.details.length && <p className="text-xs text-muted-foreground">Nessun articolo in questa pagina.</p>}
-          {detailQuery.data?.details.map(({ source: s, row, reason }, index) => <div data-testid="cj-sim-source-row" key={`${s.saleId}:${s.articleId}:${index}`} className="rounded-md border p-3 text-xs space-y-1">
+          {!detailQuery.isFetching && !detailQuery.isError && detailQuery.data?.details.map(({ source: s, row, reason }, index) => <div data-testid="cj-sim-source-row" key={`${s.saleId}:${s.articleId}:${index}`} className="rounded-md border p-3 text-xs space-y-1">
             <p className="font-semibold">{s.cliente || "Senza identità"} · Vendita {s.bisuiteId} · Articolo {s.articleId ?? "senza ID"}</p>
             <p className="break-words">{s.descrizione || s.tipologia} · {s.insertedAt?.slice(0, 10) || "senza data"} · {row?.pdv ?? s.pdv} · {row?.addetto ?? s.addetto}</p>
             <p>{CJ_SIM_REASONS[reason]} · Contratto: {row?.codiceContratto || s.contract || "non disponibile"}</p>

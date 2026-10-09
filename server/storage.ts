@@ -5,7 +5,9 @@ import { MOBILE_CATEGORIES, driverFromCategory, isCjMobileEligible, cjT0Month, e
 import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
 import type { CjCohortData, CjCohortRow } from "@shared/customerJourneyCohorts";
 import { CJ_PRESUMED_PAID_DRIVERS } from "@shared/customerJourney";
-import type { CjMobileSource } from "@shared/customerJourneyDiagnostics";
+import { paginateCjMobileSources, matchesDiagnosticFilters, reconcileCjMobile, type CjMobileSource, type CjSimDiagnosticPage } from "@shared/customerJourneyDiagnostics";
+import { buildGettoneJourneys, filterGettoneByInsertDate, filterGettoneByDate, type CjListFilters } from "@shared/customerJourney";
+import { createHash } from "node:crypto";
 
 // Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
 type DbExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -200,6 +202,7 @@ export interface IStorage {
   getCustomerJourneyItemFacets(journeyIds: string[], addettiFilter?: string[] | null): Promise<Map<string, CjJourneyFacets>>;
   getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null, readOnly?: boolean): Promise<CjReportRow[]>;
   getCustomerJourneyMobileSourceBatches(orgId: string, addettiFilter: string[] | null, from: string, to: string): AsyncIterable<CjMobileSource[]>;
+  getCustomerJourneySimDiagnosticPage(orgId: string, addettiFilter: string[] | null, filters: CjListFilters, from: string, to: string, page: number, detail: boolean): Promise<CjSimDiagnosticPage>;
   getCustomerJourneyCohortRows(orgId: string, addettiFilter?: string[] | null): Promise<CjCohortData>;
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
@@ -1530,6 +1533,7 @@ export class DatabaseStorage implements IStorage {
     orgId: string,
     addettiFilter?: string[] | null,
     readOnly = false,
+    executor: DbExecutor | typeof db = db,
   ): Promise<CjReportRow[]> {
     if (!readOnly) await this.reconcileCustomerJourneysIfStale(orgId);
     let cond;
@@ -1543,7 +1547,7 @@ export class DatabaseStorage implements IStorage {
     } else {
       cond = eq(customerJourneys.organizationId, orgId);
     }
-    const rows = await db.select({
+    const rows = await executor.select({
       itemId: customerJourneyItems.id,
       bisuiteSaleId: customerJourneyItems.bisuiteSaleId,
       bisuiteArticleId: customerJourneyItems.bisuiteArticleId,
@@ -1573,7 +1577,7 @@ export class DatabaseStorage implements IStorage {
       dataInserimento: customerJourneyItems.dataInserimento,
     }).from(customerJourneyItems)
       .innerJoin(customerJourneys, eq(customerJourneyItems.journeyId, customerJourneys.id))
-      .where(cond);
+      .where(cond).orderBy(customerJourneyItems.id);
 
     return rows.map((r) => {
       const referente = [r.nome, r.cognome].filter(Boolean).join(" ").trim();
@@ -1609,6 +1613,7 @@ export class DatabaseStorage implements IStorage {
 
   async *getCustomerJourneyMobileSourceBatches(
     orgId: string, addettiFilter: string[] | null, from: string, to: string,
+    executor: DbExecutor | typeof db = db,
   ): AsyncGenerator<CjMobileSource[]> {
     const allowed = addettiFilter?.map(a => a.trim().toLowerCase()).filter(Boolean);
     if (allowed != null && allowed.length === 0) return;
@@ -1622,7 +1627,7 @@ export class DatabaseStorage implements IStorage {
     let after: string | undefined;
     while (true) {
     // Project only the fields needed by diagnostics; never return raw sale data.
-    const sales = await db.select({
+    const sales = await executor.select({
       id: bisuiteSales.id, bisuiteId: bisuiteSales.bisuiteId, date: bisuiteSales.dataVendita,
       pdv: bisuiteSales.nomeNegozio, addetto: bisuiteSales.nomeAddetto,
       stato: bisuiteSales.stato, cliente: bisuiteSales.nomeCliente,
@@ -1828,6 +1833,51 @@ export class DatabaseStorage implements IStorage {
     const cfg = await this.getOrgConfig(orgId);
     const raw = (cfg?.config as Record<string, unknown> | null | undefined)?.customerJourneyTriggerDate;
     return parseCjTriggerDate(raw) ?? CJ_DEFAULT_TRIGGER_DATE;
+  }
+
+  /** One MVCC snapshot per request, no reconciliation and no retained raw sale payloads.
+   * Hash every authorized input, not counts/max dates: equal-size replacements and
+   * economic/manual changes must invalidate older pages too.
+   */
+  async getCustomerJourneySimDiagnosticPage(
+    orgId: string, addettiFilter: string[] | null, filters: CjListFilters,
+    from: string, to: string, page: number, detail: boolean,
+  ): Promise<CjSimDiagnosticPage> {
+    return db.transaction(async tx => {
+      const rows = await this.getCustomerJourneyReportRows(orgId, addettiFilter, true, tx);
+      const [cfg] = await tx.select({ config: organizationConfig.config }).from(organizationConfig)
+        .where(eq(organizationConfig.organizationId, orgId));
+      const trigger = formatCjTriggerDate(parseCjTriggerDate(
+        (cfg?.config as Record<string, unknown> | undefined)?.customerJourneyTriggerDate,
+      ) ?? CJ_DEFAULT_TRIGGER_DATE);
+      const selected = filterGettoneByInsertDate(filterGettoneByDate(
+        buildGettoneJourneys(rows.filter(r => matchesDiagnosticFilters(r, filters))), trigger, null,
+      ), from || null, to || null);
+      const hash = createHash("sha256");
+      hash.update(JSON.stringify({ orgId, addettiFilter, filters, from, to, trigger, rows }));
+      const batches = this.getCustomerJourneyMobileSourceBatches(orgId, addettiFilter, from, to, tx);
+      async function* versionedBatches() {
+        for await (const batch of batches) {
+          // Frame individual sources, independent of DB batch boundaries.
+          for (const source of batch) hash.update(JSON.stringify(source) + "\n");
+          yield batch;
+        }
+      }
+      const result = await paginateCjMobileSources(
+        versionedBatches(), rows, selected, filters, from, to, page, 50, detail,
+      );
+      const diagnostics = !detail ? reconcileCjMobile([], rows, selected, filters, from, to) : undefined;
+      if (diagnostics) {
+        diagnostics.counts = result.counts;
+        diagnostics.sourceTotal = result.sourceTotal;
+        diagnostics.discrepancy = diagnostics.period - result.counts.admitted;
+      }
+      return {
+        ...result, version: hash.digest("hex"),
+        // The client must not combine sales with a separately fetched CJ report.
+        ...(diagnostics ? { diagnostics } : {}),
+      };
+    }, { isolationLevel: "repeatable read", accessMode: "read only" });
   }
 
   async setCustomerJourneyTriggerDate(orgId: string, date: string | null): Promise<Date> {

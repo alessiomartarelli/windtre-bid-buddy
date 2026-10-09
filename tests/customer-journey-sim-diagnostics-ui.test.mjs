@@ -4,7 +4,8 @@ import { createServer } from "node:http";
 import { build } from "esbuild";
 import { launchBrowser } from "./helpers/uiTest.mjs";
 import { buildGettoneJourneys, filterGettoneByInsertDate } from "../shared/customerJourney.ts";
-import { matchesDiagnosticFilters, paginateCjMobileSources } from "../shared/customerJourneyDiagnostics.ts";
+import { matchesDiagnosticFilters, paginateCjMobileSources, reconcileCjMobile } from "../shared/customerJourneyDiagnostics.ts";
+import { createHash } from "node:crypto";
 import { rows, sources } from "./fixtures/sim-diagnostics-data.mjs";
 
 const rowIds = ["cj-sim-source-row", "cj-sim-outcome-row", "cj-sim-gettone-row"];
@@ -67,6 +68,15 @@ test("SIM diagnostics: React pagination, context changes and retry", { timeout: 
         const selected = filterGettoneByInsertDate(buildGettoneJourneys(filteredRows), from, to);
         async function* batches() { yield sources; }
         const body = await paginateCjMobileSources(batches(), filteredRows, selected, f, from, to, index, 50, detail);
+        body.version = createHash("sha256").update(JSON.stringify({ f, from, to, rows, sources })).digest("hex");
+        if (!detail) {
+          body.diagnostics = reconcileCjMobile([], rows, selected, f, from, to);
+          body.diagnostics.counts = body.counts;
+          body.diagnostics.sourceTotal = body.sourceTotal;
+          body.diagnostics.discrepancy = body.diagnostics.period - body.counts.admitted;
+        } else {
+          assert.equal(url.searchParams.get("version"), body.version, "detail must validate its summary version");
+        }
         record.body = body;
         await route.fulfill({ json: body }).catch(() => {}); // A changed context can abort a held request.
         gate?.finished.resolve();

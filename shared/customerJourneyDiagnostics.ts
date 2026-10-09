@@ -45,6 +45,11 @@ export interface CjSimSourcePage {
   pageSize: number;
 }
 
+export interface CjSimDiagnosticPage extends CjSimSourcePage {
+  version: string;
+  diagnostics?: ReturnType<typeof reconcileCjMobile>;
+}
+
 export function inCjInsertPeriod(date: string | null, from: string, to: string): boolean {
   if (!date) return !from && !to;
   const day = date.slice(0, 10);

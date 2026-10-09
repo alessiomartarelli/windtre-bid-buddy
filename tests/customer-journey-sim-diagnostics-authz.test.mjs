@@ -105,12 +105,17 @@ test("historical dataset: bounded period reads, exact summaries and stable pages
     assert.equal(summary.body.counts.admitted, 1);
     assert.equal(summary.body.counts.data, 605);
     assert.equal(summary.body.counts.unlinked, 604);
+    assert.match(summary.body.version, /^[a-f0-9]{64}$/);
+    assert.equal(summary.body.diagnostics.period, 1);
+    assert.equal(summary.body.diagnostics.sourceTotal, summary.body.sourceTotal);
+    assert.deepEqual(summary.body.diagnostics.counts, summary.body.counts);
     assert.deepEqual(summary.body.details, [], "summary must not download source articles");
     const details = [];
     const started = performance.now();
     for (let page = 0; page < Math.ceil(1210 / 50); page++) {
-      const result = await read({ detail: "1", page: String(page) });
+      const result = await read({ detail: "1", page: String(page), version: summary.body.version });
       assert.equal(result.status, 200);
+      assert.equal(result.body.version, summary.body.version);
       assert.deepEqual(result.body.counts, summary.body.counts);
       assert.equal(result.body.sourceTotal, summary.body.sourceTotal);
       assert.ok(result.body.details.length <= 50);
@@ -140,6 +145,77 @@ test("historical dataset: bounded period reads, exact summaries and stable pages
     assert.equal((await read()).body.sourceTotal, 1210);
     assert.equal((await pool.query("SELECT count(*)::int n FROM customer_journeys WHERE organization_id=$1", [a.orgId])).rows[0].n, 1);
     assert.equal((await pool.query("SELECT count(*)::int n FROM customer_journey_items WHERE organization_id=$1", [a.orgId])).rows[0].n, 1);
+    await setRole(pool, a.profileId, "admin", []);
+    const stalePage = async version => {
+      const result = await read({ detail: "1", page: "1", version });
+      assert.equal(result.status, 409);
+      assert.equal(result.body.code, "CJ_DIAGNOSTICS_CHANGED");
+      assert.equal(result.body.details, undefined, "never deliver mixed-version rows");
+      assert.equal(result.body.counts, undefined, "never deliver a newer summary with an older page");
+    };
+    // Insertion before the first row shifts every offset; it must not silently duplicate page one.
+    await pool.query(`INSERT INTO bisuite_sales (id,organization_id,bisuite_id,data_vendita,nome_addetto,raw_data)
+      VALUES ('00000000-0000-0000-0000-000000000001',$1,40001,'2026-07-02','MARIO',
+        '{"articoli":[{"id":1,"categoria":{"nome":"UNTIED"},"tipologia":{"nome":"VOCE"}}]}')`, [a.orgId]);
+    await stalePage(summary.body.version);
+    let fresh = (await read()).body;
+    assert.equal(fresh.sourceTotal, 1211);
+    // Deletion after page one must not silently omit the shifted row on page two.
+    await pool.query("DELETE FROM bisuite_sales WHERE organization_id=$1 AND bisuite_id=40001", [a.orgId]);
+    await stalePage(fresh.version);
+    fresh = (await read()).body;
+    assert.equal(fresh.version, summary.body.version, "content version is stable when the exact context is restored");
+    // An edit with unchanged totals still invalidates the diagnostic context.
+    await pool.query(`UPDATE bisuite_sales SET nome_cliente='Cliente rinominato'
+      WHERE organization_id=$1 AND bisuite_id=20002`, [a.orgId]);
+    await stalePage(fresh.version);
+    fresh = (await read()).body;
+    await pool.query(`UPDATE customer_journey_items SET economic_state='pagato',economic_state_manual=true
+      WHERE organization_id=$1`, [a.orgId]);
+    await stalePage(fresh.version);
+    fresh = (await read()).body;
+    assert.equal(fresh.diagnostics.outcomes.manualPositive, 1);
+    await pool.query(`UPDATE organization_config SET config=jsonb_set(config,'{customerJourneyTriggerDate}','"2026-08-01"')
+      WHERE organization_id=$1`, [a.orgId]);
+    await stalePage(fresh.version);
+    fresh = (await read()).body;
+    assert.equal(fresh.diagnostics.clients, 0);
+    assert.equal((await read({ version: "bad" })).status, 400);
+    await setRole(pool, a.profileId, "operatore", []);
+    await stalePage(fresh.version);
+
+    // A sync committing BETWEEN database batches cannot contaminate even a single response.
+    const f = { typeFilter: "tutti", pdvFilter: [], addettoFilter: "tutti", stateFilter: "tutti", search: "" };
+    const baseline = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, f, "2026-07-01", "2026-07-31", 0, false);
+    const originalBatches = storage.getCustomerJourneyMobileSourceBatches;
+    const originalReconcile = storage.reconcileCustomerJourneysIfStale;
+    let mutated = false;
+    storage.reconcileCustomerJourneysIfStale = () => { throw new Error("Unexpected diagnostic reconciliation"); };
+    storage.getCustomerJourneyMobileSourceBatches = async function* (...args) {
+      for await (const batch of originalBatches.apply(this, args)) {
+        yield batch;
+        if (!mutated) {
+          mutated = true;
+          await pool.query(`DELETE FROM bisuite_sales WHERE id=(
+            SELECT id FROM bisuite_sales WHERE organization_id=$1 AND data_vendita BETWEEN '2026-07-01' AND '2026-07-31 23:59:59.999'
+            ORDER BY id DESC LIMIT 1)`, [a.orgId]);
+        }
+      }
+    };
+    try {
+      const duringSync = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, f, "2026-07-01", "2026-07-31", 24, true);
+      assert.ok(mutated);
+      assert.equal(duringSync.version, baseline.version);
+      assert.equal(duringSync.sourceTotal, baseline.sourceTotal);
+      assert.deepEqual(duringSync.counts, baseline.counts);
+      assert.equal(duringSync.details.length, 10);
+    } finally {
+      storage.getCustomerJourneyMobileSourceBatches = originalBatches;
+      storage.reconcileCustomerJourneysIfStale = originalReconcile;
+    }
+    const afterSync = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, f, "2026-07-01", "2026-07-31", 24, true);
+    assert.notEqual(afterSync.version, baseline.version);
+    assert.equal(afterSync.sourceTotal, baseline.sourceTotal - 2);
   } finally {
     await cleanupOrg(pool, a);
     await pool.end();
