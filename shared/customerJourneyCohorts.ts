@@ -1,6 +1,7 @@
 import {
   CJ_DRIVER_LABELS, cjT0Month, gettoneForPiste, isCjItemActive,
   isCjMobileEligible, monthOfIso, pisteInWindow, effectiveEconomicState,
+  cjPhoneEligibility, cjPhoneKey,
 } from "./customerJourney";
 import type { CjReportRow } from "./customerJourney";
 import type { CjEconomicState } from "./schema";
@@ -33,6 +34,8 @@ export interface CjCohortEvent {
   newPista: boolean;
   generated: number;
   confirmed: number;
+  extraGenerated: number;
+  extraConfirmed: number;
   source: string;
   kind: "vendita" | "riconoscimento";
 }
@@ -45,6 +48,8 @@ export interface CjCohortCustomer {
   mobileActive: boolean;
   generated: number;
   confirmed: number;
+  extraGenerated: number;
+  extraConfirmed: number;
   unallocatedGenerated: number;
   unallocatedConfirmed: number;
 }
@@ -88,17 +93,23 @@ export function buildCjCohortModel(rows: CjCohortRow[], triggerDate?: string | n
     const opener = mobiles[0].addetto || "Non attribuito";
     const base = { journeyId, cliente: list[0].cliente, cohort, opener };
     const customer: CjCohortCustomer = {
-      ...base, pdv: mobiles[0].pdv, mobileActive: mobiles.some(isCjItemActive), generated: 0, confirmed: 0, unallocatedGenerated: 0, unallocatedConfirmed: 0,
+      ...base, pdv: mobiles[0].pdv, mobileActive: mobiles.some(isCjItemActive), generated: 0, confirmed: 0, extraGenerated: 0, extraConfirmed: 0, unallocatedGenerated: 0, unallocatedConfirmed: 0,
     };
     model.customers.push(customer);
-    const candidates = list.filter(r => r.driver !== "mobile" && pisteInWindow(r.eventDate, t0)).sort(order);
+    // Structural eligibility retains economic reversal history. Current
+    // eligibility below still excludes cancelled/stornato pairs from stock.
+    const structural = cjPhoneEligibility(list.map(r => ({ ...r, economicState: null })), t0, openedAt, list[0]?.triggerBisuiteId);
+    const currentPhones = cjPhoneEligibility(list, t0, openedAt, list[0]?.triggerBisuiteId);
+    const extraPhones = list.filter(r => r.driver === "telefono" && structural.get(cjPhoneKey(r))?.kind === "extra").sort(order);
+    const candidates = list.filter(r => r.driver !== "mobile" && pisteInWindow(r.eventDate, t0)
+      && (r.driver !== "telefono" || structural.get(cjPhoneKey(r))?.kind === "iniziale")).sort(order);
     const hasUndatedQualifying = customer.mobileActive &&
       candidates.some(r => isCjItemActive(r) && !month(r.insertedAt));
     const seen = new Set<string>();
     const makeEvent = (r: CjCohortRow, eventMonth: string, kind: CjCohortEvent["kind"]): CjCohortEvent => ({
       ...base, itemId: r.itemId, month: eventMonth, seller: r.addetto || "Non attribuito",
       pdv: r.pdv, driver: r.driver, product: r.descrizione || CJ_DRIVER_LABELS[r.driver],
-      active: isCjItemActive(r), newPista: false, generated: 0, confirmed: 0, source: "", kind,
+      active: isCjItemActive(r), newPista: false, generated: 0, confirmed: 0, extraGenerated: 0, extraConfirmed: 0, source: "", kind,
     });
     for (const r of candidates) {
       const salesMonth = month(r.insertedAt);
@@ -120,7 +131,18 @@ export function buildCjCohortModel(rows: CjCohortRow[], triggerDate?: string | n
       customer.unallocatedGenerated = customer.generated;
       model.unallocatedGenerated += customer.unallocatedGenerated;
     }
-    const transitions = [...mobiles, ...candidates].flatMap(r => {
+    for (const r of extraPhones) {
+      const salesMonth = month(r.insertedAt);
+      if (!salesMonth) { model.undatedSales++; continue; }
+      const ev = makeEvent(r, salesMonth, "vendita");
+      ev.product = `Coppia aggiuntiva SIM–smartphone · ${ev.product}`;
+      ev.active = currentPhones.get(cjPhoneKey(r))?.kind === "extra";
+      ev.extraGenerated = ev.generated = ev.active ? 20 : 0;
+      customer.generated += ev.generated;
+      customer.extraGenerated += ev.generated;
+      model.events.push(ev);
+    }
+    const transitions = [...mobiles, ...candidates, ...extraPhones].flatMap(r => {
       if (r.historyIncomplete) model.incompleteHistories++;
       // Operational KO is not a valid qualifying contract. Economic storni
       // must instead stay in the history, to retain the original credit.
@@ -130,22 +152,46 @@ export function buildCjCohortModel(rows: CjCohortRow[], triggerDate?: string | n
     const states = new Map<string, boolean>();
     const drivers = new Map<string, string>();
     const mobileStates = new Map(mobiles.map(r => [r.itemId, String(r.state) !== "ko"]));
+    const economicStates = new Map<string, CjEconomicState>();
+    const economicSources = new Map<string, string>();
+    const extraAmount = () => {
+      const phones = cjPhoneEligibility(list.map(r => ({
+        ...r, economicState: economicSources.get(r.itemId) === "presunto" ? null : economicStates.get(r.itemId) ?? "annullato",
+      })), t0, openedAt, list[0]?.triggerBisuiteId);
+      const pairs = Array.from(phones.values()).filter(p => p.kind === "extra" && p.paid);
+      return { total: pairs.length * 20, explicit: pairs.filter(p => p.explicit).length * 20 };
+    };
     const driverCount = () => [...mobileStates.values()].some(Boolean)
       ? new Set([...states].filter(([, p]) => p).map(([id]) => drivers.get(id)!)).size : 0;
     for (const { r, h } of transitions) {
       const before = driverCount();
+      const extraBefore = extraAmount();
+      economicStates.set(r.itemId, h.state);
+      economicSources.set(r.itemId, h.source);
       if (r.driver === "mobile") mobileStates.set(r.itemId, paid(h.state));
-      else {
+      else if (!extraPhones.some(p => p.itemId === r.itemId)) {
         drivers.set(r.itemId, r.driver);
         states.set(r.itemId, paid(h.state));
       }
-      const delta = gettoneForPiste(driverCount()) - gettoneForPiste(before);
-      if (!delta) continue;
-      const ev = makeEvent(r, h.month, "riconoscimento");
-      ev.confirmed = delta;
-      ev.source = h.source;
-      customer.confirmed += delta;
-      model.events.push(ev);
+      const after = extraAmount();
+      const explicitDelta = after.explicit - extraBefore.explicit;
+      const presumedDelta = after.total - extraBefore.total - explicitDelta;
+      const baseDelta = gettoneForPiste(driverCount()) - gettoneForPiste(before);
+      for (const segment of [
+        { amount: baseDelta, extra: false, source: h.source },
+        { amount: explicitDelta, extra: true, source: h.source },
+        { amount: presumedDelta, extra: true, source: "presunto" },
+      ]) {
+        if (!segment.amount) continue;
+        const ev = makeEvent(r, h.month, "riconoscimento");
+        ev.confirmed = segment.amount;
+        ev.extraConfirmed = segment.extra ? segment.amount : 0;
+        if (segment.extra) ev.product = `Coppia aggiuntiva SIM–smartphone · ${ev.product}`;
+        ev.source = segment.source;
+        customer.confirmed += segment.amount;
+        customer.extraConfirmed += ev.extraConfirmed;
+        model.events.push(ev);
+      }
     }
     // A known current state without historical evidence must not be given
     // a fabricated recognition month. Reconcile portfolio stock separately.
@@ -156,10 +202,13 @@ export function buildCjCohortModel(rows: CjCohortRow[], triggerDate?: string | n
       const current = latest(r);
       return isCjItemActive(current) && paid(effectiveEconomicState(current));
     }).map(r => r.driver));
-    const current = mobiles.some(r => isCjItemActive(latest(r))) ? gettoneForPiste(currentDrivers.size) : 0;
+    const latestPhones = cjPhoneEligibility(list.map(latest), t0, openedAt, list[0]?.triggerBisuiteId);
+    const extraCurrent = Array.from(latestPhones.values()).filter(p => p.kind === "extra" && p.paid).length * 20;
+    const current = mobiles.some(r => isCjItemActive(latest(r))) ? gettoneForPiste(currentDrivers.size) + extraCurrent : 0;
     customer.unallocatedConfirmed = current - customer.confirmed;
     model.unallocatedConfirmed += customer.unallocatedConfirmed;
     customer.confirmed = current;
+    customer.extraConfirmed = extraCurrent;
   }
   model.customers.sort((a, b) => a.cohort.localeCompare(b.cohort) || a.cliente.localeCompare(b.cliente, "it"));
   model.events.sort((a, b) => a.month.localeCompare(b.month) || a.itemId.localeCompare(b.itemId));
@@ -174,6 +223,10 @@ export interface CjCohortSummary {
   sales: number;
   newPiste: number;
   generated: number;
+  baseGenerated: number;
+  extraGenerated: number;
+  extraConfirmed: number;
+  extraPresumed: number;
   confirmed: number;
   presumed: number;
   pending: number;
@@ -188,6 +241,10 @@ export function summarizeCjCohort(customers: CjCohortCustomer[], events: CjCohor
     clients: ids.size, repurchased, advanced, percentage: ids.size ? repurchased / ids.size * 100 : 0,
     sales: sales.length, newPiste: sales.filter(e => e.newPista).length,
     generated: selected.reduce((s, e) => s + e.generated, 0),
+    baseGenerated: selected.reduce((s, e) => s + e.generated - e.extraGenerated, 0),
+    extraGenerated: selected.reduce((s, e) => s + e.extraGenerated, 0),
+    extraConfirmed: selected.reduce((s, e) => s + (e.source === "presunto" ? 0 : e.extraConfirmed), 0),
+    extraPresumed: selected.reduce((s, e) => s + (e.source === "presunto" ? e.extraConfirmed : 0), 0),
     confirmed: selected.reduce((s, e) => s + (e.source === "presunto" ? 0 : e.confirmed), 0),
     presumed: selected.reduce((s, e) => s + (e.source === "presunto" ? e.confirmed : 0), 0),
     // Portfolio pending is a stock, NOT generated(month) - confirmed(month).

@@ -450,7 +450,7 @@ test('scenario 4: private journey shows the customer name, item keeps the addett
 // cambiano); l'inserimento di una nuova vendita fa avanzare il watermark e
 // compare la seconda journey.
 // ===========================================================================
-test('scenario 5: sales already in DB appear on list via auto-reconcile (no manual rigenera)', async () => {
+test('scenario 5: consultations never reconcile; explicit regeneration updates the watermark', async () => {
   const pool = await newPool();
   const session = await signupAndLogin();
   const cf1 = uniq('AUTORC').toUpperCase();
@@ -466,9 +466,12 @@ test('scenario 5: sales already in DB appear on list via auto-reconcile (no manu
     // Prima del load non c'è ancora alcun reconcile né journey.
     assert.equal(await reconciledWatermark(pool, session.orgId), null, 'no watermark before first load');
 
-    // Il GET della lista riconcilia automaticamente e ritorna la journey.
+    assert.equal((await listJourneys(session)).length, 0, 'GET must not create a journey');
+    assert.equal(await reconciledWatermark(pool, session.orgId), null, 'GET must not write watermark');
+    await reconcile(session);
+    // Solo il reconcile esplicito crea la journey.
     const list1 = await listJourneys(session);
-    assert.equal(list1.length, 1, 'auto-reconcile must surface the existing sale as a journey');
+    assert.equal(list1.length, 1, 'explicit reconcile surfaces the existing sale');
     const wm1 = await reconciledWatermark(pool, session.orgId);
     assert.ok(wm1, 'watermark must be set after the auto-reconcile');
 
@@ -479,6 +482,8 @@ test('scenario 5: sales already in DB appear on list via auto-reconcile (no manu
 
     // Nuova vendita (altra pagina) => il load successivo la riconcilia.
     await insertSale(pool, session.orgId, cf2, 'ADD AUTO 2', phones);
+    assert.equal((await listJourneys(session)).length, 1, 'reading new sales must not mutate the journey list');
+    await reconcile(session);
     const list3 = await listJourneys(session);
     assert.equal(list3.length, 2, 'new sale must appear on the next load without manual rigenera');
     const wm3 = await reconciledWatermark(pool, session.orgId);
@@ -554,6 +559,7 @@ test('scenario 6: a September purchase is linked to the July SIM journey and rai
   try {
     // (1) SIM a luglio (SALE_DATE = 2026-07-15) => journey con solo mobile+telefono.
     const julySaleId = await insertSale(pool, session.orgId, cf, addetto, phones);
+    await reconcile(session);
     const list1 = await listJourneys(session);
     assert.equal(list1.length, 1, 'July SIM opens exactly one journey');
     const journeyId = list1[0].id;
@@ -569,7 +575,8 @@ test('scenario 6: a September purchase is linked to the July SIM journey and rai
       pool, session.orgId, cf, addetto, '2026-09-02T10:00:00.000Z', buildRawDataFisso(cf, addetto),
     );
 
-    // (3) il load successivo riconcilia (watermark superato) e aggancia la vendita.
+    // (3) reconcile esplicito/schedulato aggancia la vendita, non la consultazione.
+    await reconcile(session);
     const list2 = await listJourneys(session);
     assert.equal(list2.length, 1, 'still ONE journey: the later purchase must not open a new one');
     assert.equal(list2[0].id, journeyId);
@@ -698,6 +705,7 @@ test('scenario 8: moving the trigger date forward prunes journeys opened under t
       });
       assert.equal(put.status, 200, `config PUT failed: ${JSON.stringify(put.body)}`);
       assert.equal(await reconciledWatermark(pool, session.orgId), null, 'trigger change must reset the reconcile watermark');
+      await reconcile(session);
 
       const list = await jsonReq(`${BASE}/api/customer-journeys`, { headers: { Cookie: session.cookieHeader } });
       assert.equal(list.status, 200);
@@ -790,9 +798,9 @@ test('scenario 9: a trigger change racing an in-flight reconcile still ends in t
       if (round % 2 === 1) ops.reverse();
       const results = await Promise.all(ops.map((op) => op()));
       for (const r of results) if (r?.status != null) assert.equal(r.status, 200);
-
-      // Stato finale osservabile dalla lista (che riconcilia se il watermark è
-      // stato azzerato dal PUT): solo luglio.
+      // Solo il writer esplicito/schedulato consuma l'invalidazione del
+      // trigger dopo la race; la consultazione non effettua riparazioni.
+      await reconcile(session);
       const list = await jsonReq(`${BASE}/api/customer-journeys`, { headers: { Cookie: session.cookieHeader } });
       assert.equal(list.status, 200);
       assert.deepEqual(list.body.map((j) => j.customerKey), [cfJuly], `round ${round}: only July after the race`);

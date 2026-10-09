@@ -10,6 +10,8 @@ const row = (id, changes = {}) => ({
   customerType: "privato", pdv: "Roma", addetto: "Mario", driver: "mobile", state: "inserito",
   economicState: null, categoria: "UNTIED", tipologia: "VOCE", descrizione: "SIM voce",
   bisuiteSaleId: `s${id}`, bisuiteArticleId: id,
+  iccid: "89000000000000000001",
+  ...(changes.driver === "telefono" ? { categoria: "TELEFONIA", tipologia: "SMARTPHONE", bisuiteSaleId: "s1" } : {}),
   openedAt: "2026-07-02", insertedAt: "2026-07-02", eventDate: "2026-07-02", valore: 0,
   ...changes,
 });

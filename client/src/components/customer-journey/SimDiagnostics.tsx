@@ -184,6 +184,7 @@ export default function SimDiagnostics({ filters, from, to, onOpenJourney }: {
           </div>)}
           <h3 className="text-sm font-semibold">Gettoni calcolati per cliente</h3>
           {d.confirmed.slice(page * pageSize, (page + 1) * pageSize).map(j => <div data-testid="cj-sim-gettone-row" key={j.journeyId} className="rounded-md border p-3 text-xs">
+            <p>Base stimata {euro(j.base)} · extra {euro(j.extra)} ({j.extraCoppie} coppie)</p>
             <p>{j.cliente}: esiti positivi {euro(j.real)} · inclusi presunti {euro(j.includingPresumed)}</p>
             <Button size="sm" variant="link" onClick={() => onOpenJourney(j.journeyId)}>Apri scheda cliente</Button>
           </div>)}

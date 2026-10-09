@@ -1,4 +1,4 @@
-import type { CjDriver, CjItemState, CjEconomicState } from "./schema";
+import type { CjDriver, CjItemState, CjEconomicState, CustomerJourney, CustomerJourneyItem } from "./schema";
 
 // === Customer Journey driver classification (Task #158) ===
 // Mappa categoria BiSuite → driver CJ. Rispecchia la classificazione canvass
@@ -58,8 +58,12 @@ export interface CjDriverSummary {
 // L'isolamento per operatore (solo i propri item) è applicato lato server.
 export interface CjReportRow {
   itemId?: string;
+  bisuiteId?: number | null;
   bisuiteSaleId?: string | null;
   bisuiteArticleId?: number | null;
+  iccid?: string | null;
+  cjTriggerMobile?: boolean;
+  triggerBisuiteId?: number | null;
   codiceContratto?: string | null;
   economicStateManual?: boolean;
   drmsOutcomeState?: CjEconomicState | null;
@@ -356,7 +360,20 @@ export function pisteInWindow(eventDate: string | null, t0Month: number | null):
 }
 
 // Sintesi per-journey usata dall'analisi gettoni. Una riga per cliente.
-export interface CjGettoneJourney {
+export interface CjGettoneBreakdown {
+  gettoneBase: number;
+  gettoneBaseMaturato: number;
+  gettoneBaseEsplicito: number;
+  gettoneBasePresunto: number;
+  gettoneBaseConfermato: number;
+  extraCoppie: number;
+  extraStimato: number;
+  extraMaturato: number;
+  extraEsplicito: number;
+  extraPresunto: number;
+  extraConfermato: number;
+}
+export interface CjGettoneJourney extends CjGettoneBreakdown {
   journeyId: string;
   cliente: string;
   customerType: string;
@@ -407,6 +424,8 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
   }
   const t0ByJourney = new Map(Array.from(grouped, ([id, list]) =>
     [id, cjT0Month(list.find(r => r.openedAt)?.openedAt ?? null, list)]));
+  const phonesByJourney = new Map(Array.from(grouped, ([id, list]) =>
+    [id, cjPhoneEligibility(list, t0ByJourney.get(id) ?? null, list.find(r => r.openedAt)?.openedAt, list[0]?.triggerBisuiteId)]));
   const map = new Map<string, {
     cliente: string; customerType: string;
     mobilePdv: string; mobileAddetto: string;
@@ -419,7 +438,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     simAttive: number;
     // Candidati pista: driver non-mobile attivi con la loro data evento.
     // Il conteggio distinto in-finestra avviene dopo aver fissato T0.
-    candidates: { driver: CjDriver; eventDate: string | null; pagato: boolean }[];
+     candidates: { driver: CjDriver; eventDate: string | null; pagato: boolean; explicit: boolean; confirmed: boolean }[];
   }>();
   for (const r of rows) {
     let e = map.get(r.journeyId);
@@ -458,11 +477,14 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     }
     if (!e.openedAt && r.openedAt) e.openedAt = r.openedAt;
     if (r.driver !== "mobile" && isCjItemActive(r)) {
+      if (r.driver === "telefono" && phonesByJourney.get(r.journeyId)?.get(cjPhoneKey(r))?.kind !== "iniziale") continue;
       e.candidates.push({
         driver: r.driver,
         eventDate: r.eventDate ?? null,
         // smartphone: liquidato presunto (nessun processo automatico).
         pagato: ["pagato", "riaccreditato"].includes(effectiveEconomicState(r) ?? ""),
+        explicit: ["pagato", "riaccreditato"].includes(r.economicState ?? r.state),
+        confirmed: !!r.gettoneConfirmed,
       });
     }
   }
@@ -476,15 +498,25 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       const t0Month = t0ByJourney.get(journeyId) ?? null;
       const activeDrivers = new Set<CjDriver>();
       const paidDrivers = new Set<CjDriver>();
+      const explicitDrivers = new Set<CjDriver>();
+      const confirmedDrivers = new Set<CjDriver>();
       for (const c of e.candidates) {
         if (!pisteInWindow(c.eventDate, t0Month)) continue;
         activeDrivers.add(c.driver);
         if (c.pagato) paidDrivers.add(c.driver);
+        if (c.explicit) explicitDrivers.add(c.driver);
+        if (c.confirmed) confirmedDrivers.add(c.driver);
       }
       const pisteAttive = activeDrivers.size;
       const pisteConfermate = paidDrivers.size;
-      const fatturato = gettoneForPiste(pisteAttive);
-      const fatturatoMaturato = gettoneForPiste(pisteConfermate);
+      const gettoneBase = gettoneForPiste(pisteAttive);
+      const gettoneBaseMaturato = gettoneForPiste(pisteConfermate);
+      const extra = [...(phonesByJourney.get(journeyId)?.values() ?? [])].filter(p => p.kind === "extra");
+      const extraStimato = extra.length * 20;
+      const extraMaturato = extra.filter(p => p.paid).length * 20;
+      const extraEsplicito = extra.filter(p => p.explicit).length * 20;
+      const fatturato = gettoneBase + extraStimato;
+      const fatturatoMaturato = gettoneBaseMaturato + extraMaturato;
       return {
         journeyId,
         cliente: e.cliente,
@@ -498,7 +530,14 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
         fatturato,
         pisteConfermate,
         fatturatoMaturato,
-        potenzialePieno: Math.max(0, gettoneForPiste(CJ_MAX_PISTE) - fatturato),
+        gettoneBase, gettoneBaseMaturato,
+        gettoneBaseEsplicito: gettoneForPiste(explicitDrivers.size),
+        gettoneBasePresunto: gettoneBaseMaturato - gettoneForPiste(explicitDrivers.size),
+        gettoneBaseConfermato: gettoneForPiste(confirmedDrivers.size),
+        extraCoppie: extra.length, extraStimato, extraMaturato,
+        extraEsplicito, extraPresunto: extraMaturato - extraEsplicito,
+        extraConfermato: extra.filter(p => p.confirmed).length * 20,
+        potenzialePieno: Math.max(0, gettoneForPiste(CJ_MAX_PISTE) - gettoneBase),
       };
     });
 }
@@ -558,7 +597,7 @@ export function filterGettoneByInsertDate(
 
 // Gruppo dell'analisi gettoni lungo una dimensione (negozio / addetto /
 // ragione sociale).
-export interface CjGettoneGroup {
+export interface CjGettoneGroup extends CjGettoneBreakdown {
   key: string;
   label: string;
   // N. SIM mobile attivate nel periodo (volume item-level).
@@ -575,7 +614,7 @@ export interface CjGettoneGroup {
   potenziale: number;
 }
 
-export interface CjGettoneTotals {
+export interface CjGettoneTotals extends CjGettoneBreakdown {
   // N. SIM mobile attivate nel periodo (volume item-level).
   simAttivate: number;
   // N. clienti distinti con SIM attiva.
@@ -608,13 +647,13 @@ export function aggregateGettone(
   const s = clampSaturation(saturationPct) / 100;
   const map = new Map<string, {
     label: string; simAttivate: number; clienti: number; conProdotti: number;
-    fatturato: number; fatturatoMaturato: number; incremento: number;
+    fatturato: number; fatturatoMaturato: number; incremento: number; journeys: CjGettoneJourney[];
   }>();
   for (const j of journeys) {
     const { key, label } = keyFn(j);
     let e = map.get(key);
     if (!e) {
-      e = { label, simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, fatturatoMaturato: 0, incremento: 0 };
+      e = { label, simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, fatturatoMaturato: 0, incremento: 0, journeys: [] };
       map.set(key, e);
     }
     e.simAttivate += j.simAttive;
@@ -622,7 +661,8 @@ export function aggregateGettone(
     if (j.pisteAttive >= 1) e.conProdotti += 1;
     e.fatturato += j.fatturato;
     e.fatturatoMaturato += j.fatturatoMaturato;
-    e.incremento += gettoneIncremento(j.pisteAttive, j.fatturato, addProducts);
+    e.journeys.push(j);
+    e.incremento += gettoneIncremento(j.pisteAttive, j.gettoneBase ?? j.fatturato, addProducts);
   }
   return Array.from(map.entries())
     .map(([key, e]) => ({
@@ -633,6 +673,7 @@ export function aggregateGettone(
       conProdotti: e.conProdotti,
       fatturato: e.fatturato,
       fatturatoMaturato: e.fatturatoMaturato,
+      ...sumCjGettoneBreakdown(e.journeys),
       potenziale: e.incremento * s,
     }))
     .sort((a, b) => b.fatturato - a.fatturato || b.clienti - a.clienti || a.label.localeCompare(b.label, "it"));
@@ -658,10 +699,35 @@ export function gettoneTotals(
     if (j.pisteAttive >= 1) conProdotti += 1;
     fatturato += j.fatturato;
     fatturatoMaturato += j.fatturatoMaturato;
-    incremento += gettoneIncremento(j.pisteAttive, j.fatturato, addProducts);
+    incremento += gettoneIncremento(j.pisteAttive, j.gettoneBase ?? j.fatturato, addProducts);
     pisteAttive += j.pisteAttive;
   }
-  return { simAttivate, clienti, conProdotti, fatturato, fatturatoMaturato, potenziale: incremento * s, pisteAttive };
+  return { simAttivate, clienti, conProdotti, fatturato, fatturatoMaturato, potenziale: incremento * s, pisteAttive,
+    ...sumCjGettoneBreakdown(journeys) };
+}
+
+export function sumCjGettoneBreakdown(journeys: CjGettoneJourney[]): CjGettoneBreakdown {
+  const result: CjGettoneBreakdown = {
+    gettoneBase: 0, gettoneBaseMaturato: 0, gettoneBaseEsplicito: 0, gettoneBasePresunto: 0, gettoneBaseConfermato: 0,
+    extraCoppie: 0, extraStimato: 0, extraMaturato: 0, extraEsplicito: 0, extraPresunto: 0, extraConfermato: 0,
+  };
+  for (const j of journeys) for (const key of Object.keys(result) as (keyof CjGettoneBreakdown)[]) result[key] += j[key] ?? 0;
+  return result;
+}
+
+export function cjJourneyReportRows(journey: CustomerJourney, items: CustomerJourneyItem[]): CjReportRow[] {
+  const iso = (value: string | Date | null) => value ? new Date(value).toISOString() : null;
+  return items.map(it => ({
+    ...it, itemId: it.id, journeyId: journey.id, customerKey: journey.customerKey,
+    customerType: journey.customerType, cliente: journey.nominativo ?? journey.customerKey,
+    triggerBisuiteId: journey.triggerBisuiteId,
+    pdv: it.pdvDestinazione || it.pdvOrigine || "", addetto: it.addetto ?? "",
+    state: it.state as CjItemState, economicState: it.economicState as CjEconomicState | null,
+    drmsOutcomeState: it.drmsOutcomeState as CjEconomicState | null,
+    driver: it.driver as CjDriver, valore: Number(it.importo) || 0,
+    openedAt: iso(journey.openedAt), insertedAt: iso(it.dataInserimento),
+    eventDate: iso(it.dataAttivazione ?? it.dataInserimento),
+  }));
 }
 
 /**
@@ -691,7 +757,7 @@ export function simSaturationPct(pisteAttive: number): number {
 
 // Riga di dettaglio dell'analisi gettoni: una per cliente/SIM che ha attivato
 // la CJ, con la sua percentuale di saturazione cross-sell.
-export interface CjGettoneDetailRow {
+export interface CjGettoneDetailRow extends CjGettoneBreakdown {
   journeyId: string;
   cliente: string;
   // N. SIM mobile attive del cliente.
@@ -728,6 +794,7 @@ export function gettoneDetailByKey(
       saturazionePct: simSaturationPct(j.pisteAttive),
       fatturato: j.fatturato,
       fatturatoMaturato: j.fatturatoMaturato,
+      ...sumCjGettoneBreakdown([j]),
     });
   }
   for (const list of Array.from(map.values())) {
@@ -745,14 +812,16 @@ export function summarizeDrivers(
   items: CjSummaryItem[],
   t0Month: number | null = null,
 ): CjDriverSummary[] {
+  const phones = cjPhoneEligibility(items, t0Month);
   return CJ_DRIVER_ORDER.map((driver) => {
-    const driverItems = items.filter((it) => it.driver === driver && cjSummaryItemInScope(it, t0Month));
+    const driverItems = items.filter((it) => it.driver === driver && cjSummaryItemInScope(it, t0Month)
+      && (driver !== "telefono" || phones.get(cjPhoneKey(it))?.kind === "iniziale"));
     const activated = driverItems.some((it) => isCjItemActive(it));
     return { driver, activated, count: driverItems.length };
   });
 }
 
-type CjSummaryItem = CjStatePair & {
+type CjSummaryItem = CjPhoneItem & {
   driver: CjDriver; eventDate?: string | null;
   categoria?: string | null; tipologia?: string | null; descrizione?: string | null;
 };
@@ -809,8 +878,10 @@ export function summarizeDriversWithPhase(
   items: (CjSummaryItem & { eventDate: string | null; addetto: string | null })[],
   opts: { t0Month: number | null; myAddetti: string[] | null },
 ): CjDriverSummary[] {
+  const phones = cjPhoneEligibility(items, opts.t0Month);
   return CJ_DRIVER_ORDER.map((driver) => {
-    const driverItems = items.filter((it) => it.driver === driver && cjSummaryItemInScope(it, opts.t0Month));
+    const driverItems = items.filter((it) => it.driver === driver && cjSummaryItemInScope(it, opts.t0Month)
+      && (driver !== "telefono" || phones.get(cjPhoneKey(it))?.kind === "iniziale"));
     const activated = driverItems.some((it) => isCjItemActive(it));
     const phase = activated ? classifyDriverPhase(driverItems, opts) : null;
     return { driver, activated, count: driverItems.length, phase };
@@ -900,8 +971,10 @@ export function parseVenditaInfo(dettaglio: any): {
   codiceContratto?: string;
   podPdr?: string;
   imei?: string;
+  iccid?: string;
 } {
-  const out: { codiceContratto?: string; podPdr?: string; imei?: string } = {};
+  const out: { codiceContratto?: string; podPdr?: string; imei?: string; iccid?: string } = {};
+  const iccids = new Set<string>();
   if (!dettaglio || typeof dettaglio !== "object") return out;
   const fields = [
     dettaglio.venditaInfo1, dettaglio.venditaInfo2, dettaglio.venditaInfo3,
@@ -914,9 +987,128 @@ export function parseVenditaInfo(dettaglio: any): {
     const label = f.slice(0, idx).toUpperCase().trim();
     const value = f.slice(idx + 1).trim();
     if (!value || value === "0") continue;
-    if (label.includes("CODICE CONTRATTO")) out.codiceContratto = value;
+    if (label.includes("ICCID")) {
+      const iccid = normalizeCjIccid(value);
+      if (iccid) iccids.add(iccid);
+      else iccids.add("invalid");
+    } else if (label.includes("CODICE CONTRATTO")) out.codiceContratto = value;
     else if (label.includes("POD") || label.includes("PDR")) out.podPdr = value;
     else if (label.includes("IMEI")) out.imei = value;
+  }
+  if (iccids.size === 1 && !iccids.has("invalid")) out.iccid = [...iccids][0];
+  return out;
+}
+
+/** ICCID sono identificativi testuali: non accettare numeri già arrotondati. */
+export function normalizeCjIccid(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const s = value.trim().replace(/[\s-]/g, "");
+  return /^\d{18,22}$/.test(s) && !/^0+$/.test(s) ? s : null;
+}
+
+export type CjPhoneItem = CjStatePair & {
+  id?: string; itemId?: string; driver: string;
+  categoria?: string | null; tipologia?: string | null; descrizione?: string | null;
+  iccid?: string | null; cjTriggerMobile?: boolean;
+  bisuiteSaleId?: string | null; bisuiteArticleId?: number | null;
+  bisuiteId?: number | null;
+  codiceContratto?: string | null; eventDate?: string | null;
+  simContract?: string | null;
+  gettoneConfirmed?: boolean;
+};
+export type CjPhoneKind = "iniziale" | "extra" | "non_smartphone" | "iccid_mancante"
+  | "sim_non_abbinata" | "abbinamento_ambiguo" | "stato_non_valido" | "fuori_periodo" | "duplicato";
+export const CJ_PHONE_REASONS: Record<CjPhoneKind, string> = {
+  iniziale: "Smartphone abbinato alla SIM iniziale: concorre al gettone base.",
+  extra: "Coppia successiva nuova SIM–smartphone: gettone aggiuntivo di 20 €, separato dalle cinque piste.",
+  non_smartphone: "Articolo non SMARTPHONE nel contenitore TELEFONIA.",
+  iccid_mancante: "ICCID mancante, non valido o conflittuale: collegamento non verificabile.",
+  sim_non_abbinata: "Nessuna SIM ammissibile con lo stesso ICCID; extra solo per vendite successive.",
+  abbinamento_ambiguo: "Più attivazioni distinte con lo stesso ICCID: abbinamento ambiguo.",
+  stato_non_valido: "Smartphone o SIM abbinata KO, annullato o stornato.",
+  fuori_periodo: "Smartphone o SIM abbinata fuori dalla finestra T0–T6, oppure senza data verificabile.",
+  duplicato: "Associazione SIM–smartphone già conteggiata: nessun premio duplicato.",
+};
+export interface CjPhoneEligibility {
+  kind: CjPhoneKind; mobile?: CjPhoneItem; paid: boolean; explicit: boolean; confirmed: boolean;
+}
+export function cjPhoneKey(it: CjPhoneItem): string {
+  return it.id ?? it.itemId ?? `${it.bisuiteSaleId ?? ""}:${it.bisuiteArticleId ?? ""}`;
+}
+export function selectCjTriggerMobile(items: CjPhoneItem[]): CjPhoneItem | undefined {
+  const eligible = items.filter(it => it.driver === "mobile" && isCjMobileEligible(it));
+  return eligible.filter(it => it.cjTriggerMobile).sort(cjPhoneSort)[0]
+    ?? (items.some(it => it.cjTriggerMobile !== undefined) ? undefined : eligible.filter(isCjItemActive).sort(cjPhoneSort)[0]);
+}
+function cjPhoneSort(a: CjPhoneItem, b: CjPhoneItem): number {
+  return (a.eventDate ?? "9999").localeCompare(b.eventDate ?? "9999")
+    || (a.bisuiteId ?? Number.MAX_SAFE_INTEGER) - (b.bisuiteId ?? Number.MAX_SAFE_INTEGER)
+    || (a.bisuiteSaleId ?? "").localeCompare(b.bisuiteSaleId ?? "")
+    || (a.bisuiteArticleId ?? Number.MAX_SAFE_INTEGER) - (b.bisuiteArticleId ?? Number.MAX_SAFE_INTEGER)
+    || cjPhoneKey(a).localeCompare(cjPhoneKey(b));
+}
+/** Unica eleggibilità per schede, sintesi, report e export. Nessuna scrittura. */
+export function cjPhoneEligibility(items: CjPhoneItem[], t0Month: number | null, openedAt?: string | null, triggerBisuiteId?: number | null): Map<string, CjPhoneEligibility> {
+  const out = new Map<string, CjPhoneEligibility>();
+  const trigger = selectCjTriggerMobile(items);
+  const used = new Set<string>();
+  const mobiles = items.filter(it => it.driver === "mobile" && isCjMobileEligible(it));
+  for (const phone of items.filter(it => it.driver === "telefono").sort(cjPhoneSort)) {
+    const result: CjPhoneEligibility = { kind: "sim_non_abbinata", paid: false, explicit: false, confirmed: false };
+    const iccid = normalizeCjIccid(phone.iccid);
+    if ((phone.categoria ?? "").trim().toUpperCase() !== "TELEFONIA"
+        || (phone.tipologia ?? "").trim().toUpperCase() !== "SMARTPHONE") result.kind = "non_smartphone";
+    else if (!iccid) result.kind = "iccid_mancante";
+    else {
+      const initial = !!trigger && !!phone.bisuiteSaleId
+        && phone.bisuiteSaleId === trigger.bisuiteSaleId && normalizeCjIccid(trigger.iccid) === iccid;
+      const reusesTrigger = !initial && trigger && normalizeCjIccid(trigger.iccid) === iccid;
+      const matches = mobiles.filter(m => normalizeCjIccid(m.iccid) === iccid
+        && !reusesTrigger
+        && (initial ? m.bisuiteSaleId === trigger?.bisuiteSaleId
+          : !!phone.bisuiteSaleId && m.bisuiteSaleId === phone.bisuiteSaleId));
+      // Duplicati dello stesso contratto sono un evento; attivazioni diverse no.
+      const events = new Map<string, CjPhoneItem[]>();
+      for (const m of matches) {
+        const key = `${m.bisuiteSaleId}:${m.codiceContratto || m.simContract || m.bisuiteArticleId || cjPhoneKey(m)}`;
+        events.set(key, [...(events.get(key) ?? []), m]);
+      }
+      if (events.size > 1) result.kind = "abbinamento_ambiguo";
+      else if (events.size === 1) {
+        const group = [...events.values()][0];
+        const mobile = initial ? trigger! : group.sort(cjPhoneSort)[0];
+        result.mobile = mobile;
+        const triggerDate = trigger?.eventDate ?? openedAt;
+        const triggerCms = trigger?.bisuiteId ?? triggerBisuiteId;
+        const afterOpening = triggerDate && mobile.eventDate && (
+          Date.parse(mobile.eventDate) > Date.parse(triggerDate)
+          || (Date.parse(mobile.eventDate) === Date.parse(triggerDate) && triggerCms != null && mobile.bisuiteId != null && mobile.bisuiteId > triggerCms)
+        );
+        const later = triggerDate && mobile.eventDate && phone.eventDate
+          && (!trigger || phone.bisuiteSaleId !== trigger.bisuiteSaleId)
+          && afterOpening && Date.parse(phone.eventDate) >= Date.parse(mobile.eventDate);
+        if (!isCjItemActive(phone) || group.some(m => !isCjItemActive(m)) || !isCjItemActive(mobile))
+          result.kind = "stato_non_valido";
+        else if (t0Month == null || !phone.eventDate || !mobile.eventDate
+          || monthOfIso(phone.eventDate) == null || monthOfIso(mobile.eventDate) == null
+          || !pisteInWindow(phone.eventDate, t0Month) || !pisteInWindow(mobile.eventDate, t0Month))
+          result.kind = "fuori_periodo";
+        else if (initial || later) {
+          const key = iccid; // the same physical SIM cannot be rewarded again via another receipt
+          if (used.has(key)) result.kind = "duplicato";
+          else {
+            used.add(key);
+            result.kind = initial ? "iniziale" : "extra";
+            const paid = (it: CjPhoneItem) => ["pagato", "riaccreditato"].includes(effectiveEconomicState(it) ?? "");
+            const explicit = (it: CjPhoneItem) => ["pagato", "riaccreditato"].includes(it.economicState ?? it.state);
+            result.paid = paid(phone) && (initial || group.every(paid));
+            result.explicit = explicit(phone) && (initial || group.every(explicit));
+            result.confirmed = !!phone.gettoneConfirmed && (initial || group.every(m => m.gettoneConfirmed));
+          }
+        }
+      }
+    }
+    out.set(cjPhoneKey(phone), result);
   }
   return out;
 }

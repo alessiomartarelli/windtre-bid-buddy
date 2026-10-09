@@ -1,5 +1,7 @@
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, economicStateDisplayLabel,
+  cjJourneyReportRows, buildGettoneJourneys, cjPhoneEligibility, cjPhoneKey, cjT0Month, CJ_PHONE_REASONS,
+  type CjGettoneJourney,
 } from "./customerJourney";
 import type { CustomerJourney, CustomerJourneyItem, CjDriver } from "./schema";
 
@@ -30,7 +32,7 @@ export interface CjExportDriverSummary {
   count: number;
 }
 
-export type CjListJourney = CustomerJourney & { drivers: CjExportDriverSummary[] };
+export type CjListJourney = CustomerJourney & { drivers: CjExportDriverSummary[]; gettone?: CjGettoneJourney };
 
 // Numero di colonne fisse (non-driver) prima delle colonne per-driver nella
 // tabella PDF dell'elenco, usato per mappare l'indice colonna ↔ driver nei
@@ -138,7 +140,7 @@ export function driverTableBody(
 export function contractsHead(): string[] {
   return [
     "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV",
-    "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Esito", "Gettone",
+    "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Esito", "Gettone confermato", "ICCID", "Smartphone CJ",
   ];
 }
 
@@ -146,7 +148,12 @@ export function contractsHead(): string[] {
 export function contractsBody(
   items: CustomerJourneyItem[],
   withEmoji: boolean,
+  journey?: CustomerJourney,
 ): (string | number)[][] {
+  const rows = journey ? cjJourneyReportRows(journey, items) : items.map(it => ({
+    ...it, eventDate: (it.dataAttivazione ?? it.dataInserimento) ? new Date((it.dataAttivazione ?? it.dataInserimento)!).toISOString() : null,
+  }));
+  const phones = cjPhoneEligibility(rows, cjT0Month(journey?.openedAt ? new Date(journey.openedAt).toISOString() : null, rows));
   return items.map((it) => [
     withEmoji ? CJ_DRIVER_EMOJI[it.driver as CjDriver] || "" : "",
     driverLabel(it.driver),
@@ -161,7 +168,29 @@ export function contractsBody(
     itemStateLabel(it.state),
     economicStateDisplayLabel(it),
     it.gettoneConfirmed ? "Sì" : "No",
+    it.iccid || "—",
+    it.driver === "telefono" ? CJ_PHONE_REASONS[phones.get(cjPhoneKey(it))?.kind ?? "sim_non_abbinata"] : "—",
   ]);
+}
+
+export function journeyGettoneRows(journey: CustomerJourney, items: CustomerJourneyItem[]): (string | number)[][] {
+  const gettone = buildGettoneJourneys(cjJourneyReportRows(journey, items))[0];
+  return gettoneBreakdownRows(gettone);
+}
+export function gettoneBreakdownRows(g?: CjGettoneJourney): (string | number)[][] {
+  return [
+    ["Gettone base stimato", g?.gettoneBase ?? 0],
+    ["Extra coppie SIM–smartphone", g?.extraStimato ?? 0],
+    ["Coppie aggiuntive", g?.extraCoppie ?? 0],
+    ["Totale stimato", g?.fatturato ?? 0],
+    ["Base con esiti espliciti", g?.gettoneBaseEsplicito ?? 0],
+    ["Base liquidato presunto", g?.gettoneBasePresunto ?? 0],
+    ["Extra con esiti espliciti", g?.extraEsplicito ?? 0],
+    ["Extra liquidato presunto", g?.extraPresunto ?? 0],
+    ["Base gettone confermato", g?.gettoneBaseConfermato ?? 0],
+    ["Extra gettone confermato", g?.extraConfermato ?? 0],
+    ["Potenziale residuo base", g?.potenzialePieno ?? 0],
+  ];
 }
 
 /** Righe di intestazione del foglio Excel del dettaglio. */
@@ -202,6 +231,7 @@ export function listPdfHead(): string[] {
   return [
     "Cliente", "Tipo", "CF/P.IVA", "Stato", "Driver",
     ...CJ_DRIVER_ORDER.map(() => ""),
+    "Base €", "Extra €", "Totale €",
   ];
 }
 
@@ -217,6 +247,7 @@ export function listPdfBody(journeys: CjListJourney[]): (string | number)[][] {
       j.status === "aperta" ? "Aperta" : "Chiusa",
       `${activeDriverCount(j)}/${total}`,
       ...CJ_DRIVER_ORDER.map((d) => (m.get(d)?.activated ? "Si" : "")),
+      j.gettone?.gettoneBase ?? 0, j.gettone?.extraStimato ?? 0, j.gettone?.fatturato ?? 0,
     ];
   });
 }
@@ -242,6 +273,7 @@ export function listExcelHead(): string[] {
   return [
     "Cliente", "Tipo", "CF/P.IVA", "Telefono", "Stato", "Driver attivati",
     ...CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d] || driverLabel(d)),
+    "Gettone base stimato", "Extra SIM–smartphone", "Totale stimato",
   ];
 }
 
@@ -258,6 +290,7 @@ export function listExcelBody(journeys: CjListJourney[]): (string | number)[][] 
       j.status === "aperta" ? "Aperta" : "Chiusa",
       `${activeDriverCount(j)}/${total}`,
       ...CJ_DRIVER_ORDER.map((d) => (m.get(d)?.activated ? "Sì" : "")),
+      j.gettone?.gettoneBase ?? 0, j.gettone?.extraStimato ?? 0, j.gettone?.fatturato ?? 0,
     ];
   });
 }

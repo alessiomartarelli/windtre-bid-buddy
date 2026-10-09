@@ -222,10 +222,10 @@ test('driverTableBody: Excel mette l\'emoji in col 0', () => {
 // ===========================================================================
 // DETTAGLIO — tabella Contratti: intestazione + mapping campi.
 // ===========================================================================
-test('contractsHead: 13 colonne nell\'ordine atteso (Stato operativo + Esito economico)', () => {
+test('contractsHead: include ICCID e motivo smartphone, separando la conferma manuale', () => {
   assert.deepEqual(contractsHead(), [
     '', 'Driver', 'Descrizione', 'Contratto', 'Addetto', 'PDV',
-    'IMEI', 'RATA/CANONE', 'Inserito', 'Attivato', 'Stato', 'Esito', 'Gettone',
+    'IMEI', 'RATA/CANONE', 'Inserito', 'Attivato', 'Stato', 'Esito', 'Gettone confermato', 'ICCID', 'Smartphone CJ',
   ]);
 });
 
@@ -312,9 +312,10 @@ test('listExcelHeaderRows: include filterLabel solo se presente', () => {
 test('listPdfHead: 5 fisse + colonne driver vuote, LIST_FIXED_COLS coerente', () => {
   const head = listPdfHead();
   assert.deepEqual(head.slice(0, LIST_FIXED_COLS), ['Cliente', 'Tipo', 'CF/P.IVA', 'Stato', 'Driver']);
-  assert.equal(head.length, LIST_FIXED_COLS + CJ_DRIVER_ORDER.length);
+  assert.equal(head.length, LIST_FIXED_COLS + CJ_DRIVER_ORDER.length + 3);
   // intestazioni driver vuote (l'icona è disegnata come immagine)
-  assert.deepEqual(head.slice(LIST_FIXED_COLS), CJ_DRIVER_ORDER.map(() => ''));
+  assert.deepEqual(head.slice(LIST_FIXED_COLS, LIST_FIXED_COLS + CJ_DRIVER_ORDER.length), CJ_DRIVER_ORDER.map(() => ''));
+  assert.deepEqual(head.slice(-3), ['Base €', 'Extra €', 'Totale €']);
 });
 
 test('listPdfBody: tipo Business/Privato, stato, conteggio attivi, "Si"/""', () => {
@@ -345,7 +346,7 @@ test('listPdfBody: tipo Business/Privato, stato, conteggio attivi, "Si"/""', () 
 test('listExcelHead: include Telefono e usa emoji per driver', () => {
   const head = listExcelHead();
   assert.deepEqual(head.slice(0, 6), ['Cliente', 'Tipo', 'CF/P.IVA', 'Telefono', 'Stato', 'Driver attivati']);
-  assert.deepEqual(head.slice(6), CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d]));
+  assert.deepEqual(head.slice(6, 6 + CJ_DRIVER_ORDER.length), CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d]));
 });
 
 test('listExcelBody: include telefono, "Sì" per driver attivati', () => {

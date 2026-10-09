@@ -1,5 +1,5 @@
 import type { CustomerJourney, CustomerJourneyItem } from "@shared/schema";
-import { isCjItemActive, isCjMobileEligible, cjT0Month, CJ_WINDOW_MONTHS, pisteInWindow } from "../../../shared/customerJourney";
+import { isCjItemActive, isCjMobileEligible, cjT0Month, CJ_WINDOW_MONTHS, pisteInWindow, cjPhoneEligibility, cjPhoneKey, CJ_PHONE_REASONS } from "../../../shared/customerJourney";
 
 // === Logica pura del tracciamento temporale Customer Journey (Task #185) ===
 // Estratta dal componente React (`CustomerJourney.tsx`) per poterla testare a
@@ -148,7 +148,9 @@ export function computeTimeline(
     const triggerItems = items
       .filter(inTriggerSale)
       .map((it, idx) => ({ it, idx, t: itemEventDate(it)?.getTime() ?? Number.POSITIVE_INFINITY }))
-      .sort((a, b) => a.t - b.t || String(a.it.id).localeCompare(String(b.it.id)) || a.idx - b.idx)
+       .sort((a, b) => Number(b.it.cjTriggerMobile) - Number(a.it.cjTriggerMobile) || a.t - b.t
+         || (a.it.bisuiteArticleId ?? Number.MAX_SAFE_INTEGER) - (b.it.bisuiteArticleId ?? Number.MAX_SAFE_INTEGER)
+         || String(a.it.id).localeCompare(String(b.it.id)) || a.idx - b.idx)
       .map((d) => d.it);
     // Ultimo fallback dentro la vendita trigger: qualsiasi articolo (dati
     // sporchi: trigger salvato su una vendita senza mobile). Non è escluso
@@ -159,8 +161,12 @@ export function computeTimeline(
       triggerItems.find(it => it.driver !== "mobile");
     if (byTrigger) return byTrigger.id;
     const byDate = [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime() || String(a.it.id).localeCompare(String(b.it.id)));
-    const firstActivating = byDate.find((d) => isActivatingMobile(d.it));
+    // In un dettaglio operator-scoped la SIM iniziale può non essere visibile.
+    // Il marker persistito evita di mostrare una SIM successiva come nuovo T0.
+    const modern = items.some(it => typeof it.cjTriggerMobile === "boolean");
+    const firstActivating = byDate.find((d) => isActivatingMobile(d.it) && (!modern || d.it.cjTriggerMobile));
     if (firstActivating) return firstActivating.it.id;
+    if (modern) return undefined;
     return byDate.find(d => d.it.driver !== "mobile")?.it.id;
   })();
 
@@ -200,12 +206,15 @@ export type CjItemValidityKind =
   | "stato_non_valido"
   | "fuori_periodo"
   | "sim_esclusa"
+  | "smartphone_escluso"
+  | "coppia_extra"
   | "driver_duplicato";
 
 export interface CjItemValidity {
   kind: CjItemValidityKind;
   // true solo per le piste che aumentano il gettone (kind === "valida").
   counts: boolean;
+  reason?: string;
 }
 
 // Calcola la validità di tutti gli item, anche quelli senza data.
@@ -227,6 +236,8 @@ export function computeItemValidity(
   const allItems = model.items ?? model.rows.map(r => r.it);
   const t0Month = cjT0Month(isoOf(toDateOrNull(journey.openedAt)),
     allItems.map(it => ({ ...it, eventDate: isoOf(itemEventDate(it)) })));
+  const phones = cjPhoneEligibility(allItems.map(it => ({ ...it, eventDate: isoOf(itemEventDate(it)) })), t0Month,
+    isoOf(model.t0Date), journey.triggerBisuiteId);
 
   // Driver già conteggiati come pista in finestra: il primo (per data, perché
   // `model.rows` è ordinato) vince, gli altri dello stesso driver sono
@@ -237,6 +248,14 @@ export function computeItemValidity(
     ...allItems.filter(it => !itemEventDate(it)).map(it => ({ it, date: null })),
   ];
   for (const { it, date } of validityRows) {
+    if (it.driver === "telefono") {
+      const phone = phones.get(cjPhoneKey(it));
+      if (phone?.kind !== "iniziale") {
+        out.set(it.id, { kind: phone?.kind === "extra" ? "coppia_extra" : "smartphone_escluso",
+          counts: false, reason: phone ? CJ_PHONE_REASONS[phone.kind] : "Collegamento SIM non verificabile." });
+        continue;
+      }
+    }
     if (it.driver === "mobile" && !isCjMobileEligible(it)) {
       out.set(it.id, { kind: "sim_esclusa", counts: false });
       continue;
@@ -285,6 +304,8 @@ export const CJ_VALIDITY_LABELS: Record<CjItemValidityKind, string> = {
   fuori_periodo: "Non conta",
   driver_duplicato: "Non conta",
   sim_esclusa: "SIM esclusa",
+  smartphone_escluso: "Non conta",
+  coppia_extra: "Extra +20 €",
 };
 
 // Spiegazione estesa del perché un contratto conta o no (tooltip della scheda).
@@ -295,6 +316,8 @@ export const CJ_VALIDITY_REASONS: Record<CjItemValidityKind, string> = {
   stato_non_valido: "Stato ko/annullato/stornato: non conta per il gettone.",
   fuori_periodo: "Contratto fuori dai mesi solari T0–T6 inclusi: non conta per il gettone.",
   sim_esclusa: "SIM dati, Tourist o allarme: esclusa da apertura, coorte e conteggi SIM della Customer Journey.",
+  smartphone_escluso: "Smartphone non abbinato alla SIM iniziale o coppia non valida.",
+  coppia_extra: "Coppia SIM–smartphone successiva: +20 €, non aumenta le piste iniziali.",
   driver_duplicato: "Pista dello stesso tipo già conteggiata per questo cliente.",
 };
 

@@ -52,6 +52,12 @@ function row(over = {}) {
     state: 'attivato',
     driver: 'mobile',
     valore: 10,
+    bisuiteSaleId: 'synthetic-initial',
+    bisuiteArticleId: over.driver === 'telefono' ? 2 : 1,
+    iccid: '89000000000000000001',
+    categoria: over.driver === 'telefono' ? 'TELEFONIA' : 'UNTIED',
+    tipologia: over.driver === 'telefono' ? 'SMARTPHONE' : 'RICARICABILE',
+    eventDate: over.openedAt ?? '2026-07-05T00:00:00.000Z',
     ...over,
   };
 }
@@ -735,7 +741,7 @@ test('crossSellPercentuali: percentuali con/senza prodotti e cohort vuota', () =
 test('analisi gettoni: input vuoto => zero', () => {
   assert.deepEqual(aggregateGettone([], (j) => ({ key: j.pdv, label: j.pdv }), 100), []);
   const t = gettoneTotals([], 100);
-  assert.deepEqual(t, { simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, fatturatoMaturato: 0, potenziale: 0, pisteAttive: 0 });
+  assert.equal(Object.values(t).every(value => value === 0), true);
 });
 
 // --- simSaturationPct: percentuale di saturazione cross-sell per SIM ---

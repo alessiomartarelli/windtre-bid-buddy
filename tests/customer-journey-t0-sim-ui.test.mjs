@@ -45,16 +45,16 @@ test('scheda cliente: T0 sulla riga Mobile di una vendita trigger multi-articolo
       triggerSaleId: saleId,
     });
     const when = '2026-03-10T10:00:00Z';
-    const common = { pdv: 'PDV Trigger Test', dataInserimento: when, bisuiteSaleId: saleId };
+    const common = { pdv: 'PDV Trigger Test', dataInserimento: when, bisuiteSaleId: saleId, iccid: '89000000000000000001' };
     // Ordine volutamente "sbagliato": fisso e smartphone prima della SIM.
     const fissoId = await addJourneyItem(pool, session.orgId, journeyId, {
       ...common, driver: 'fisso', state: 'attivato', categoria: 'ADSL/FIBRA/FWA CF', descrizione: 'Super Fibra',
     });
     const telefonoId = await addJourneyItem(pool, session.orgId, journeyId, {
-      ...common, driver: 'telefono', state: 'attivato', categoria: 'TELEFONI', descrizione: 'Smartphone X', importo: '499',
+      ...common, driver: 'telefono', state: 'attivato', categoria: 'TELEFONIA', tipologia: 'SMARTPHONE', descrizione: 'Smartphone X', importo: '499',
     });
     const mobileId = await addJourneyItem(pool, session.orgId, journeyId, {
-      ...common, driver: 'mobile', state: 'attivato', categoria: 'TIED CF', descrizione: 'SIM Unlimited',
+      ...common, driver: 'mobile', state: 'attivato', categoria: 'TIED CF', descrizione: 'SIM Unlimited', cjTriggerMobile: true,
     });
 
     const context = await newAuthedContext(browser, session);
@@ -179,7 +179,7 @@ async function runDirtyTriggerScenario({ via }) {
     assert.equal((await simValidity.innerText()).trim(), 'Non conta', `[${via}] later SIM must be classified "Non conta"`);
     assert.equal(await page.locator('[data-testid^="timeline-validity-"]', { hasText: /^Attivante$/ }).count(), 0, `[${via}] no row may be "Attivante"`);
 
-    // Card driver: Mobile attivo ma NON "attivante"; fisso e telefono contano.
+    // Mobile non attivante; il fisso conta, il telefono senza SIM abbinata no.
     const mobileCard = page.getByTestId('driver-mobile');
     await mobileCard.waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await mobileCard.getAttribute('data-status'), 'attivo', `[${via}] mobile driver card status must be "attivo"`);
@@ -187,7 +187,7 @@ async function runDirtyTriggerScenario({ via }) {
     assert.doesNotMatch(mobileText, /attivante/i, `[${via}] mobile driver card must NOT read "Attivo · attivante"`);
     assert.match(mobileText, /Attivo · non conta/, `[${via}] mobile driver card must read "Attivo · non conta"`);
     assert.equal(await page.getByTestId('driver-fisso').getAttribute('data-status'), 'valido', `[${via}] fisso must count as cross-sell`);
-    assert.equal(await page.getByTestId('driver-telefono').getAttribute('data-status'), 'valido', `[${via}] telefono must count as cross-sell`);
+    assert.equal(await page.getByTestId('driver-telefono').getAttribute('data-status'), 'assente', `[${via}] unmatched phone must not count as cross-sell`);
 
     await page.close();
     await context.close();

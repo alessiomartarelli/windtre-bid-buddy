@@ -179,6 +179,10 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       { Indicatore: "Vendite valide", Valore: summary.sales },
       { Indicatore: "Nuove piste", Valore: summary.newPiste },
       { Indicatore: "Bonus generato", Valore: summary.generated },
+      { Indicatore: "Gettone base generato", Valore: summary.baseGenerated },
+      { Indicatore: "Extra coppie generati", Valore: summary.extraGenerated },
+      { Indicatore: "Extra con esiti espliciti", Valore: summary.extraConfirmed },
+      { Indicatore: "Extra presunti", Valore: summary.extraPresumed },
       { Indicatore: "Bonus mensile confermato", Valore: summary.confirmed },
       { Indicatore: "Bonus presunto (separato)", Valore: summary.presumed },
       { Indicatore: "Portafoglio bonus pendente (stock)", Valore: summary.pending },
@@ -196,6 +200,8 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       Cliente: customer.cliente, Journey: customer.journeyId, "Mese di acquisizione": customer.cohort, Apertura: customer.opener,
       Negozio: customer.pdv, "SIM attiva": customer.mobileActive ? "Sì" : "No",
       "Bonus generato totale": customer.generated, "Riconosciuto totale incl. presunto": customer.confirmed,
+      "Base generata": customer.generated - customer.extraGenerated,
+      "Extra generati": customer.extraGenerated, "Extra riconosciuti incl. presunto": customer.extraConfirmed,
       "Generato non allocato (data mancante)": customer.unallocatedGenerated,
       "Saldo riconosciuto senza mese ricostruibile": customer.unallocatedConfirmed,
       "Tipo cliente": typeByJourney.get(customer.journeyId) ?? "",
@@ -207,6 +213,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       Prodotto: e.product, Venditore: e.seller, Apertura: e.opener, Negozio: e.pdv,
       Fonte: e.source, Attivo: e.active ? "Sì" : "No", "Nuova pista": e.newPista ? "Sì" : "No",
       Generato: e.generated, Confermato: e.confirmed,
+      "Extra generato": e.extraGenerated, "Extra riconosciuto": e.extraConfirmed,
     }))), "Eventi");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([
       { Diagnostica: "Vendite senza mese d'inserimento", Valore: model.undatedSales },
@@ -271,7 +278,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     { label: "Riacquisto valido", value: `${summary.repurchased} · ${summary.percentage.toLocaleString("it-IT", { maximumFractionDigits: 1 })}%`, note: `${summary.repurchased} clienti / ${summary.clients} clienti analizzati`, icon: CalendarDays, tone: "text-emerald-700 dark:text-emerald-300" },
     { label: "Clienti avanzati", value: summary.advanced.toLocaleString("it-IT"), note: "Almeno una nuova pista valida", icon: ChevronRight, tone: "text-indigo-700 dark:text-indigo-300" },
     { label: "Vendite · nuove piste", value: `${summary.sales} · ${summary.newPiste}`, note: "Vendite valide / piste distinte aggiunte", icon: Store, tone: "text-foreground" },
-    { label: "Bonus generato", value: euro(summary.generated), note: "Marginale sulle nuove piste, non commissione addetto", icon: Wallet, tone: "text-foreground" },
+    { label: "Bonus generato", value: euro(summary.generated), note: `Base ${euro(summary.baseGenerated)} · extra ${euro(summary.extraGenerated)}; non commissione addetto`, icon: Wallet, tone: "text-foreground" },
     { label: "Confermato · presunto", value: `${euro(summary.confirmed)} · ${euro(summary.presumed)}`, note: "Il presunto resta separato dal confermato", icon: CircleHelp, tone: "text-foreground" },
     { label: "Portafoglio pendente", value: euro(summary.pending), note: "Stock attuale del gruppo clienti, non attribuito al venditore né al mese", icon: Wallet, tone: "text-amber-700 dark:text-amber-300" },
   ];
@@ -331,6 +338,10 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     </section>
 
     <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+      <p className="mb-2 text-xs text-muted-foreground">
+        Extra SIM–smartphone: esiti espliciti {euro(summary.extraConfirmed)} · presunti {euro(summary.extraPresumed)}.
+        Le coppie aggiuntive non sono nuove piste e non sono conferme di pagamento.
+      </p>
       <h3 className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-200"><AlertTriangle className="h-4 w-4" />Metodo, qualità e perimetro dello storico</h3>
       <ul className="mt-2 grid gap-1.5 text-xs leading-relaxed text-muted-foreground sm:grid-cols-2">
         <li>Gli stock commerciali sono ricalcolati sugli stati validi oggi, non sono fotografie storiche di chiusura mensile; il denominatore include journey inattive ma eleggibili.</li>

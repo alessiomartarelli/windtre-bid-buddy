@@ -174,12 +174,15 @@ export function reconcileCjMobile(
       else outcomes.manualNone++;
     }
   }
-  const confirmed = selected.map(j => {
-    const drivers = new Set((grouped.get(j.journeyId) ?? []).filter(r => matchesDiagnosticFilters(r, filters) && r.driver !== "mobile"
-      && isCjItemActive(r) && ["pagato", "riaccreditato"].includes(r.economicState ?? "")
-      && pisteInWindow(r.eventDate, t0.get(j.journeyId) ?? null)).map(r => r.driver));
-    return { journeyId: j.journeyId, cliente: j.cliente, real: gettoneForPiste(drivers.size), includingPresumed: j.fatturatoMaturato };
-  });
+  const confirmed = selected.map(j => ({
+    journeyId: j.journeyId, cliente: j.cliente,
+    real: j.gettoneBaseEsplicito + j.extraEsplicito,
+    includingPresumed: j.fatturatoMaturato,
+    base: j.gettoneBase, extra: j.extraStimato, extraCoppie: j.extraCoppie,
+    baseExplicit: j.gettoneBaseEsplicito, extraExplicit: j.extraEsplicito,
+    presumed: j.gettoneBasePresunto + j.extraPresunto,
+    manualConfirmed: j.gettoneBaseConfermato + j.extraConfermato,
+  }));
   return {
     details, counts, sourceTotal: details.length, period, later, earlierOrUndated,
     cumulative: active.length, clients: selected.length, outcomes, mobile,

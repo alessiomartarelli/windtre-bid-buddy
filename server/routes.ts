@@ -4180,16 +4180,7 @@ export async function registerRoutes(
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
-      // Le vendite già scaricate da altre pagine (Vendite BiSuite, Incentivazione,
-      // scheduler) vengono riconciliate automaticamente in customer journey, così
-      // compaiono senza dover premere "Rigenera da BiSuite". Il reconcile parte solo
-      // se le vendite locali sono cambiate dall'ultimo (watermark), quindi i load
-      // successivi restano leggeri. Eventuali errori non bloccano la lista.
-      try {
-        await storage.reconcileCustomerJourneysIfStale(profile.organizationId);
-      } catch (e) {
-        console.error("Customer journeys auto-reconcile error:", e);
-      }
+      // Lettura pura: il reconcile è eseguito dal fetch schedulato o da POST.
       const addettiFilter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
       const journeys = await storage.listCustomerJourneys(profile.organizationId, addettiFilter);
       // Allega a ogni scheda il riepilogo driver (attivati vs attivabili),
@@ -4208,10 +4199,14 @@ export async function registerRoutes(
       // Stesso isolamento operatore: un operatore vede solo i valori dei propri
       // item, anche su journey con item di addetti diversi.
       const facets = await storage.getCustomerJourneyItemFacets(journeyIds, addettiFilter);
+      const gettoni = new Map(buildGettoneJourneys(
+        await storage.getCustomerJourneyReportRows(profile.organizationId, addettiFilter, true),
+      ).map(g => [g.journeyId, g]));
       const withDrivers = journeys.map((j) => ({
         ...j,
         drivers: summaries.get(j.id) ?? [],
         valore: values.get(j.id) ?? 0,
+        gettone: gettoni.get(j.id),
         pdvs: facets.get(j.id)?.pdvs ?? [],
         addetti: facets.get(j.id)?.addetti ?? [],
         states: facets.get(j.id)?.states ?? [],

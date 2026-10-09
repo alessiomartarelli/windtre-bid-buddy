@@ -29,8 +29,10 @@ let nextId = 1;
 // `eventDate` è un ISO a mezzanotte UTC (come in produzione `openedAt` deriva
 // dalla data vendita a mezzanotte UTC) per evitare ambiguità di fuso orario sui
 // bordi di mese.
-function contract({ driver, state, eventDate, bisuiteSaleId = null, bisuiteId = null }) {
-  return { id: `c_${nextId++}`, driver, state, eventDate, bisuiteSaleId, bisuiteId };
+function contract({ driver, state, eventDate, bisuiteSaleId = 'S1', bisuiteId = null }) {
+  return { id: `c_${nextId++}`, driver, state, eventDate, bisuiteSaleId, bisuiteId,
+    iccid: '89000000000000000001', categoria: driver === 'telefono' ? 'TELEFONIA' : 'UNTIED',
+    tipologia: driver === 'telefono' ? 'SMARTPHONE' : 'RICARICABILE' };
 }
 
 // Da un singolo elenco di contratti deriva le due shape e lancia entrambe le
@@ -45,6 +47,7 @@ function derive(contracts, journeyOpts = {}) {
   // Shape scheda: CustomerJourneyItem[] -> timeline -> validità.
   const items = contracts.map((c) => ({
     id: c.id,
+    iccid: c.iccid, categoria: c.categoria, tipologia: c.tipologia,
     driver: c.driver,
     state: c.state,
     dataAttivazione: c.eventDate,
@@ -61,6 +64,8 @@ function derive(contracts, journeyOpts = {}) {
   // Shape gettone: CjReportRow[] (un'unica journey "J1").
   const rows = contracts.map((c) => ({
     journeyId: 'J1',
+    itemId: c.id, iccid: c.iccid, categoria: c.categoria, tipologia: c.tipologia,
+    bisuiteSaleId: c.bisuiteSaleId, bisuiteArticleId: c.bisuiteArticleId,
     customerKey: 'K1',
     customerType: 'privato',
     cliente: 'Cliente Test',
@@ -182,7 +187,8 @@ test('parità: trigger su contratto non-mobile resta pista in entrambe', () => {
 test('parità: dataset combinato (tutti i rami limite insieme)', () => {
   const contracts = [
     contract({ driver: 'mobile', state: 'attivato', eventDate: '2026-07-03T00:00:00.000Z', bisuiteSaleId: 'S1' }), // trigger
-    contract({ driver: 'mobile', state: 'attivato', eventDate: '2026-08-01T00:00:00.000Z' }), // SIM extra (non pista)
+    { ...contract({ driver: 'mobile', state: 'attivato', eventDate: '2026-08-01T00:00:00.000Z', bisuiteSaleId: 'S2' }),
+      iccid: '89000000000000000002' }, // SIM successiva distinta, senza smartphone (non pista né extra)
     contract({ driver: 'fisso', state: 'attivato', eventDate: '2026-06-15T00:00:00.000Z' }), // pre-T0 => fuori
     contract({ driver: 'energia', state: 'attivato', eventDate: '2026-07-20T00:00:00.000Z' }), // valida
     contract({ driver: 'energia', state: 'attivato', eventDate: '2026-07-25T00:00:00.000Z' }), // duplicato

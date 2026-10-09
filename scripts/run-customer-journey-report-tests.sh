@@ -9,4 +9,4 @@
 set -euo pipefail
 
 echo "[cj-report-tests] running suite ..."
-exec node --import tsx --test tests/customer-journey-report.test.mjs
+exec node --import tsx --test tests/customer-journey-report.test.mjs tests/customer-journey-smartphone.test.mjs

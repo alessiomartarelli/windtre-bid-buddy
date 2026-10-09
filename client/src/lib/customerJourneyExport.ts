@@ -10,6 +10,7 @@ import {
   type CjExportDriverSummary, type CjListJourney,
   journeyTitle, detailMeta, detailFileBase,
   driverTableHead, driverTableBody, contractsHead, contractsBody,
+  journeyGettoneRows,
   detailExcelHeaderRows,
   listSubtitle, listPdfHead, listPdfBody,
   listExcelHeaderRows, listExcelHead, listExcelBody,
@@ -126,6 +127,12 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
     },
   });
 
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY ?? 60) + 8,
+    head: [["Gettoni (base ed extra separati)", "€ / numero"]],
+    body: journeyGettoneRows(journey, items),
+    styles: { fontSize: 9 }, headStyles: { fillColor: [99, 102, 241] },
+  });
   // Sezione Contratti.
   const afterDrivers = (doc as any).lastAutoTable?.finalY ?? 60;
   doc.setFontSize(13);
@@ -135,7 +142,7 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
     autoTable(doc, {
       startY: afterDrivers + 14,
       head: [contractsHead()],
-      body: contractsBody(items, false),
+      body: contractsBody(items, false, journey),
       styles: { fontSize: 7.5, cellPadding: 1.5, valign: "middle", overflow: "linebreak" },
       headStyles: { fillColor: [99, 102, 241], fontSize: 7.5 },
       columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 32 } },
@@ -171,7 +178,7 @@ export function exportJourneyExcel(data: JourneyExportData): void {
 
   const contractRows: (string | number)[][] = [
     contractsHead(),
-    ...contractsBody(items, true),
+    ...contractsBody(items, true, journey),
   ];
   const wsContracts = XLSX.utils.aoa_to_sheet(contractRows);
   wsContracts["!cols"] = [
@@ -179,6 +186,7 @@ export function exportJourneyExcel(data: JourneyExportData): void {
     { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 9 },
   ];
   XLSX.utils.book_append_sheet(workbook, wsContracts, "Contratti");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(journeyGettoneRows(journey, items)), "Gettoni");
 
   XLSX.writeFile(workbook, `${detailFileBase(journey)}.xlsx`);
 }

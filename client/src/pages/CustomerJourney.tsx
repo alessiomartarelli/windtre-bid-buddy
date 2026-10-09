@@ -38,6 +38,7 @@ import {
   buildGettoneJourneys, filterGettoneByDate, filterGettoneByInsertDate,
   aggregateGettone, gettoneTotals,
   crossSellPercentuali, gettoneDetailByKey,
+  cjJourneyReportRows,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES, CJ_ECONOMIC_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjEconomicState, CjDriver } from "@shared/schema";
@@ -61,6 +62,7 @@ import {
   exportJourneyPdf, exportJourneyExcel,
   exportJourneyListPdf, exportJourneyListExcel,
 } from "@/lib/customerJourneyExport";
+import { journeyGettoneRows } from "@shared/customerJourneyExport";
 import CohortReport from "@/components/customer-journey/CohortReport";
 import SimDiagnostics from "@/components/customer-journey/SimDiagnostics";
 
@@ -77,6 +79,7 @@ type JourneyListItem = CustomerJourney & {
   pdvs?: string[];
   addetti?: string[];
   states?: string[];
+  gettone?: CjGettoneJourney;
 };
 
 type SortKey = "data" | "nome" | "completamento" | "valore" | "scadenza";
@@ -450,6 +453,12 @@ const JourneyCard = memo(function JourneyCard({
             {fmtEuro(j.valore)}
           </span>
         </div>
+        {j.gettone && (
+          <p className="text-xs text-muted-foreground" data-testid={`card-gettone-breakdown-${j.id}`}>
+            Gettone base {fmtEuro(j.gettone.gettoneBase)} · extra {fmtEuro(j.gettone.extraStimato)}
+            {" "}({j.gettone.extraCoppie} coppie)
+          </p>
+        )}
         <div className="grid grid-cols-3 gap-1.5">
           {drivers.map((d) => (
             <div
@@ -2206,13 +2215,19 @@ function AnalisiViewImpl({
             <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-fatturato">
               {fmtEuro(totals.fatturato)}
             </p>
-            <p className="text-xs text-muted-foreground">gettone su tutte le piste attive</p>
+            <p className="text-xs text-muted-foreground" data-testid="text-gettone-breakdown">
+              Base {fmtEuro(totals.gettoneBase)} · extra {fmtEuro(totals.extraStimato)} ({totals.extraCoppie} coppie)
+            </p>
           </CardContent>
         </Card>
         <Card data-testid="card-gettone-fatturato-maturato" title="Gettone calcolato con esiti positivi DRMS/manuali e smartphone presunti; non prova di pagamento">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <BadgeCheck className="h-3.5 w-3.5" /> Gettone incl. presunti
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Extra: esiti espliciti {fmtEuro(totals.extraEsplicito)} · presunti {fmtEuro(totals.extraPresunto)}
+              {" "}· gettone confermato {fmtEuro(totals.extraConfermato)}
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-fatturato-maturato">
               {fmtEuro(totals.fatturatoMaturato)}
@@ -2303,9 +2318,15 @@ function AnalisiViewImpl({
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400" data-testid={`text-gettone-fatturato-${g.key}`}>
                         {fmtEuro(g.fatturato)}
+                        <div className="text-[10px] font-normal text-muted-foreground">
+                          Base {fmtEuro(g.gettoneBase)} · extra {fmtEuro(g.extraStimato)} ({g.extraCoppie})
+                        </div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums" data-testid={`text-gettone-maturato-${g.key}`}>
                         {fmtEuro(g.fatturatoMaturato)}
+                        <div className="text-[10px] text-muted-foreground">
+                          Extra: espliciti {fmtEuro(g.extraEsplicito)} · presunti {fmtEuro(g.extraPresunto)}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-amber-600 dark:text-amber-400" data-testid={`text-gettone-potenziale-${g.key}`}>
                         {fmtEuro(g.potenziale)}
@@ -2356,6 +2377,9 @@ function AnalisiViewImpl({
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
                                       {fmtEuro(r.fatturato)}
+                                      <div className="text-[10px] text-muted-foreground">
+                                        Base {fmtEuro(r.gettoneBase)} · extra {fmtEuro(r.extraStimato)}
+                                      </div>
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
                                       {fmtEuro(r.fatturatoMaturato)}
@@ -2540,7 +2564,7 @@ function CustomerJourneyTimeline({
                             return (
                               <span
                                 className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold ${cls}`}
-                                title={CJ_VALIDITY_REASONS[v.kind]}
+                                title={v.reason ?? CJ_VALIDITY_REASONS[v.kind]}
                                 data-testid={`timeline-validity-${it.id}`}
                                 data-validity={v.kind}
                               >
@@ -2780,6 +2804,7 @@ function JourneyDetailViewImpl({
   ragioneSocialePending: boolean;
 }) {
   const { journey, items, drivers } = detail;
+  const gettone = buildGettoneJourneys(cjJourneyReportRows(journey, items))[0];
   const driverMap = new Map(drivers.map((d) => [d.driver, d]));
   // Distinzione driver ATTIVI vs VALIDI: un driver è "attivo" se il cliente ha
   // un contratto di quel driver, ma conta come "valido" (pista cross-sell che
@@ -2842,6 +2867,26 @@ function JourneyDetailViewImpl({
 
   return (
     <div className="space-y-6">
+      <Card data-testid="detail-gettone-breakdown">
+        <CardHeader>
+          <CardTitle className="text-base">Gettone iniziale ed extra SIM–smartphone</CardTitle>
+          <CardDescription>
+            Le coppie successive aggiungono 20 € ciascuna, senza modificare le cinque piste o il potenziale del gettone base.
+            Gli esiti presunti non sono conferme del gettone.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+            {journeyGettoneRows(journey, items).map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="font-semibold tabular-nums">{label === "Coppie aggiuntive" ? value : fmtEuro(Number(value))}</dd>
+              </div>
+            ))}
+          </dl>
+          {!gettone && <p className="text-xs text-muted-foreground mt-2">Nessuna SIM attiva ammissibile: cliente fuori coorte gettoni.</p>}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -3108,6 +3153,12 @@ function JourneyDetailViewImpl({
                         <span className="block truncate" title={it.descrizione || ""}>
                           {it.descrizione || it.tipologia || it.categoria || "—"}
                         </span>
+                        {it.driver === "telefono" && (
+                          <p className="text-[11px] text-muted-foreground mt-1" data-testid={`phone-reason-${it.id}`}>
+                            {it.iccid ? `ICCID ${it.iccid} · ` : ""}
+                            {driverItemValidity.get(it.id)?.reason ?? CJ_VALIDITY_REASONS[driverItemValidity.get(it.id)?.kind ?? "smartphone_escluso"]}
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">
                         {it.codiceContratto || "—"}

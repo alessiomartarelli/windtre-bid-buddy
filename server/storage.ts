@@ -1378,7 +1378,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerJourney(id: string, orgId: string): Promise<CustomerJourney | undefined> {
-    await this.reconcileCustomerJourneysIfStale(orgId);
+    // Consultazione in sola lettura: riallineamento solo esplicito/schedulato.
     const [row] = await db.select().from(customerJourneys)
       .where(and(eq(customerJourneys.id, id), eq(customerJourneys.organizationId, orgId)));
     return row;
@@ -1409,6 +1409,12 @@ export class DatabaseStorage implements IStorage {
     // attivazione con fallback data inserimento (stesso criterio del report).
     const rows = await db.select({
       journeyId: customerJourneyItems.journeyId,
+      id: customerJourneyItems.id,
+      iccid: customerJourneyItems.iccid,
+      cjTriggerMobile: customerJourneyItems.cjTriggerMobile,
+      bisuiteSaleId: customerJourneyItems.bisuiteSaleId,
+      bisuiteArticleId: customerJourneyItems.bisuiteArticleId,
+      codiceContratto: customerJourneyItems.codiceContratto,
       driver: customerJourneyItems.driver,
       categoria: customerJourneyItems.categoria,
       tipologia: customerJourneyItems.tipologia,
@@ -1420,12 +1426,14 @@ export class DatabaseStorage implements IStorage {
       addetto: customerJourneyItems.addetto,
     }).from(customerJourneyItems)
       .where(inArray(customerJourneyItems.journeyId, journeyIds));
-    type PhaseItem = { driver: CjDriver; state: CjItemState; economicState: string | null; eventDate: string | null; addetto: string | null; categoria: string | null; tipologia: string | null; descrizione: string | null };
+    type PhaseItem = { id: string; iccid: string | null; cjTriggerMobile: boolean; bisuiteSaleId: string | null; bisuiteArticleId: number | null; codiceContratto: string | null; driver: CjDriver; state: CjItemState; economicState: string | null; eventDate: string | null; addetto: string | null; categoria: string | null; tipologia: string | null; descrizione: string | null };
     const byJourney = new Map<string, PhaseItem[]>();
     for (const r of rows) {
       const list = byJourney.get(r.journeyId) ?? [];
       const evt = r.dataAttivazione ?? r.dataInserimento ?? null;
       list.push({
+        id: r.id, iccid: r.iccid, cjTriggerMobile: r.cjTriggerMobile,
+        bisuiteSaleId: r.bisuiteSaleId, bisuiteArticleId: r.bisuiteArticleId, codiceContratto: r.codiceContratto,
         driver: r.driver as CjDriver,
         categoria: r.categoria, tipologia: r.tipologia, descrizione: r.descrizione,
         state: r.state as CjItemState,
@@ -1536,7 +1544,7 @@ export class DatabaseStorage implements IStorage {
     readOnly = false,
     executor: DbExecutor | typeof db = db,
   ): Promise<CjReportRow[]> {
-    if (!readOnly) await this.reconcileCustomerJourneysIfStale(orgId);
+    // Anche gli export/report ordinari sono letture, mai reconcile implicito.
     let cond;
     if (addettiFilter != null) {
       const lower = addettiFilter.map((a) => a.toLowerCase().trim()).filter(Boolean);
@@ -1550,6 +1558,9 @@ export class DatabaseStorage implements IStorage {
     }
     const rows = await executor.select({
       itemId: customerJourneyItems.id,
+      bisuiteId: customerJourneyItems.bisuiteId,
+      iccid: customerJourneyItems.iccid,
+      cjTriggerMobile: customerJourneyItems.cjTriggerMobile,
       bisuiteSaleId: customerJourneyItems.bisuiteSaleId,
       bisuiteArticleId: customerJourneyItems.bisuiteArticleId,
       codiceContratto: customerJourneyItems.codiceContratto,
@@ -1564,6 +1575,7 @@ export class DatabaseStorage implements IStorage {
       ragioneSociale: customerJourneys.ragioneSociale,
       nominativo: customerJourneys.nominativo,
       openedAt: customerJourneys.openedAt,
+      triggerBisuiteId: customerJourneys.triggerBisuiteId,
       categoria: customerJourneyItems.categoria,
       tipologia: customerJourneyItems.tipologia,
       descrizione: customerJourneyItems.descrizione,
@@ -1588,6 +1600,8 @@ export class DatabaseStorage implements IStorage {
       const v = r.importo != null ? parseFloat(String(r.importo)) : NaN;
       return {
         itemId: r.itemId,
+        bisuiteId: r.bisuiteId,
+        iccid: r.iccid, cjTriggerMobile: r.cjTriggerMobile,
         bisuiteSaleId: r.bisuiteSaleId, bisuiteArticleId: r.bisuiteArticleId,
         codiceContratto: r.codiceContratto, economicStateManual: r.economicStateManual,
         drmsOutcomeState: r.drmsOutcomeState as CjEconomicState | null,
@@ -1604,6 +1618,7 @@ export class DatabaseStorage implements IStorage {
         driver: r.driver as CjDriver,
         valore: Number.isFinite(v) ? v : 0,
         openedAt: r.openedAt ? r.openedAt.toISOString() : null,
+        triggerBisuiteId: r.triggerBisuiteId,
         eventDate: r.dataAttivazione
           ? r.dataAttivazione.toISOString()
           : (r.dataInserimento ? r.dataInserimento.toISOString() : null),
@@ -1740,8 +1755,9 @@ export class DatabaseStorage implements IStorage {
         economicHistory = date ? [{ month: date, state: "pagato", source: "presunto" }] : [];
         historyIncomplete = !date;
       }
+      const { codiceContratto: _contract, ...publicRow } = r;
       return {
-        ...r, itemId: it.id, economicHistory, historyIncomplete,
+        ...publicRow, itemId: it.id, economicHistory, historyIncomplete,
         ...(r.driver === "mobile" ? {
           simContract: it.codiceContratto ?? null,
           operativeDecisionAt: it.stateManual ? it.stateUpdatedAt?.toISOString() ?? null : null,
@@ -2065,7 +2081,7 @@ export class DatabaseStorage implements IStorage {
       const autoState: CjItemState = "inserito";
       const autoEconomicState: CjEconomicState | null = isAnnullata ? "annullato" : null;
 
-      const articoli: any[] = Array.isArray(raw.articoli) ? raw.articoli : [];
+      const articoli: any[] = Array.isArray(raw.articoli) ? [...raw.articoli].sort((a, b) => Number(a?.id) - Number(b?.id)) : [];
       for (const art of articoli) {
         const categoria = art?.categoria?.nome ?? null;
         const tipologia = art?.tipologia?.nome ?? null;
@@ -2112,6 +2128,7 @@ export class DatabaseStorage implements IStorage {
           bisuiteSaleId: sale.id,
           bisuiteId: sale.bisuiteId ?? null,
           bisuiteArticleId: art?.id != null ? Number(art.id) : null,
+          iccid: parsed.iccid ?? null,
           nome: cliente.nome ?? null,
           cognome: cliente.cognome ?? null,
           cf: cf || null,
@@ -2148,6 +2165,22 @@ export class DatabaseStorage implements IStorage {
     // della pagina). Raggruppiamo gli insert in chunk per non superare il
     // limite di parametri di Postgres (~65535).
     const candidates = Array.from(byCustomer.values()).filter((c) => c.hasTrigger);
+    for (const cand of candidates) {
+      const unique = new Map<string, InsertCustomerJourneyItem>();
+      for (const it of cand.items) {
+        const key = `${it.bisuiteSaleId}:${it.bisuiteArticleId}`;
+        const previous = unique.get(key);
+        if (!previous) unique.set(key, it);
+        else if (previous.iccid !== it.iccid || previous.tipologia !== it.tipologia || previous.driver !== it.driver) {
+          previous.iccid = null; // conflicting copies cannot establish a certain association
+        }
+      }
+      cand.items = [...unique.values()];
+      const trigger = cand.items.filter(it => it.bisuiteSaleId === cand.triggerSaleId
+        && it.driver === "mobile" && isCjMobileEligible(it))
+        .sort((a, b) => (a.bisuiteArticleId ?? Number.MAX_SAFE_INTEGER) - (b.bisuiteArticleId ?? Number.MAX_SAFE_INTEGER))[0];
+      for (const it of cand.items) it.cjTriggerMobile = it === trigger;
+    }
     const chunk = <T>(arr: T[], size: number): T[][] => {
       const out: T[][] = [];
       for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -2253,6 +2286,8 @@ export class DatabaseStorage implements IStorage {
             codiceContratto: sql`excluded.codice_contratto`,
             categoria: sql`excluded.categoria`,
             tipologia: sql`excluded.tipologia`,
+            iccid: sql`excluded.iccid`,
+            cjTriggerMobile: sql`excluded.cj_trigger_mobile`,
             descrizione: sql`excluded.descrizione`,
             canone: sql`excluded.canone`,
             dataInserimento: sql`excluded.data_inserimento`,
@@ -2313,7 +2348,7 @@ export class DatabaseStorage implements IStorage {
                       || ${salesSnapshotAt ? sql`jsonb_build_object('customerJourneyReconciledAt', ${salesSnapshotAt.toISOString()}::text)` : sql`'{}'::jsonb`}),
             updated_at = now()`);
     await tx.execute(sql`UPDATE organization_config
-      SET config = config || '{"customerJourneyEligibilityVersion":2}'::jsonb
+      SET config = config || '{"customerJourneyEligibilityVersion":3}'::jsonb
       WHERE organization_id = ${orgId}`);
 
     return {
@@ -2399,7 +2434,7 @@ export class DatabaseStorage implements IStorage {
     if (!lastSync) return { reconciled: false }; // nessuna vendita: niente da fare
     const watermark = await this.getCustomerJourneyReconciledAt(orgId);
     const cfg = await this.getOrgConfig(orgId);
-    const eligibilityCurrent = (cfg?.config as any)?.customerJourneyEligibilityVersion === 2;
+    const eligibilityCurrent = (cfg?.config as any)?.customerJourneyEligibilityVersion === 3;
     if (eligibilityCurrent && watermark && lastSync.getTime() <= watermark.getTime()) {
       return { reconciled: false }; // già allineato
     }

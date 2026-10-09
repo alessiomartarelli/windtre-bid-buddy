@@ -85,7 +85,8 @@ test('card, summaries, confirmed gettone, SIM volumes and historical items share
   assert.equal(validity.get('sim').kind, 'attivante');
   assert.equal(validity.get('beforeSim').counts, true);
   assert.equal(validity.get('previous').kind, 'fuori_periodo');
-  assert.equal(validity.get('t7').kind, 'fuori_periodo');
+  assert.equal(validity.get('t7').kind, 'smartphone_escluso');
+  assert.match(validity.get('t7').reason, /non SMARTPHONE/);
   assert.equal(summary.find(d => d.driver === 'telefono').activated, false);
   assert.equal(summary.find(d => d.driver === 'mobile').count, 1);
   const exported = driverTableBody(summary, false);

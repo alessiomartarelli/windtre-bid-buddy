@@ -1,4 +1,4 @@
-import { cjT0Month, isCjItemActive, isCjMobileEligible, monthOfIso, pisteInWindow } from "./customerJourney";
+import { cjT0Month, isCjItemActive, isCjMobileEligible, monthOfIso, pisteInWindow, cjPhoneEligibility, cjPhoneKey } from "./customerJourney";
 import type { CjCohortCustomer, CjCohortRow } from "./customerJourneyCohorts";
 
 export interface CjDroppedSim {
@@ -69,7 +69,9 @@ export function buildCjProgression(
     const list = grouped.get(c.journeyId) ?? [];
     const t0 = cjT0Month(list.find(r => r.openedAt)?.openedAt ?? null, list);
     const within = list.filter(r => pisteInWindow(r.eventDate, t0));
-    const sales = within.filter(r => r.driver !== "mobile" && isCjItemActive(r));
+    const phones = cjPhoneEligibility(list, t0, list.find(r => r.openedAt)?.openedAt);
+    const sales = within.filter(r => r.driver !== "mobile" && isCjItemActive(r)
+      && (r.driver !== "telefono" || phones.get(cjPhoneKey(r))?.kind === "iniziale"));
     candidates.set(c.journeyId, sales);
     undatedSales += sales.filter(r => !ym(r.insertedAt)).length;
     for (const r of within.filter(r => r.driver === "mobile" && isCjMobileEligible(r))) {

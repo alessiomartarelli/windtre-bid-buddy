@@ -303,14 +303,14 @@ export async function seedValenze(pool, orgId, { month, year, sectionId, rows, f
 // Ritorna l'id dell'item creato.
 // `bisuiteId` (opzionale) = id numerico BiSuite della vendita (per il match
 // con `triggerBisuiteId` della journey).
-export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito', dataInserimento = null, bisuiteSaleId = null, bisuiteId = null, categoria = null, descrizione = null }) {
+export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito', dataInserimento = null, bisuiteSaleId = null, bisuiteId = null, categoria = null, descrizione = null, tipologia = null, iccid = null, cjTriggerMobile = false }) {
   const r = await pool.query(
     `INSERT INTO customer_journey_items
        (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo,
-        bisuite_sale_id, bisuite_id, categoria, descrizione)
-     VALUES ($1, $2, $3, $4, $5, COALESCE($8::timestamptz, now()), $6, $7, $9, $10, $11, $12)
+        bisuite_sale_id, bisuite_id, categoria, descrizione, tipologia, iccid, cj_trigger_mobile)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($8::timestamptz, now()), $6, $7, $9, $10, $11, $12, $13, $14, $15)
      RETURNING id`,
-    [journeyId, orgId, driver, addetto, state, pdv, importo, dataInserimento, bisuiteSaleId, bisuiteId, categoria, descrizione],
+    [journeyId, orgId, driver, addetto, state, pdv, importo, dataInserimento, bisuiteSaleId, bisuiteId, categoria, descrizione, tipologia, iccid, cjTriggerMobile],
   );
   return r.rows[0].id;
 }

@@ -196,19 +196,48 @@ attive oltre alla SIM che ha aperto la journey. La tabella a scaglioni
   (`pisteAttive / CJ_MAX_PISTE`). Logica pura `simSaturationPct` +
   `gettoneDetailByKey` in `shared/customerJourney.ts`.
 
-## Reconcile automatico al load (vendite già scaricate)
+## Reconcile esplicito/schedulato e consultazione in sola lettura
 
-Le vendite già presenti in `bisuite_sales` perché scaricate da altre pagine
-(Vendite BiSuite "Allinea", Incentivazione, scheduler giornaliero) compaiono
-**automaticamente** nella Customer Journey, senza che l'utente debba premere
-"Rigenera da BiSuite". Il `GET /api/customer-journeys` invoca
-`reconcileCustomerJourneysIfStale(orgId)`, che riconcilia **solo** se le vendite
-locali sono cambiate dall'ultimo reconcile: confronta `max(last_seen_at)` di
-`bisuite_sales` con un watermark salvato in org config
-(`customerJourneyReconciledAt`, aggiornato a fine di ogni
-`reconcileCustomerJourneys`). Quando sono allineati il load resta leggero (nessun
-reconcile). Errori del reconcile non bloccano la lista (vengono loggati). Il
-pulsante "Rigenera da BiSuite" (admin) resta come forzatura manuale.
+Lista, dettaglio, report ed export (inclusa diagnostica) non scrivono e non
+riconciliano durante la consultazione. Il fetch BiSuite, anche schedulato,
+riallinea le vendite già scaricate; “Rigenera da BiSuite” forza il reconcile
+per l'organizzazione dell'admin. La versione di eleggibilità è 3: il percorso
+`reconcileCustomerJourneysIfStale` riconosce la necessità di aggiornare anche
+uno storico con watermark fresco. Il reconcile è transazionale e idempotente,
+preserva stati operativi/economici, conferme gettone e dettagli manuali.
+
+## Smartphone collegati alla SIM e coppie aggiuntive
+
+Solo `categoria=TELEFONIA` e `tipologia=SMARTPHONE` qualificano. L'ICCID è
+estratto dai campi `venditaInfo1..5` con etichetta ICCID, come stringa senza
+perdere zeri; numeri JSON (già potenzialmente arrotondati), valori assenti o
+conflittuali non sono utilizzabili. Non si inferisce l'associazione da
+cliente, numero telefonico o IMEI. La SIM fisica non è un secondo contratto.
+
+Nella vendita trigger viene scelta una sola attivazione mobile ammissibile:
+prima vendita per data, poi ID BiSuite, poi articolo mobile con ID più basso.
+L'identità e il marker della SIM iniziale sono riallineati sugli item senza
+toccare dettagli o stati manuali. Con più SIM nello stesso scontrino, solo
+lo smartphone dello stesso scontrino con ICCID della SIM iniziale concorre alla pista Smartphone.
+Un telefono acquistato in uno scontrino successivo con l'ICCID iniziale non
+genera né una pista base né una coppia aggiuntiva: non contiene una nuova SIM.
+Altri dispositivi e smartphone non associati restano nello storico con motivo.
+
+Una **vendita successiva** con nuova SIM ammissibile e smartphone nella
+stessa vendita, con ICCID identico nella coppia, aggiunge **20 €**. Può avere
+ICCID diverso dalla SIM iniziale. Entrambi devono essere attivi e datati
+nella finestra T0–T6; SIM sola, telefono solo, KO, annullo, storno, fuori
+finestra e associazioni ambigue non generano extra. Duplicati dello stesso
+contratto/associazione non moltiplicano il premio. Più coppie verificabili
+con ICCID distinti producono più extra, senza nuove CJ o nuove piste.
+
+Schede, analisi, timeline, diagnostica e PDF/Excel usano la stessa eleggibilità.
+Il totale stimato è **base a scaglioni + extra**. Saturazione, incremento e
+potenziale residuo sono calcolati **solo sulla base**. Il breakdown distingue
+esiti positivi espliciti, liquidazioni smartphone presunte e spunte manuali di
+gettone confermato. Per maturare un extra serve anche l'esito positivo della
+SIM associata; smartphone presunto non significa extra confermato.
+Questo intervento non cambia Dashboard Gara, Vendite, Canvass o regole DRMS.
 
 ## Visibilità (per ruolo)
 

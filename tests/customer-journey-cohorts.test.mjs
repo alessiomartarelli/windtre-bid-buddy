@@ -5,6 +5,9 @@ import { buildCjCohortModel, summarizeCjCohort } from "../shared/customerJourney
 const row = (id, driver, date, extra = {}) => ({
   itemId: id, journeyId: "j1", customerKey: "c1", customerType: "privato", cliente: "Cliente",
   pdv: "Negozio", addetto: "Anna", state: "attivato", driver, valore: 999,
+  bisuiteSaleId: "synthetic-initial", iccid: "89000000000000000001",
+  categoria: driver === "telefono" ? "TELEFONIA" : "UNTIED",
+  tipologia: driver === "telefono" ? "SMARTPHONE" : "RICARICABILE",
   openedAt: "2026-07-01T00:00:00Z", eventDate: `${date}T00:00:00Z`,
   insertedAt: `${date}T00:00:00Z`, economicHistory: [], historyIncomplete: false, ...extra,
 });

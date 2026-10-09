@@ -230,6 +230,9 @@ export const customerJourneyItems = pgTable("customer_journey_items", {
   bisuiteSaleId: varchar("bisuite_sale_id"),
   bisuiteId: integer("bisuite_id"),
   bisuiteArticleId: integer("bisuite_article_id"),
+  // Identità verificabile BiSuite, mai ricavata da cliente/telefono/IMEI.
+  iccid: varchar("iccid"),
+  cjTriggerMobile: boolean("cj_trigger_mobile").notNull().default(false),
   // Campi ITEM_CJ
   nome: varchar("nome"),
   cognome: varchar("cognome"),
