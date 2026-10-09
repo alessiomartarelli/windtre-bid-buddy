@@ -18,6 +18,8 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
   // Keep page selection tied to its filter context; changed filters immediately show page one.
   const [pagination, setPagination] = useState({ context, page: 0 });
   const page = pagination.context === context ? pagination.page : 0;
+  // Commit the new context too: returning to earlier filters must not resurrect their old page.
+  if (pagination.context !== context) setPagination({ context, page: 0 });
   const params = new URLSearchParams({ filters: JSON.stringify(filters), from, to });
   const load = async (detail: boolean, signal?: AbortSignal): Promise<CjSimSourcePage> => {
     const response = await fetch(`/api/customer-journeys/report-mobile-sources?${params}&detail=${detail ? 1 : 0}&page=${detail ? page : 0}`,
@@ -115,10 +117,13 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
             </p>
           </>}
         </div>
-        <Button variant="outline" size="sm" onClick={() => setShowDetail(v => !v)} aria-expanded={showDetail}>
+        <Button variant="outline" size="sm" onClick={() => {
+          setPagination({ context, page: 0 });
+          setShowDetail(v => !v);
+        }} aria-expanded={showDetail}>
           {showDetail ? "Nascondi contratti e articoli" : "Mostra contratti e articoli"}
         </Button>
-        {showDetail && <div className="space-y-3 max-h-[32rem] overflow-y-auto">
+        {showDetail && <div data-testid="cj-sim-detail" className="space-y-3 max-h-[32rem] overflow-y-auto">
           <div className="flex flex-wrap items-center gap-2" aria-label="Pagine dettaglio SIM">
             <Button size="sm" variant="outline" disabled={page === 0 || detailQuery.isFetching}
               onClick={() => setPagination({ context, page: page - 1 })}>Precedente</Button>
@@ -132,14 +137,14 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
             Pagina non disponibile. <Button size="sm" variant="outline" onClick={() => detailQuery.refetch()}>Riprova</Button>
           </div>}
           {detailQuery.isSuccess && !detailQuery.data.details.length && <p className="text-xs text-muted-foreground">Nessun articolo in questa pagina.</p>}
-          {detailQuery.data?.details.map(({ source: s, row, reason }, index) => <div key={`${s.saleId}:${s.articleId}:${index}`} className="rounded-md border p-3 text-xs space-y-1">
+          {detailQuery.data?.details.map(({ source: s, row, reason }, index) => <div data-testid="cj-sim-source-row" key={`${s.saleId}:${s.articleId}:${index}`} className="rounded-md border p-3 text-xs space-y-1">
             <p className="font-semibold">{s.cliente || "Senza identità"} · Vendita {s.bisuiteId} · Articolo {s.articleId ?? "senza ID"}</p>
             <p className="break-words">{s.descrizione || s.tipologia} · {s.insertedAt?.slice(0, 10) || "senza data"} · {row?.pdv ?? s.pdv} · {row?.addetto ?? s.addetto}</p>
             <p>{CJ_SIM_REASONS[reason]} · Contratto: {row?.codiceContratto || s.contract || "non disponibile"}</p>
             {row && <Button size="sm" variant="link" onClick={() => onOpenJourney(row.journeyId)}>Apri scheda cliente</Button>}
           </div>)}
           <h3 className="text-sm font-semibold">Esiti SIM dei clienti selezionati, incluse successive e negative</h3>
-          {d.mobile.slice(page * pageSize, (page + 1) * pageSize).map((r, index) => <div key={r.itemId ?? index} className="rounded-md border p-3 text-xs space-y-1">
+          {d.mobile.slice(page * pageSize, (page + 1) * pageSize).map((r, index) => <div data-testid="cj-sim-outcome-row" key={r.itemId ?? index} className="rounded-md border p-3 text-xs space-y-1">
             <p className="font-semibold">{r.cliente} · Contratto {r.codiceContratto || "non disponibile"}</p>
             <p className="break-words">{r.descrizione} · {r.insertedAt?.slice(0, 10) || "senza data"}</p>
             <p>DRMS: {economicStateLabel(r.drmsOutcomeState)} · Stato utilizzato: {economicStateLabel(r.economicState)}
@@ -148,7 +153,7 @@ export default function SimDiagnostics({ rows, selected, filters, from, to, onOp
             <Button size="sm" variant="link" onClick={() => onOpenJourney(r.journeyId)}>Apri scheda cliente</Button>
           </div>)}
           <h3 className="text-sm font-semibold">Gettoni calcolati per cliente</h3>
-          {d.confirmed.slice(page * pageSize, (page + 1) * pageSize).map(j => <div key={j.journeyId} className="rounded-md border p-3 text-xs">
+          {d.confirmed.slice(page * pageSize, (page + 1) * pageSize).map(j => <div data-testid="cj-sim-gettone-row" key={j.journeyId} className="rounded-md border p-3 text-xs">
             <p>{j.cliente}: esiti positivi {euro(j.real)} · inclusi presunti {euro(j.includingPresumed)}</p>
             <Button size="sm" variant="link" onClick={() => onOpenJourney(j.journeyId)}>Apri scheda cliente</Button>
           </div>)}
