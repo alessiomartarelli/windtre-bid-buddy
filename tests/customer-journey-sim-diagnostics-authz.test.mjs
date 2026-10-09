@@ -128,6 +128,66 @@ test("historical dataset: bounded period reads, exact summaries and stable pages
     details.forEach(d => counted[d.reason]++);
     assert.deepEqual(counted, summary.body.counts);
     assert.deepEqual((await read({ detail: "1", page: "0" })).body.details, details.slice(0, 50));
+    // Compare identical direct-storage requests, and verify warm reads do not
+    // rebuild report rows or revisit source batches. No browser or production writes.
+    const perfFilters = { typeFilter: "tutti", pdvFilter: [], addettoFilter: "tutti", stateFilter: "tutti", search: "" };
+    const coldStart = performance.now();
+    for (let page = 0; page < 25; page++) {
+      storage.cjSimDiagnosticCache.clear();
+      const result = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, perfFilters, "2026-07-01", "2026-07-31", page, true);
+      assert.equal(result.version, summary.body.version);
+      assert.deepEqual(JSON.parse(JSON.stringify(result.details)), details.slice(page * 50, (page + 1) * 50));
+    }
+    const coldMs = performance.now() - coldStart;
+    const originalReport = storage.getCustomerJourneyReportRows;
+    const originalSources = storage.getCustomerJourneyMobileSourceBatches;
+    storage.getCustomerJourneyReportRows = () => { throw new Error("Warm page rebuilt report"); };
+    storage.getCustomerJourneyMobileSourceBatches = () => { throw new Error("Warm page revisited batches"); };
+    const warmStart = performance.now();
+    try {
+      for (let page = 0; page < 25; page++) {
+        const result = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, perfFilters, "2026-07-01", "2026-07-31", page, true);
+        assert.equal(result.version, summary.body.version);
+        assert.deepEqual(result.details, details.slice(page * 50, (page + 1) * 50));
+      }
+    } finally {
+      storage.getCustomerJourneyReportRows = originalReport;
+      storage.getCustomerJourneyMobileSourceBatches = originalSources;
+    }
+    console.log(`Diagnostic context benchmark: 25 cold pages ${Math.round(coldMs)}ms; 25 validated warm pages ${Math.round(performance.now() - warmStart)}ms`);
+    // A larger period exercises the CPU/JSON cost of thousands of SIM articles.
+    await pool.query(`INSERT INTO bisuite_sales (organization_id,bisuite_id,data_vendita,nome_addetto,raw_data)
+      SELECT $1,50000+n,'2026-08-02','MARIO',jsonb_build_object(
+        'cliente',jsonb_build_object('codiceFiscale','LARGE'||n),
+        'articoli',jsonb_build_array(
+          jsonb_build_object('id',1,'categoria',jsonb_build_object('nome','UNTIED')),
+          jsonb_build_object('id',2,'categoria',jsonb_build_object('nome','UNTIED'))))
+      FROM generate_series(1,2500) n`, [a.orgId]);
+    const largeRead = page => storage.getCustomerJourneySimDiagnosticPage(
+      a.orgId, null, perfFilters, "2026-08-01", "2026-08-31", page, true);
+    const largeColdStart = performance.now();
+    let largeBaseline;
+    for (let page = 0; page < 10; page++) {
+      storage.cjSimDiagnosticCache.clear();
+      largeBaseline = await largeRead(page);
+      assert.equal(largeBaseline.sourceTotal, 5001);
+    }
+    const largeColdMs = performance.now() - largeColdStart;
+    storage.getCustomerJourneyReportRows = () => { throw new Error("Large warm page rebuilt report"); };
+    storage.getCustomerJourneyMobileSourceBatches = () => { throw new Error("Large warm page revisited batches"); };
+    const largeWarmStart = performance.now();
+    try {
+      for (let page = 0; page < 10; page++) {
+        const result = await largeRead(page);
+        assert.equal(result.version, largeBaseline.version);
+        assert.deepEqual(result.counts, largeBaseline.counts);
+        assert.equal(result.details.length, 50);
+      }
+    } finally {
+      storage.getCustomerJourneyReportRows = originalReport;
+      storage.getCustomerJourneyMobileSourceBatches = originalSources;
+    }
+    console.log(`Large diagnostic benchmark: 5,001 period articles; 10 cold pages ${Math.round(largeColdMs)}ms; 10 validated warm pages ${Math.round(performance.now() - largeWarmStart)}ms`);
     for (const filters of [
       { typeFilter: "azienda" }, { pdvFilter: ["Altro"] }, { addettoFilter: "LUIGI" },
       { stateFilter: "pagato" }, { search: "inesistente" },
@@ -175,6 +235,23 @@ test("historical dataset: bounded period reads, exact summaries and stable pages
     await stalePage(fresh.version);
     fresh = (await read()).body;
     assert.equal(fresh.diagnostics.outcomes.manualPositive, 1);
+    // These direct SQL mutations deliberately do NOT update updated_at.
+    await pool.query(`UPDATE customer_journeys SET nome='Nome aggiornato' WHERE id=$1`, [journey.id]);
+    await stalePage(fresh.version);
+    fresh = (await read()).body;
+    const item = (await pool.query(`DELETE FROM customer_journey_items WHERE organization_id=$1 RETURNING *`, [a.orgId])).rows[0];
+    await stalePage(fresh.version);
+    fresh = (await read()).body;
+    await pool.query(`INSERT INTO customer_journey_items
+      (id,organization_id,journey_id,driver,bisuite_sale_id,bisuite_article_id,categoria,tipologia,addetto,state,data_inserimento,data_attivazione)
+      VALUES ($1,$2,$3,'mobile',$4,1,'UNTIED','VOCE','MARIO','inserito','2026-07-01','2026-06-01')`,
+      [item.id, a.orgId, journey.id, sale.id]);
+    await stalePage(fresh.version);
+    fresh = (await read()).body;
+    await pool.query(`UPDATE bisuite_sales SET raw_data=jsonb_set(raw_data,'{articoli,0,descrizione}','"SIM aggiornata"')
+      WHERE organization_id=$1 AND bisuite_id=20002`, [a.orgId]);
+    await stalePage(fresh.version);
+    fresh = (await read()).body;
     await pool.query(`UPDATE organization_config SET config=jsonb_set(config,'{customerJourneyTriggerDate}','"2026-08-01"')
       WHERE organization_id=$1`, [a.orgId]);
     await stalePage(fresh.version);
@@ -187,6 +264,7 @@ test("historical dataset: bounded period reads, exact summaries and stable pages
     // A sync committing BETWEEN database batches cannot contaminate even a single response.
     const f = { typeFilter: "tutti", pdvFilter: [], addettoFilter: "tutti", stateFilter: "tutti", search: "" };
     const baseline = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, f, "2026-07-01", "2026-07-31", 0, false);
+    storage.cjSimDiagnosticCache.clear(); // Exercise the cache-miss multi-batch snapshot path.
     const originalBatches = storage.getCustomerJourneyMobileSourceBatches;
     const originalReconcile = storage.reconcileCustomerJourneysIfStale;
     let mutated = false;
@@ -216,6 +294,21 @@ test("historical dataset: bounded period reads, exact summaries and stable pages
     const afterSync = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, f, "2026-07-01", "2026-07-31", 24, true);
     assert.notEqual(afterSync.version, baseline.version);
     assert.equal(afterSync.sourceTotal, baseline.sourceTotal - 2);
+    // Warm hit: a commit after token validation belongs to the NEXT request,
+    // just as with the multi-batch miss above.
+    const originalToken = storage.getCjSimDiagnosticToken;
+    storage.getCjSimDiagnosticToken = async function (...args) {
+      const token = await originalToken.apply(this, args);
+      await pool.query(`UPDATE customer_journey_items SET drms_outcome_state='stornato' WHERE organization_id=$1`, [a.orgId]);
+      return token;
+    };
+    try {
+      const warmDuringSync = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, f, "2026-07-01", "2026-07-31", 24, true);
+      assert.equal(warmDuringSync.version, afterSync.version);
+      assert.deepEqual(warmDuringSync.details, JSON.parse(JSON.stringify(afterSync.details)));
+    } finally { storage.getCjSimDiagnosticToken = originalToken; }
+    const warmAfterSync = await storage.getCustomerJourneySimDiagnosticPage(a.orgId, null, f, "2026-07-01", "2026-07-31", 24, true);
+    assert.notEqual(warmAfterSync.version, afterSync.version);
   } finally {
     await cleanupOrg(pool, a);
     await pool.end();

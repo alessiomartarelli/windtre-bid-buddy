@@ -8,6 +8,7 @@ import { CJ_PRESUMED_PAID_DRIVERS } from "@shared/customerJourney";
 import { paginateCjMobileSources, matchesDiagnosticFilters, reconcileCjMobile, type CjMobileSource, type CjSimDiagnosticPage } from "@shared/customerJourneyDiagnostics";
 import { buildGettoneJourneys, filterGettoneByInsertDate, filterGettoneByDate, type CjListFilters } from "@shared/customerJourney";
 import { createHash } from "node:crypto";
+import { CjSimDiagnosticCache } from "./cjSimDiagnosticCache";
 
 // Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
 type DbExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -1835,6 +1836,30 @@ export class DatabaseStorage implements IStorage {
     return parseCjTriggerDate(raw) ?? CJ_DEFAULT_TRIGGER_DATE;
   }
 
+  private readonly cjSimDiagnosticCache = new CjSimDiagnosticCache();
+
+  /** Internal short-lived validation token, NOT the public content version.
+   * xmin + ctid identifies each visible tuple version, even for direct SQL writes
+   * that do not touch updated_at. Ordered membership detects inserts/deletes.
+   * No payload JSON is read. Conservatively covers all sales in the requested
+   * insertion period and all CJ/config rows in the tenant: unrelated
+   * edits can cause a miss but cannot leak data or permit stale pages.
+   * Never persist this token: transaction IDs are not permanent watermarks.
+   */
+  private async getCjSimDiagnosticToken(tx: DbExecutor, orgId: string, from: string, to: string): Promise<string> {
+    const parts = [];
+    for (const table of [bisuiteSales, customerJourneyItems, customerJourneys, organizationConfig]) {
+      const result = await tx.execute(sql`
+        SELECT encode(sha256(convert_to(COALESCE(string_agg(
+          id::text || ':' || xmin::text || ':' || ctid::text, ',' ORDER BY id), ''), 'UTF8')), 'hex') AS token
+        FROM ${table} WHERE organization_id = ${orgId}
+        ${table === bisuiteSales && from ? sql`AND data_vendita >= ${from}::timestamp` : sql``}
+        ${table === bisuiteSales && to ? sql`AND data_vendita < ${to}::timestamp + interval '1 day'` : sql``}`);
+      parts.push(result.rows[0].token);
+    }
+    return JSON.stringify(parts);
+  }
+
   /** One MVCC snapshot per request, no reconciliation and no retained raw sale payloads.
    * Hash every authorized input, not counts/max dates: equal-size replacements and
    * economic/manual changes must invalidate older pages too.
@@ -1844,6 +1869,11 @@ export class DatabaseStorage implements IStorage {
     from: string, to: string, page: number, detail: boolean,
   ): Promise<CjSimDiagnosticPage> {
     return db.transaction(async tx => {
+      const key = JSON.stringify({ orgId, addettiFilter, filters, from, to });
+      const token = await this.getCjSimDiagnosticToken(tx, orgId, from, to);
+      const cached = this.cjSimDiagnosticCache.get(key, token, page, detail);
+      if (cached) return cached;
+      const collector = this.cjSimDiagnosticCache.collector();
       const rows = await this.getCustomerJourneyReportRows(orgId, addettiFilter, true, tx);
       const [cfg] = await tx.select({ config: organizationConfig.config }).from(organizationConfig)
         .where(eq(organizationConfig.organizationId, orgId));
@@ -1865,17 +1895,18 @@ export class DatabaseStorage implements IStorage {
       }
       const result = await paginateCjMobileSources(
         versionedBatches(), rows, selected, filters, from, to, page, 50, detail,
+        collector.add,
       );
-      const diagnostics = !detail ? reconcileCjMobile([], rows, selected, filters, from, to) : undefined;
-      if (diagnostics) {
-        diagnostics.counts = result.counts;
-        diagnostics.sourceTotal = result.sourceTotal;
-        diagnostics.discrepancy = diagnostics.period - result.counts.admitted;
-      }
+      const diagnostics = reconcileCjMobile([], rows, selected, filters, from, to);
+      diagnostics.counts = result.counts;
+      diagnostics.sourceTotal = result.sourceTotal;
+      diagnostics.discrepancy = diagnostics.period - result.counts.admitted;
+      const version = hash.digest("hex");
+      this.cjSimDiagnosticCache.put(key, token, { ...result, version, diagnostics }, collector.finish());
       return {
-        ...result, version: hash.digest("hex"),
+        ...result, version,
         // The client must not combine sales with a separately fetched CJ report.
-        ...(diagnostics ? { diagnostics } : {}),
+        ...(!detail ? { diagnostics } : {}),
       };
     }, { isolationLevel: "repeatable read", accessMode: "read only" });
   }

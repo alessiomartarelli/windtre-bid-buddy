@@ -110,6 +110,7 @@ export function createCjMobileClassifier(
 export async function paginateCjMobileSources(
   batches: AsyncIterable<CjMobileSource[]>, rows: CjReportRow[], selected: CjGettoneJourney[],
   filters: CjListFilters, from: string, to: string, page: number, pageSize: number, includeDetail: boolean,
+  collect?: (detail: CjSimDetail) => void,
 ): Promise<CjSimSourcePage> {
   const classify = createCjMobileClassifier(rows, selected, filters, from, to);
   const counts = Object.fromEntries(Object.keys(CJ_SIM_REASONS).map(k => [k, 0])) as Record<CjSimReason, number>;
@@ -119,6 +120,7 @@ export async function paginateCjMobileSources(
     for (const source of sources) {
       const detail = classify(source);
       if (!detail) continue;
+      collect?.(detail);
       counts[detail.reason]++;
       if (includeDetail && sourceTotal >= page * pageSize && details.length < pageSize) details.push(detail);
       sourceTotal++;
