@@ -166,12 +166,24 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
         ...row.slice(15),
       ]);
     if (provenanceRows.length > 0) {
+      // Keep provenance separate from the dense contract table, and do not
+      // detach the SIM/article references from their smartphone/channel/role
+      // across pages (unless a single row is taller than an entire page).
+      doc.addPage();
       autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY + 8,
+        startY: 20,
         head: [["Smartphone", ...contractsHead().slice(15)]],
         body: provenanceRows,
+        rowPageBreak: "avoid",
+        showHead: "everyPage",
         styles: { fontSize: 8, cellPadding: 2, valign: "top", overflow: "linebreak" },
         headStyles: { fillColor: [99, 102, 241] },
+        columnStyles: {
+          0: { cellWidth: 64 },
+          1: { cellWidth: 27 },
+          2: { cellWidth: 32 },
+          3: { cellWidth: "auto" },
+        },
       });
     }
   }
