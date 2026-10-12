@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseVenditaInfo, normalizeCjIccid, cjPhoneEligibility, buildGettoneJourneys,
   cjJourneyReportRows, summarizeDrivers, aggregateGettone, gettoneTotals, gettoneDetailByKey,
+  buildGettoneAuditDetails,
 } from '../shared/customerJourney.ts';
 import { computeTimeline, computeItemValidity } from '../client/src/lib/customerJourneyTimeline.ts';
 import { contractsBody, journeyGettoneRows } from '../shared/customerJourneyExport.ts';
@@ -323,4 +324,60 @@ test('the five original tiers stay unchanged; extra at full saturation cannot ma
     assert.equal(g.extraStimato, 20); assert.equal(g.pisteAttive, 1 + n);
     assert.equal(g.potenzialePieno, 120 - g.gettoneBase);
   }
+});
+
+test('gettone audit reconciles tiered base, energy contracts, explicit/presumed outcomes and deduplicated phone pairs', () => {
+  const energia = (id, sale, tipologia, over = {}) => ({
+    ...sim(id, sale, null, sale === 'sale-a' ? july : august),
+    driver: 'energia', categoria: 'ENERGIA W3', tipologia, descrizione: `Contratto ${tipologia}`,
+    codiceContratto: `SYN-ENERGY-${id}`, ...over,
+  });
+  const initialPhone = phone(2, 'sale-a', A);
+  const pairB = pair(B, 'sale-b', 10, august).map(it => ({
+    ...it, economicState: 'pagato', gettoneConfirmed: true,
+  }));
+  const pairC = pair(C, 'sale-c', 20, '2026-09-09T00:00:00.000Z');
+  pairC[0].economicState = 'pagato';
+  const items = [
+    sim(1, 'sale-a', A),
+    initialPhone,
+    energia(3, 'sale-a', 'LUCE', { economicState: 'pagato', economicStateManual: true, gettoneConfirmed: true }),
+    energia(4, 'sale-a', 'GAS'),
+    ...pairB,
+    ...pairC,
+    { ...pairB[1], id: 'duplicate-extra-phone', bisuiteArticleId: 99 },
+    phone(30, 'later-old-sim-phone', A, august),
+  ];
+  const reportRows = rows(items);
+  const [g] = buildGettoneJourneys(reportRows);
+  const audit = buildGettoneAuditDetails(reportRows, [g])[0];
+
+  assert.equal(g.pisteAttive, 2);
+  assert.equal(g.gettoneBase, 30);
+  assert.equal(g.gettoneBaseEsplicito, 20);
+  assert.equal(g.gettoneBasePresunto, 10);
+  assert.equal(g.gettoneBaseMaturato, g.gettoneBaseEsplicito + g.gettoneBasePresunto);
+  assert.equal(g.extraCoppie, 2, 'same ICCID repeated on another phone is deduplicated');
+  assert.equal(g.extraStimato, 40);
+  assert.equal(g.extraEsplicito, 20);
+  assert.equal(g.extraPresunto, 20);
+  assert.equal(g.extraMaturato, g.extraEsplicito + g.extraPresunto);
+  assert.equal(g.fatturato, 70);
+  assert.equal(g.fatturatoMaturato, g.gettoneBaseMaturato + g.extraMaturato);
+
+  assert.equal(audit.contractsByTrack.energia, 2, 'luce and gas are two contracts');
+  assert.equal(audit.tracks.includes('energia'), true);
+  assert.equal(audit.contractsByTrack.telefono, 1, 'only the initial smartphone counts as a base track');
+  assert.equal(audit.validPhones, 2);
+  assert.equal(audit.gettone.extraCoppie, audit.validPhones);
+  assert.equal(audit.contracts.find(c => c.itemId === 'phone-2').phoneKind, 'iniziale');
+  assert.equal(audit.contracts.find(c => c.itemId === 'phone-2').economicSource, 'Presunto smartphone');
+  assert.equal(audit.contracts.find(c => c.contract === 'SYN-ENERGY-3').economicState, 'pagato');
+  assert.equal(audit.contracts.find(c => c.contract === 'SYN-ENERGY-3').economicSource, 'Manuale');
+  assert.equal(audit.contracts.find(c => c.itemId === 'phone-30').phoneKind, 'sim_non_abbinata');
+  assert.equal(audit.contracts.find(c => c.itemId === 'duplicate-extra-phone').phoneKind, 'duplicato');
+  assert.equal(g.gettoneBaseConfermato, 20);
+  assert.equal(g.extraConfermato, 20);
+  assert.notEqual(g.fatturatoMaturato, g.gettoneBaseConfermato + g.extraConfermato,
+    'manual gettone confirmation remains separate from contract economic outcomes');
 });

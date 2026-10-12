@@ -35,11 +35,11 @@ import {
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ECONOMIC_STATE_LABELS,
-  isCjItemActive, economicStateLabel, isCjEconomicPresumedPaid, CJ_PRESUMED_PAID_LABEL, CJ_PRESUMED_PAID_NOTE,
+  isCjItemActive, economicStateLabel, economicStateDisplayLabel, isCjEconomicPresumedPaid, CJ_PRESUMED_PAID_LABEL, CJ_PRESUMED_PAID_NOTE,
   aggregateReport, matchesCjFilters,
   CJ_NON_MOBILE_DRIVERS, matchesCjDriverFilter, nextCjDriverFilterMode, isCjDriverFilterActive,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
-  buildGettoneJourneys, filterGettoneByDate, filterGettoneByInsertDate,
+  buildGettoneJourneys, buildGettoneAuditDetails, filterGettoneByDate, filterGettoneByInsertDate,
   aggregateGettone, gettoneTotals,
   crossSellPercentuali, gettoneDetailByKey,
   cjJourneyReportRows,
@@ -50,7 +50,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type {
   CjReportRow, CjReportGroup, CjListFilters, CjDriverFilter, CjDriverFilterMode,
   CjGettoneGroup, CjGettoneTotals, CjGettoneJourney, CjGettoneDetailRow,
-  CjDriverPhase,
+  CjDriverPhase, CjGettoneAuditCustomer,
 } from "@shared/customerJourney";
 import { cjUnqualifiedInsertDates, isCjJourneyQualified } from "@shared/customerJourneyMembership";
 import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
@@ -1681,7 +1681,7 @@ export default function CustomerJourneyPage() {
                 </div>
                 {reportTab === "analisi" ? (
                   <AnalisiView
-                    diagnosticRows={reportRows}
+                    diagnosticRows={reportFiltered}
                     diagnosticSelected={gettoneJourneys}
                     diagnosticFilters={activeFilters}
                     isLoading={reportQuery.isLoading}
@@ -2069,6 +2069,12 @@ function AnalisiViewImpl({
   diagnosticFilters: CjListFilters;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [detailMode, setDetailMode] = useState<"stimato" | "maturato" | null>(null);
+  const [detailPage, setDetailPage] = useState(0);
+  const auditCustomers = useMemo(
+    () => detailMode ? buildGettoneAuditDetails(diagnosticRows, diagnosticSelected) : [],
+    [detailMode, diagnosticRows, diagnosticSelected],
+  );
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -2232,6 +2238,11 @@ function AnalisiViewImpl({
             <p className="text-xs text-muted-foreground mt-1">
               Smartphone solo se abbinati per ICCID alla SIM iniziale o a una nuova SIM extra valida.
             </p>
+            <Button className="mt-2 w-full sm:w-auto" size="sm" variant="outline"
+              data-testid="button-gettone-open-estimated-detail"
+              onClick={() => { setDetailPage(0); setDetailMode("stimato"); }}>
+              <Eye className="h-4 w-4 mr-2" /> Apri dettaglio stimato
+            </Button>
           </CardContent>
         </Card>
         <Card data-testid="card-gettone-fatturato-maturato" title="Gettone calcolato con esiti positivi DRMS/manuali e smartphone presunti; non prova di pagamento">
@@ -2251,6 +2262,11 @@ function AnalisiViewImpl({
                 ? `${fmtPct((totals.fatturatoMaturato / totals.fatturato) * 100)} dello stimato · esiti positivi DRMS/manuali + smartphone presunti`
                 : "Esiti positivi DRMS/manuali + smartphone presunti"}
             </p>
+            <Button className="mt-2 w-full sm:w-auto" size="sm" variant="outline"
+              data-testid="button-gettone-open-matured-detail"
+              onClick={() => { setDetailPage(0); setDetailMode("maturato"); }}>
+              <Eye className="h-4 w-4 mr-2" /> Apri dettaglio maturato
+            </Button>
           </CardContent>
         </Card>
         <Card data-testid="card-gettone-potenziale">
@@ -2423,14 +2439,125 @@ function AnalisiViewImpl({
           .join(" · ")}
         . Saturazione completa = {CJ_MAX_PISTE} piste ({fmtEuro(CJ_GETTONE_TABLE[CJ_MAX_PISTE])}).
       </p>
+
+      <Dialog open={detailMode !== null} onOpenChange={(open) => {
+        if (!open) setDetailMode(null);
+      }}>
+        <ResponsiveDialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          data-testid="dialog-gettone-detail">
+          <DialogHeader>
+            <DialogTitle>
+              Dettaglio gettone {detailMode === "stimato" ? "stimato" : "maturato"}
+            </DialogTitle>
+            <DialogDescription>
+              {auditCustomers.length} clienti della coorte selezionata. Sono inclusi anche gli acquisti successivi nella finestra T0–T6;
+              valgono gli stessi filtri e lo stesso perimetro autorizzato delle card. Il calcolo è consultivo e non avvia riconciliazioni.
+            </DialogDescription>
+          </DialogHeader>
+          {!auditCustomers.length ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Nessun cliente nel perimetro selezionato.</p>
+          ) : (
+            <div className="space-y-4" data-testid="gettone-audit-detail">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <AuditMetric label="Clienti unici" value={diagnosticSelected.length} />
+                <AuditMetric label="Rami iniziali" value={diagnosticSelected.length} />
+                <AuditMetric label="Rami extra" value={totals.extraCoppie} />
+                <AuditMetric label="Rami totali (iniziali + extra)" value={totals.ramiSimAperti} />
+                <AuditMetric label="Contratti ammissibili" value={auditCustomers.reduce((n, c) => n + Object.values(c.contractsByTrack).reduce((a, b) => a + (b ?? 0), 0), 0)} />
+                <AuditMetric label="Piste attive per cliente" value={auditCustomers.reduce((n, c) => n + c.tracks.length, 0)} />
+                <AuditMetric label="Coppie extra valide" value={totals.extraCoppie} />
+                <AuditMetric label="Gettone base" value={fmtEuro(totals.gettoneBase)} />
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="mb-2 text-sm font-semibold">Contratti ammissibili per pista</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  {CJ_NON_MOBILE_DRIVERS.map(driver => (
+                    <span key={driver}>
+                      {CJ_DRIVER_LABELS[driver]}: {auditCustomers.reduce((n, c) => n + (c.contractsByTrack[driver] ?? 0), 0)} contratti
+                      {driver === "energia" && " (luce e gas restano una pista)"}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {detailMode === "stimato" ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-md border p-3">
+                    <p className="mb-2 text-sm font-semibold">Scaglioni del gettone base</p>
+                    <div className="space-y-1 text-sm">
+                      {CJ_GETTONE_TABLE.map((tariffa, piste) => {
+                        const clienti = diagnosticSelected.filter(j => j.pisteAttive === piste).length;
+                        return <div key={piste} className="flex justify-between gap-3">
+                          <span>{clienti} {clienti === 1 ? "cliente" : "clienti"} · {piste} {piste === 1 ? "pista" : "piste"} × {fmtEuro(tariffa)}</span>
+                          <strong>{fmtEuro(clienti * tariffa)}</strong>
+                        </div>;
+                      })}
+                    </div>
+                    <p className="mt-2 flex justify-between border-t pt-2 text-sm font-semibold">
+                      Subtotale base <span>{fmtEuro(totals.gettoneBase)}</span>
+                    </p>
+                  </div>
+                  <div className="rounded-md border p-3 text-sm">
+                    <p className="font-semibold">Premi extra</p>
+                    <p className="mt-2">{totals.extraCoppie} coppie SIM–smartphone × 20 € = <strong>{fmtEuro(totals.extraStimato)}</strong></p>
+                    <p className="mt-3 flex justify-between border-t pt-2 font-semibold">
+                      Totale stimato <span>{fmtEuro(totals.gettoneBase + totals.extraStimato)}</span>
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-md border p-3">
+                  <p className="mb-2 text-sm font-semibold">Maturato: esiti economici e presunti separati</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+                    <AuditMetric label="Clienti con base esplicita" value={diagnosticSelected.filter(j => j.gettoneBaseEsplicito > 0).length} />
+                    <AuditMetric label="Base da esiti espliciti" value={fmtEuro(totals.gettoneBaseEsplicito)} />
+                    <AuditMetric label="Clienti con componente base presunta" value={diagnosticSelected.filter(j => j.gettoneBasePresunto > 0).length} />
+                    <AuditMetric label="Base presunta" value={fmtEuro(totals.gettoneBasePresunto)} />
+                    <AuditMetric label="Base maturata" value={fmtEuro(totals.gettoneBaseMaturato)} />
+                    <AuditMetric label="Coppie extra esplicite" value={totals.extraEsplicito / 20} />
+                    <AuditMetric label="Extra da esiti espliciti" value={fmtEuro(totals.extraEsplicito)} />
+                    <AuditMetric label="Coppie extra presunte" value={totals.extraPresunto / 20} />
+                    <AuditMetric label="Extra presunti" value={fmtEuro(totals.extraPresunto)} />
+                    <AuditMetric label="Extra maturati" value={fmtEuro(totals.extraMaturato)} />
+                    <AuditMetric label="Contratti con spunta manuale gettone" value={auditCustomers.reduce((n, c) => n + c.confirmedManualItems, 0)} />
+                    <AuditMetric label="Gettone confermato manualmente · base" value={fmtEuro(totals.gettoneBaseConfermato)} />
+                    <AuditMetric label="Gettone confermato manualmente · extra" value={fmtEuro(totals.extraConfermato)} />
+                    <AuditMetric label="Totale maturato (presunti inclusi)" value={fmtEuro(totals.gettoneBaseMaturato + totals.extraMaturato)} />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    La conferma manuale del gettone è una spunta distinta dagli esiti DRMS/manuali dei contratti e non prova un pagamento realmente ricevuto.
+                  </p>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Clienti e contratti · {auditCustomers.length} clienti</p>
+                {auditCustomers.length > 50 && <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={detailPage === 0}
+                    onClick={() => setDetailPage(p => Math.max(0, p - 1))}>Precedente</Button>
+                  <span className="text-xs">Pagina {detailPage + 1} di {Math.ceil(auditCustomers.length / 50)}</span>
+                  <Button size="sm" variant="outline" disabled={(detailPage + 1) * 50 >= auditCustomers.length}
+                    onClick={() => setDetailPage(p => p + 1)}>Successiva</Button>
+                </div>}
+              </div>
+              <div className="space-y-3">
+                {auditCustomers.slice(detailPage * 50, (detailPage + 1) * 50).map(customer => (
+                  <GettoneAuditCustomerCard key={customer.journeyId} customer={customer} mode={detailMode}
+                    onOpenJourney={(id) => { setDetailMode(null); onOpenJourney(id); }} />
+                ))}
+              </div>
+            </div>
+          )}
+        </ResponsiveDialogContent>
+      </Dialog>
     </div>
   );
 }
 
-// === Grafico di tracciamento temporale (Task #185) ===
-// La logica pura (asse mesi, rilevamento T0, raggruppamento PDV) vive in
-// `@/lib/customerJourneyTimeline` ed è coperta da test (Task #186).
-
+function AuditMetric({ label, value }: { label: string; value: string | number }) {
+  return <div className="rounded-md bg-muted/40 p-2">
+    <div className="text-[11px] leading-tight text-muted-foreground">{label}</div>
+    <div className="font-semibold tabular-nums">{value}</div>
+  </div>;
+}
 function CustomerJourneyTimeline({
   journey, items,
 }: {
@@ -3547,4 +3674,64 @@ function EconomicStateCell({
       )}
     </div>
   );
+}
+
+function GettoneAuditCustomerCard({ customer, mode, onOpenJourney }: {
+  customer: CjGettoneAuditCustomer;
+  mode: "stimato" | "maturato" | null;
+  onOpenJourney: (journeyId: string) => void;
+}) {
+  const g = customer.gettone;
+  return <section className="rounded-md border p-3" data-testid={`gettone-audit-customer-${customer.journeyId}`}>
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div>
+        <p className="font-semibold">{customer.cliente || "Senza nominativo"} · {customer.customerType === "azienda" ? "Azienda" : "Privato"}</p>
+        <p className="text-xs text-muted-foreground">{customer.pdv || "Senza PDV"} · {customer.addetto || "Senza addetto"}</p>
+      </div>
+      <Button size="sm" variant="outline" onClick={() => onOpenJourney(customer.journeyId)}
+        data-testid={`button-gettone-audit-open-${customer.journeyId}`}>Apri scheda cliente</Button>
+    </div>
+    <div className="my-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+      <div>SIM attive: <strong>{g.simAttive}</strong></div>
+      <div>Rami: <strong>1 iniziale + {g.extraCoppie} extra</strong></div>
+      <div>Piste ammissibili: <strong>{customer.tracks.length}</strong></div>
+      <div>Contratti per pista: <strong>{Object.values(customer.contractsByTrack).reduce((a, b) => a + (b ?? 0), 0)}</strong></div>
+      <div>Base stimata: <strong>{fmtEuro(g.gettoneBase)}</strong></div>
+      <div>Extra: <strong>{g.extraCoppie} × 20 € = {fmtEuro(g.extraStimato)}</strong></div>
+      {mode === "maturato" && <>
+        <div>Clienti con base esplicita: <strong>{g.gettoneBaseEsplicito > 0 ? 1 : 0}</strong></div>
+        <div>Clienti con componente base presunta: <strong>{g.gettoneBasePresunto > 0 ? 1 : 0}</strong></div>
+        <div>Base esplicita / presunta: <strong>{fmtEuro(g.gettoneBaseEsplicito)} / {fmtEuro(g.gettoneBasePresunto)}</strong></div>
+        <div>Coppie extra esplicite / presunte: <strong>{g.extraEsplicito / 20} / {g.extraPresunto / 20}</strong></div>
+        <div>Extra esplicito / presunto: <strong>{fmtEuro(g.extraEsplicito)} / {fmtEuro(g.extraPresunto)}</strong></div>
+        <div>Contratti con spunta manuale: <strong>{customer.confirmedManualItems}</strong></div>
+        <div>Gettone confermato manualmente: <strong>{fmtEuro(g.gettoneBaseConfermato + g.extraConfermato)}</strong></div>
+      </>}
+      <div>Totale {mode === "maturato" ? "maturato" : "stimato"}: <strong>{fmtEuro(mode === "maturato" ? g.fatturatoMaturato : g.fatturato)}</strong></div>
+    </div>
+    <p className="mb-1 text-xs text-muted-foreground">
+      Piste: {customer.tracks.length ? customer.tracks.map(d => `${CJ_DRIVER_LABELS[d]} (${customer.contractsByTrack[d] ?? 0} contratti)`).join(" · ") : "nessuna"}.
+      {" "}Energia conta come una pista anche con contratti luce e gas distinti.
+    </p>
+    <div className="space-y-2">
+      {customer.contracts.map((contract, index) => (
+        <div key={`${contract.itemId}-${index}`} className="rounded border bg-muted/20 p-2 text-xs">
+          <div className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+            <span className="font-medium">{CJ_DRIVER_LABELS[contract.driver]} · {contract.description}</span>
+            <span>{contract.eligible ? "Ammesso" : "Escluso"} · Contratto {contract.contract}</span>
+          </div>
+          <p className="text-muted-foreground">
+            {fmtDate(contract.eventDate)} · Stato operativo: {CJ_ITEM_STATE_LABELS[contract.state as keyof typeof CJ_ITEM_STATE_LABELS] ?? contract.state}
+            {" "}· Esito: {economicStateDisplayLabel({ driver: contract.driver, economicState: contract.economicState })}
+            {contract.drmsOutcomeState ? ` · DRMS: ${economicStateLabel(contract.drmsOutcomeState)}` : ""}
+            {" "}· Fonte: {contract.economicSource}
+            {contract.gettoneConfirmed ? " · Spunta gettone confermato" : ""}
+          </p>
+          {contract.phoneReason && <p className={contract.phoneKind === "iniziale" || contract.phoneKind === "extra" ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}>
+            Smartphone: {contract.phoneReason}
+          </p>}
+        </div>
+      ))}
+    </div>
+  </section>;
 }

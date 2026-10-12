@@ -14,6 +14,9 @@ Rules (decided):
 - Il gettone calcolato con esiti positivi espliciti e quello comprensivo di smartphone presunti restano valori distinti; nessuno dei due prova il pagamento effettivo del gettone CJ.
   **Why:** un esito economico del contratto o una spunta manuale non dimostra un bonifico del gettone; il valore storico include anche liquidazioni presunte.
   **How to apply:** etichettare il presunto e distinguere esiti DRMS, stato economico manuale e spunta manuale del gettone in ogni analisi economica.
+- Il gettone base a scaglioni è non lineare: mostra importo per cliente/coorte e scaglione, senza attribuirne quote artificiali ai singoli contratti o piste.
+  **Why:** il valore cambia per il numero complessivo di piste e una ripartizione per prodotto non rappresenterebbe una regola commerciale reale.
+  **How to apply:** nei dettagli mantenere separati conteggio contratti, conteggio piste e valore base; esplicito e presunto devono riconciliare il totale senza allocazioni arbitrarie.
 - **Cohort = only journeys with ≥1 ACTIVE mobile SIM.** Exclude journeys whose
   mobile is ko/stornato/annullato or that have no mobile at all. The whole
   analysis is "what cross-sell happened on top of a real new SIM activation",

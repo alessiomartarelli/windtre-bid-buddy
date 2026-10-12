@@ -243,6 +243,32 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
       0, 'negozio detail row must be removed after collapsing',
     );
 
+    // Le due card gettone aprono breakdown completi usando la stessa coorte e
+    // il link cliente richiude il dialogo prima di aprire la scheda.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.getByTestId('button-gettone-open-estimated-detail').click();
+    const estimatedDialog = page.getByTestId('dialog-gettone-detail');
+    await estimatedDialog.waitFor({ state: 'visible' });
+    const estimatedText = await estimatedDialog.innerText();
+    assert.ok(estimatedText.includes('Scaglioni del gettone base'));
+    assert.ok(estimatedText.includes('Contratti ammissibili'));
+    assert.ok(estimatedText.includes('T0–T6'));
+    await estimatedDialog.getByTestId(`button-gettone-audit-open-${jMario}`).click();
+    await page.getByTestId('button-back').waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId('text-detail-title').waitFor({ state: 'visible', timeout: 15000 });
+    assert.ok((await page.getByTestId('text-detail-title').innerText()).includes('Cliente Mario'));
+    await page.getByTestId('button-back').click();
+    await page.getByTestId('button-gettone-open-matured-detail').click();
+    const maturedDialog = page.getByTestId('dialog-gettone-detail');
+    await maturedDialog.waitFor({ state: 'visible' });
+    const maturedText = await maturedDialog.innerText();
+    assert.ok(maturedText.includes('Base da esiti espliciti'));
+    assert.ok(maturedText.includes('Gettone confermato manualmente'));
+    assert.ok(maturedText.includes('non prova un pagamento realmente ricevuto'));
+    await page.keyboard.press('Escape');
+    await maturedDialog.waitFor({ state: 'detached' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+
     await page.close();
     await context.close();
   } finally {
@@ -263,7 +289,7 @@ test('scenario 2: operator sees only their own clients in the gettone analysis',
     // Trigger abbassato: il floor dell'Analisi gettoni vale ANCHE per gli
     // operatori, quindi senza questo le journey "now()" verrebbero escluse.
     await setCjTriggerDate(pool, session.orgId, '2026-01-01');
-    await seedJourney(pool, session.orgId, {
+    const operatorJourney = await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
       nome: 'Cliente Mario',
       addetto: MARIO_ADDETTO,
@@ -302,6 +328,13 @@ test('scenario 2: operator sees only their own clients in the gettone analysis',
     // Solo una riga gettone totale presente.
     const allRows = await page.locator('[data-testid^="row-gettone-"]:not([data-testid^="row-gettone-detail-"]):not([data-testid^="row-gettone-sim-"])').count();
     assert.equal(allRows, 1, 'operator must see exactly one gettone row');
+    await page.getByTestId('button-gettone-open-estimated-detail').click();
+    const operatorDetail = page.getByTestId('dialog-gettone-detail');
+    await operatorDetail.waitFor({ state: 'visible' });
+    const operatorDetailText = await operatorDetail.innerText();
+    assert.ok(operatorDetailText.includes('Cliente Mario'));
+    assert.ok(!operatorDetailText.includes('Cliente Luigi'), 'detail must keep the operator customer perimeter');
+    await operatorDetail.getByTestId(`button-gettone-audit-open-${operatorJourney}`).waitFor({ state: 'visible' });
 
     await page.close();
     await context.close();
@@ -468,6 +501,14 @@ test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and g
       await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).count(),
       0, 'Luigi gettone row must disappear under the active store filter',
     );
+    await page.getByTestId('button-gettone-open-estimated-detail').click();
+    const filteredAudit = page.getByTestId('dialog-gettone-detail');
+    await filteredAudit.waitFor({ state: 'visible' });
+    const filteredAuditText = await filteredAudit.innerText();
+    assert.ok(filteredAuditText.includes('Cliente Mario'));
+    assert.ok(!filteredAuditText.includes('Cliente Luigi'), 'detail must inherit the active PDV filter');
+    await page.keyboard.press('Escape');
+    await filteredAudit.waitFor({ state: 'detached' });
 
     // Multi-selezione (Task #466): aggiungendo anche il PDV di Luigi entrambe
     // le righe tornano visibili (semantica OR fra i negozi selezionati).

@@ -542,6 +542,125 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     });
 }
 
+export interface CjGettoneAuditContract {
+  itemId: string;
+  driver: CjDriver;
+  contract: string;
+  description: string;
+  eventDate: string | null;
+  state: string;
+  economicState: string | null;
+  drmsOutcomeState: string | null;
+  economicSource: string;
+  gettoneConfirmed: boolean;
+  eligible: boolean;
+  phoneReason: string | null;
+  phoneKind: CjPhoneKind | null;
+}
+
+export interface CjGettoneAuditCustomer {
+  journeyId: string;
+  cliente: string;
+  customerType: string;
+  pdv: string;
+  addetto: string;
+  gettone: CjGettoneJourney;
+  contracts: CjGettoneAuditContract[];
+  contractsByTrack: Partial<Record<CjDriver, number>>;
+  tracks: CjDriver[];
+  validPhones: number;
+  confirmedManualItems: number;
+}
+
+/**
+ * Audit rows for the gettone detail. The caller passes exactly the filtered
+ * and authorized report rows used to build the displayed cohort, so this
+ * function cannot widen its perimeter. It adds contract-level evidence
+ * without allocating the non-linear base tier to individual products.
+ */
+export function buildGettoneAuditDetails(
+  rows: CjReportRow[],
+  selected: CjGettoneJourney[],
+): CjGettoneAuditCustomer[] {
+  const selectedById = new Map(selected.map(j => [j.journeyId, j]));
+  const grouped = new Map<string, CjReportRow[]>();
+  for (const row of rows) {
+    if (!selectedById.has(row.journeyId)) continue;
+    const list = grouped.get(row.journeyId) ?? [];
+    list.push(row);
+    grouped.set(row.journeyId, list);
+  }
+  const output: CjGettoneAuditCustomer[] = [];
+  for (const [journeyId, journeyRows] of grouped) {
+    const gettone = selectedById.get(journeyId)!;
+    const first = journeyRows[0];
+    const t0Month = cjT0Month(first.openedAt, journeyRows);
+    const phones = cjPhoneEligibility(
+      journeyRows, t0Month, first.openedAt, first.triggerBisuiteId,
+    );
+    const contractsByTrack: Partial<Record<CjDriver, number>> = {};
+    const tracks = new Set<CjDriver>();
+    const contracts: CjGettoneAuditContract[] = [];
+    let validPhones = 0;
+    let confirmedManualItems = 0;
+    for (const row of journeyRows) {
+      if (row.gettoneConfirmed) confirmedManualItems++;
+      const activeInWindow = isCjItemActive(row) && pisteInWindow(row.eventDate, t0Month);
+      const phone = row.driver === "telefono" ? phones.get(cjPhoneKey(row)) : undefined;
+      const eligible = row.driver === "mobile"
+        ? isCjMobileEligible(row) && activeInWindow
+        : row.driver === "telefono"
+          ? phone?.kind === "iniziale" || phone?.kind === "extra"
+          : activeInWindow;
+      if (phone?.kind === "extra") validPhones++;
+      if (eligible && row.driver !== "mobile" && (row.driver !== "telefono" || phone?.kind === "iniziale")) {
+        contractsByTrack[row.driver] = (contractsByTrack[row.driver] ?? 0) + 1;
+        tracks.add(row.driver);
+      }
+      // Include all mobile SIMs in T0–T6, all admitted base contracts and all
+      // phones (including rejected ones, whose reason is the point of detail).
+      if (row.driver !== "telefono" && row.driver !== "mobile" && !eligible) continue;
+      if (row.driver === "mobile" && !eligible && !isCjMobileEligible(row)) continue;
+      contracts.push({
+        itemId: row.itemId ?? `${row.bisuiteSaleId ?? ""}:${row.bisuiteArticleId ?? ""}`,
+        driver: row.driver,
+        contract: row.codiceContratto || "—",
+        description: row.descrizione || row.tipologia || row.categoria || "—",
+        eventDate: row.eventDate ?? null,
+        state: row.state,
+        economicState: row.economicState
+          ?? (["pagato", "annullato", "stornato", "riaccreditato"].includes(row.state) ? row.state : null),
+        drmsOutcomeState: row.drmsOutcomeState ?? null,
+        economicSource: row.economicStateManual ? "Manuale"
+          : row.drmsOutcomeState ? "DRMS"
+            : row.economicState || ["pagato", "annullato", "stornato", "riaccreditato"].includes(row.state)
+              ? "Esito economico" : row.driver === "telefono" && eligible
+              ? "Presunto smartphone" : "Nessun esito",
+        gettoneConfirmed: !!row.gettoneConfirmed,
+        eligible,
+        phoneReason: phone ? CJ_PHONE_REASONS[phone.kind] : null,
+        phoneKind: phone?.kind ?? null,
+      });
+    }
+    const pdv = gettone.pdv;
+    const addetto = gettone.addetto;
+    output.push({
+      journeyId,
+      cliente: first.cliente || first.customerKey,
+      customerType: first.customerType,
+      pdv,
+      addetto,
+      gettone,
+      contracts,
+      contractsByTrack,
+      tracks: CJ_NON_MOBILE_DRIVERS.filter(driver => tracks.has(driver)),
+      validPhones,
+      confirmedManualItems,
+    });
+  }
+  return output.sort((a, b) => a.cliente.localeCompare(b.cliente, "it"));
+}
+
 /**
  * Filtra le journey per data di attivazione SIM (coorte). `from`/`to` sono
  * stringhe `YYYY-MM-DD` (estremi inclusi) o vuote/null per nessun limite.
