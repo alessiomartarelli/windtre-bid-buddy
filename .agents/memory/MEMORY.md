@@ -84,3 +84,4 @@
 - [Impianto OK è solo gettone](impianto-ok-gettone.md) — Impianto OK Luce/Gas va escluso da pezzi, premi e punti Assicurazioni e mostrato separatamente come gettone extra.
 - [Diagnostica CJ in sola lettura](cj-diagnostics-read-only.md) — consultazione ed export devono mostrare le discrepanze, senza riconciliazioni implicite.
 - [Smartphone CJ e SIM aggiuntive](cj-smartphone-pairs.md) — l'utente riconosce 20 € per la coppia successiva con nuova SIM B, anche con ICCID diverso dall'iniziale; mai una nuova CJ.
+- [Privacy log CJ produzione](cj-production-log-privacy.md) — le righe Express dei report possono contenere dati cliente; filtra solo i prefissi di riepilogo scheduler prima di leggere i log.

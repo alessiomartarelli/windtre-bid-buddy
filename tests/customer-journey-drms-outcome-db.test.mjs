@@ -43,19 +43,31 @@ async function seedJourney(pool, orgId) {
   const ins = async (driver, extra) => {
     const r = await pool.query(
       `INSERT INTO customer_journey_items
-         (journey_id, organization_id, driver, state, cf, codice_contratto, pod, pdr, data_inserimento, addetto, categoria, descrizione)
-       VALUES ($1, $2, $3, 'inserito', $4, $5, $6, $7, '2026-02-05T10:00:00.000Z', 'Anna', $8::text, $8::text)
+         (journey_id, organization_id, driver, state, cf, codice_contratto, pod, pdr, data_inserimento,
+          addetto, bisuite_sale_id, iccid, cj_trigger_mobile, categoria, tipologia, descrizione)
+       VALUES ($1, $2, $3, 'inserito', $4, $5, $6, $7, '2026-02-05T10:00:00.000Z',
+          'Anna', $8, $9, $10, $11, $12, $13)
        RETURNING id`,
-      [journeyId, orgId, driver, CF, extra.codice ?? null, extra.pod ?? null, extra.pdr ?? null, extra.desc ?? driver],
+      [
+        journeyId, orgId, driver, CF, extra.codice ?? null, extra.pod ?? null, extra.pdr ?? null,
+        extra.bisuiteSaleId ?? null, extra.iccid ?? null, extra.cjTriggerMobile ?? false,
+        extra.categoria ?? extra.desc ?? driver, extra.tipologia ?? null, extra.desc ?? driver,
+      ],
     );
     return r.rows[0].id;
   };
   return {
     journeyId,
-    mobileId: await ins('mobile', { codice: 'CJ-MOB-001', desc: 'SIM mobile' }),
+    mobileId: await ins('mobile', {
+      codice: 'CJ-MOB-001', desc: 'SIM mobile', bisuiteSaleId: 'CJ-TRIGGER-001',
+      iccid: '8939012345678901234', cjTriggerMobile: true,
+    }),
     energiaId: await ins('energia', { codice: 'BIS-EN-77', pod: 'IT001E00000777', desc: 'Luce' }),
     fissoId: await ins('fisso', { codice: 'CJ-FIS-001', desc: 'Fibra' }),
-    telefonoId: await ins('telefono', { codice: 'CJ-TEL-001', desc: 'iPhone' }),
+    telefonoId: await ins('telefono', {
+      codice: 'CJ-TEL-001', desc: 'iPhone', categoria: 'TELEFONIA', tipologia: 'SMARTPHONE',
+      bisuiteSaleId: 'CJ-TRIGGER-001', iccid: '8939012345678901234',
+    }),
   };
 }
 
