@@ -2,6 +2,7 @@ import type { Express, RequestHandler } from "express";
 import { type Server } from "http";
 import { storage, type CjItemDetailsUpdate, CJ_DEFAULT_TRIGGER_DATE, formatCjTriggerDate } from "./storage";
 import { getCjCbSimReferences } from "./customerJourneyCbSimReferences";
+import { getCjPhoneCommercialSales } from "./customerJourneyPhoneCommercial";
 import { createDrmsOutcomeRunner } from "./cjDrmsOutcomeRunner";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
@@ -4326,12 +4327,14 @@ export async function registerRoutes(
       const journey = await storage.getCustomerJourney(req.params.id, profile.organizationId);
       if (!journey) return res.status(404).json({ error: "Customer journey non trovata" });
 
-      const items = await storage.getCustomerJourneyItems(journey.id);
+      const allItems = await storage.getCustomerJourneyItems(journey.id);
+      let items = allItems;
 
       if (profile.role === "operatore") {
         const mine = (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean);
-        const owns = items.some((it) => mine.includes(String(it.addetto || "").toLowerCase().trim()));
+        const owns = allItems.some((it) => mine.includes(String(it.addetto || "").toLowerCase().trim()));
         if (!owns) return res.status(403).json({ error: "Accesso non autorizzato" });
+        items = allItems.filter((it) => mine.includes(String(it.addetto || "").toLowerCase().trim()));
       }
 
       // Un driver è "attivato" se ha almeno un item in stato non KO e non
@@ -4347,7 +4350,12 @@ export async function registerRoutes(
         profile.organizationId, items,
         profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null,
       );
-      res.json({ journey, items, drivers, cbSimReferences });
+      const phoneCommercialSales = await getCjPhoneCommercialSales(
+        profile.organizationId, items,
+        profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null,
+      );
+      res.setHeader("Cache-Control", "private, no-store");
+      res.json({ journey, items, drivers, cbSimReferences, phoneCommercialSales });
     } catch (error) {
       console.error("Customer journey detail error:", error);
       res.status(500).json({ error: "Errore nel recupero della customer journey" });

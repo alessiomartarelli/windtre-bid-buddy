@@ -15,6 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { SmartphoneIccidLink } from '../client/src/components/customer-journey/SmartphoneIccidLink.tsx';
 import { SimIccid, CbSimReferences } from '../client/src/components/customer-journey/SimIccid.tsx';
 import { cjCbSimReference } from '../shared/customerJourneyCbSimReferences.ts';
+import { cjPhoneCommercialEvidence } from '../shared/customerJourneyPhoneCommercial.ts';
 
 // Synthetic identifiers, unrelated to the observed production customer/device.
 const A = '89000000000000000001', B = '89000000000000000002', C = '89000000000000000003';
@@ -95,6 +96,95 @@ test('later CB phone shows the referenced initial ICCID without claiming a valid
   const html = renderToStaticMarkup(React.createElement(SmartphoneIccidLink, { link, itemId: 'phone-20' }));
   assert.match(html, /non abbinamento CJ valido/);
   assert.equal(result(items).fatturato, 0);
+});
+
+test('commercial channel and exact article evidence stay separate from initial and extra CJ roles', () => {
+  const items = [sim(1, 'sale-a', A), phone(2, 'sale-a', A), ...pair()];
+  items[2] = { ...items[2], dataInserimento: '2026-08-08T00:00:00.000Z', pdvOrigine: 'PDV SIM extra' };
+  items[3] = { ...items[3], pdvOrigine: 'PDV smartphone extra' };
+  const sales = [
+    { saleId: 'sale-a', date: july, pdv: 'PDV iniziale', articles: [
+      { articleId: 1, category: 'TIED CF', description: 'SIM voce iniziale', iccid: A },
+    ] },
+    { saleId: 'sale-b', date: august, pdv: 'PDV extra', articles: [
+      { articleId: 10, category: 'UNTIED', description: 'Nuova SIM mobile', iccid: B },
+    ] },
+  ];
+  const links = cjPhoneIccidLinks(rows(items), july, 101, sales);
+  assert.equal(links.get('phone-2').commercial.channel, 'mobile_ga');
+  assert.equal(links.get('phone-2').cjRole, 'iniziale');
+  assert.equal(links.get('phone-2').mobiles[0].id, 'sim-1');
+  assert.equal(links.get('phone-11').commercial.channel, 'mobile_ga');
+  assert.equal(links.get('phone-11').cjRole, 'extra');
+  assert.equal(links.get('phone-11').mobiles[0].id, 'sim-10');
+  const initialHtml = renderToStaticMarkup(React.createElement(SmartphoneIccidLink, {
+    link: links.get('phone-2'), itemId: 'phone-2',
+  }));
+  const extraHtml = renderToStaticMarkup(React.createElement(SmartphoneIccidLink, {
+    link: links.get('phone-11'), itemId: 'phone-11',
+  }));
+  assert.match(initialHtml, /MOBILE\/GA/);
+  assert.match(initialHtml, /concorre alle piste base/);
+  assert.match(initialHtml, /Vai alla riga SIM/);
+  assert.match(extraHtml, /gettone aggiuntivo di 20 €/);
+  assert.match(extraHtml, /PDV smartphone extra/);
+  assert.match(extraHtml, /PDV SIM extra/);
+  assert.match(extraHtml, /08\/08\/2026/);
+  assert.match(extraHtml, /09\/08\/2026/);
+  assert.equal(result(items).fatturato, 40);
+});
+
+test('CB commercial evidence identifies only a matching CB article and does not grant a CJ amount', () => {
+  const items = [sim(1, 'sale-a', A), phone(20, 'cb-sale', A, august)];
+  const cbSales = [{
+    saleId: 'cb-sale', date: august, pdv: 'PDV CB',
+    articles: [{ articleId: 42, category: 'RIVINCOLO', description: 'Rivincolo smartphone', iccid: A }],
+  }];
+  const link = cjPhoneIccidLinks(rows(items), july, 101, cbSales).get('phone-20');
+  assert.equal(link.commercial.channel, 'cb');
+  assert.equal(link.commercial.cbArticleStatus, 'identificato');
+  assert.equal(link.commercial.cbArticle.articleId, 42);
+  assert.equal(link.cjRole, 'escluso');
+  assert.equal(link.status, 'corrispondenza');
+  const html = renderToStaticMarkup(React.createElement(SmartphoneIccidLink, { link, itemId: 'phone-20' }));
+  assert.match(html, /Riferimento CB verificato per ICCID/);
+  assert.match(html, /PDV CB/);
+  assert.match(html, /non costituisce una nuova coppia SIM–smartphone valida/);
+  assert.equal(result(items).fatturato, 0);
+
+  const ambiguous = cjPhoneCommercialEvidence(A, 'cb-sale', [{
+    ...cbSales[0],
+    articles: [
+      cbSales[0].articles[0],
+      { articleId: 43, category: 'MIA TIED', description: 'Secondo riferimento', iccid: A },
+    ],
+  }]);
+  assert.equal(ambiguous.cbArticle, null);
+  assert.equal(ambiguous.cbArticleStatus, 'ambiguo');
+});
+
+test('missing sale, conflicting channel and operator-hidden SIMs remain explicitly unverifiable', () => {
+  const items = [sim(1, 'sale-a', A), phone(2, 'missing-sale', A)];
+  const channels = cjPhoneCommercialEvidence(A, 'missing-sale', []);
+  assert.equal(channels.channel, 'non_verificabile');
+  const conflict = cjPhoneCommercialEvidence(A, 'mixed-sale', [{
+    saleId: 'mixed-sale', date: july, pdv: 'PDV misto', articles: [
+      { articleId: 1, category: 'TIED CF', description: 'SIM Mobile', iccid: A },
+      { articleId: 2, category: 'RIVINCOLO', description: 'Canale CB', iccid: null },
+    ],
+  }]);
+  assert.equal(conflict.channel, 'ambigua');
+  assert.equal(conflict.cbArticleStatus, 'non_verificabile');
+
+  const operatorVisibleRows = rows(items).filter(row => row.addetto === 'ADDETTO AUTORIZZATO');
+  const phoneOnly = [phone(2, 'missing-sale', A, july, { addetto: 'ADDETTO AUTORIZZATO' })];
+  const hiddenMobile = { ...sim(1, 'sale-a', A), addetto: 'ALTRO ADDETTO' };
+  const scopedLink = cjPhoneIccidLinks(rows(phoneOnly), july, 101, [{
+    saleId: 'missing-sale', date: july, pdv: 'PDV', articles: [],
+  }]).get('phone-2');
+  assert.equal(scopedLink.status, 'non_verificabile');
+  assert.equal(scopedLink.mobiles.length, 0);
+  assert.equal(operatorVisibleRows.some(row => row.addetto === hiddenMobile.addetto), false);
 });
 
 test('ICCID links remain scoped to visible items and report missing or ambiguous matches', () => {
@@ -196,6 +286,13 @@ test('CB smartphones on a SIM from before CJ never inflate July gettone or open 
     assert.equal(gettoneTotals([g], 100).ramiSimAperti, 2);
     assert.equal(gettoneTotals([g], 100).clienti, 1);
   }
+  const cbLink = cjPhoneIccidLinks(rows(items), july).get('phone-42');
+  assert.equal(cbLink.status, 'corrispondenza');
+  assert.equal(cbLink.mobiles[0].id, 'sim-40');
+  assert.equal(cbLink.cjRole, 'escluso');
+  const html = renderToStaticMarkup(React.createElement(SmartphoneIccidLink, { link: cbLink, itemId: 'phone-42' }));
+  assert.match(html, /non abbinamento CJ valido/);
+  assert.match(html, /09\/06\/2026/);
 });
 
 test('branch count excludes SIM-only sales, duplicate pairs, invalid or out-of-window pairs', () => {

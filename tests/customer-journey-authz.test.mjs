@@ -50,7 +50,10 @@ test('scenario 1: GET /api/customer-journeys is filtered by role and operator ad
       customerKey: uniq('CFMARIO').toUpperCase(),
       nome: 'Cliente Mario',
       addetto: 'MARIO ROSSI',
-      items: [{ driver: 'fisso' }],
+      items: [
+        { driver: 'fisso' },
+        { driver: 'telefono', addetto: 'LUIGI VERDI', categoria: 'TELEFONIA', tipologia: 'SMARTPHONE' },
+      ],
     });
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFLUIGI').toUpperCase(),
@@ -135,6 +138,8 @@ test('scenario 2: GET /api/customer-journeys/:id enforces per-operator ownership
     assert.equal(ownDetail.body?.journey?.id, jMario, 'detail must return the owned journey');
     assert.ok(Array.isArray(ownDetail.body?.items), 'detail must include items array');
     assert.ok(Array.isArray(ownDetail.body?.drivers), 'detail must include drivers array');
+    assert.ok(ownDetail.body.items.every(item => item.addetto === 'MARIO ROSSI'),
+      'operator detail must not return contracts assigned to another addetto');
 
     // (b) stesso operatore su journey altrui (Luigi) => 403.
     const foreignDetail = await jsonReq(`${BASE}/api/customer-journeys/${jLuigi}`, {

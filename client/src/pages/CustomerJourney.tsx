@@ -23,6 +23,7 @@ import {
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { useToast } from "@/hooks/use-toast";
 import { cjPhoneIccidLinks } from "@shared/customerJourneyPhoneLink";
+import type { CjPhoneCommercialSale } from "@shared/customerJourneyPhoneCommercial";
 import { SmartphoneIccidLink } from "@/components/customer-journey/SmartphoneIccidLink";
 import { SimIccid, CbSimReferences } from "@/components/customer-journey/SimIccid";
 import { CJ_CB_REFERENCE_CATEGORIES, type CjCbSimReference } from "@shared/customerJourneyCbSimReferences";
@@ -115,6 +116,7 @@ interface JourneyDetail {
   items: CustomerJourneyItem[];
   drivers: DriverSummary[];
   cbSimReferences?: CjCbSimReference[];
+  phoneCommercialSales?: CjPhoneCommercialSale[];
 }
 
 interface CjConfig {
@@ -2958,6 +2960,7 @@ function JourneyDetailViewImpl({
     cjJourneyReportRows(journey, items),
     journey.openedAt ? new Date(journey.openedAt).toISOString() : null,
     journey.triggerBisuiteId,
+    detail.phoneCommercialSales ?? [],
   );
   const validDrivers = new Set<string>();
   for (const it of items) {
@@ -3293,7 +3296,7 @@ function JourneyDetailViewImpl({
                 </TableHeader>
                 <TableBody>
                   {items.map((it) => (
-                    <TableRow key={it.id} data-testid={`row-item-${it.id}`}>
+                    <TableRow key={it.id} id={`row-item-${it.id}`} data-testid={`row-item-${it.id}`}>
                       <TableCell className="font-medium whitespace-nowrap">
                         {CJ_DRIVER_LABELS[it.driver as keyof typeof CJ_DRIVER_LABELS] || it.driver}
                       </TableCell>
