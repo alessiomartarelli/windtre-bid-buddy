@@ -6,7 +6,7 @@ import {
   buildGettoneAuditDetails,
 } from '../shared/customerJourney.ts';
 import { computeTimeline, computeItemValidity } from '../client/src/lib/customerJourneyTimeline.ts';
-import { contractsBody, journeyGettoneRows } from '../shared/customerJourneyExport.ts';
+import { contractsHead, contractsBody, journeyGettoneRows } from '../shared/customerJourneyExport.ts';
 import { reconcileCjMobile } from '../shared/customerJourneyDiagnostics.ts';
 import { buildCjCohortModel } from '../shared/customerJourneyCohorts.ts';
 import { cjPhoneIccidLinks } from '../shared/customerJourneyPhoneLink.ts';
@@ -46,6 +46,92 @@ test('an operator-scoped detail keeps the original opening and labels the later 
 const result = items => buildGettoneJourneys(rows(items))[0];
 const pair = (iccid = B, sale = 'sale-b', id = 10, date = august) =>
   [sim(id, sale, iccid, date), phone(id + 1, sale, iccid, date)];
+
+test('PDF/Excel detail provenance keeps initial and extra roles separate and leaves amounts unchanged', () => {
+  const items = [sim(1, 'sale-a', A), phone(2, 'sale-a', A), ...pair()];
+  const sales = [
+    { saleId: 'sale-a', date: july, pdv: 'PDV iniziale', articles: [
+      { articleId: 1, category: 'TIED CF', description: 'SIM iniziale', iccid: A },
+    ] },
+    { saleId: 'sale-b', date: august, pdv: 'PDV extra', articles: [
+      { articleId: 10, category: 'UNTIED', description: 'SIM extra', iccid: B },
+    ] },
+  ];
+  const baseline = contractsBody(items, false, journey);
+  const pdf = contractsBody(items, false, journey, sales);
+  const excel = contractsBody(items, true, journey, sales);
+  for (let i = 0; i < items.length; i++) {
+    assert.equal(pdf[i].length, contractsHead().length);
+    assert.deepEqual(pdf[i].slice(1), excel[i].slice(1));
+    assert.deepEqual(pdf[i].slice(0, 15), baseline[i].slice(0, 15));
+  }
+  assert.deepEqual(pdf[0].slice(15), ['—', '—', '—']);
+  for (const [index, iccid, article] of [[1, A, 1], [3, B, 10]]) {
+    assert.match(pdf[index][15], /MOBILE\/GA/);
+    assert.ok(pdf[index][17].includes(iccid));
+    assert.ok(pdf[index][17].includes(`Articolo BiSuite ${article}`));
+    assert.match(pdf[index][17], /SIM abbinata/);
+  }
+  assert.match(pdf[1][16], /Smartphone iniziale.*piste base/);
+  assert.match(pdf[3][16], /Coppia extra.*20 €.*separato dal base/);
+  assert.equal(result(items).fatturato, 40);
+  assert.equal(new Map(journeyGettoneRows(journey, items)).get('Extra coppie SIM–smartphone'), 20);
+});
+
+test('detail exports retain a verified CB article without turning an ICCID correspondence into a CJ pair', () => {
+  const items = [sim(1, 'sale-a', A), phone(20, 'cb-sale', A, august)];
+  const sales = [{ saleId: 'cb-sale', date: august, pdv: 'PDV CB', articles: [
+    { articleId: 42, category: 'RIVINCOLO', description: 'Rivincolo sintetico', iccid: A },
+  ] }];
+  for (const emoji of [false, true]) {
+    const row = contractsBody(items, emoji, journey, sales)[1];
+    assert.match(row[15], /^CB/);
+    assert.equal(row[16], 'Escluso dal gettone CJ');
+    assert.match(row[17], /SIM con ICCID corrispondente — non abbinamento CJ valido/);
+    assert.match(row[17], /Riferimento CB verificato per ICCID.*RIVINCOLO.*Articolo 42/);
+    assert.ok(row[17].includes(`ICCID CB: ${A}`));
+  }
+  assert.equal(result(items).fatturato, 0);
+});
+
+test('detail exports mark absent and ambiguous evidence as unverifiable, never exporting candidate links', () => {
+  const cases = [
+    { items: [phone(2, 'missing-sale', null)], sales: [],
+      channel: /Non verificabile/, reference: /SIM non verificabile/ },
+    { items: [sim(1, 'sale-a', A), ...pair(), sim(12, 'sale-b', B, august)], sales: [],
+      channel: /Non verificabile/, reference: /SIM non verificabile: abbinamento ambiguo/ },
+    { items: [phone(20, 'cb-sale', A, august)], sales: [{
+      saleId: 'cb-sale', date: august, pdv: null, articles: [
+        { articleId: 42, category: 'RIVINCOLO', description: 'Candidato uno', iccid: A },
+        { articleId: 43, category: 'MIA TIED', description: 'Candidato due', iccid: A },
+      ],
+    }], channel: /^CB/, reference: /Articolo CB non verificabile: più riferimenti/ },
+    { items: [phone(20, 'cb-sale', A, august)], sales: [{
+      saleId: 'cb-sale', date: august, pdv: null, articles: [
+        { articleId: 42, category: 'RIVINCOLO', description: 'ICCID diverso', iccid: B },
+      ],
+    }], channel: /^CB/, reference: /Articolo CB non verificabile/ },
+    { items: [phone(20, 'mixed-sale', A, august)], sales: [{
+      saleId: 'mixed-sale', date: august, pdv: null, articles: [
+        { articleId: 42, category: 'RIVINCOLO', description: 'CB non abbinato', iccid: B },
+        { articleId: 43, category: 'TIED CF', description: 'Mobile non abbinato', iccid: B },
+      ],
+    }], channel: /Non verificabile: MOBILE\/GA e CB rilevati.*ambiguo/, reference: /SIM non verificabile/ },
+  ];
+  for (const { items, sales, channel, reference } of cases) {
+    const before = journeyGettoneRows(journey, items);
+    for (const emoji of [false, true]) {
+      const exported = contractsBody(items, emoji, journey, sales);
+      for (const [i, item] of items.entries()) {
+        if (item.driver !== 'telefono') continue;
+        assert.match(exported[i][15], channel);
+        assert.match(exported[i][17], reference);
+        assert.doesNotMatch(exported[i][17], /Articolo (?:BiSuite )?\d+|Candidato|ICCID CB:/);
+      }
+    }
+    assert.deepEqual(journeyGettoneRows(journey, items), before);
+  }
+});
 
 test('Mobile and CB show full SIM ICCID independently of smartphones', () => {
   const mobile = renderToStaticMarkup(React.createElement(SimIccid, { iccid: A, testId: 'mobile-iccid' }));

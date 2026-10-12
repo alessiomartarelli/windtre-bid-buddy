@@ -4,6 +4,8 @@ import {
   type CjGettoneJourney,
 } from "./customerJourney";
 import type { CustomerJourney, CustomerJourneyItem, CjDriver } from "./schema";
+import { cjPhoneIccidLinks, type CjPhoneIccidLink } from "./customerJourneyPhoneLink";
+import type { CjPhoneCommercialSale } from "./customerJourneyPhoneCommercial";
 
 // === Logica pura di costruzione righe/colonne degli export Customer Journey ===
 // Estratta da `client/src/lib/customerJourneyExport.ts` (Task #190) per poter
@@ -141,6 +143,49 @@ export function contractsHead(): string[] {
   return [
     "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV",
     "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Esito", "Gettone confermato", "ICCID", "Smartphone CJ",
+    "Canale commerciale", "Ruolo economico CJ", "Articolo / SIM verificati",
+  ];
+}
+
+/** Provenienza descrittiva: non concede né modifica l'ammissibilità al gettone. */
+function phoneProvenance(link: CjPhoneIccidLink): string[] {
+  const channel = link.commercial.channel === "mobile_ga" ? "MOBILE/GA"
+    : link.commercial.channel === "cb" ? "CB"
+    : link.commercial.channel === "ambigua" ? "Non verificabile: MOBILE/GA e CB rilevati — canale ambiguo"
+    : "Non verificabile";
+  const role = link.cjRole === "iniziale" ? "Smartphone iniziale — concorre alle piste base"
+    : link.cjRole === "extra" ? "Coppia extra — gettone aggiuntivo di 20 €, separato dal base"
+    : "Escluso dal gettone CJ";
+  const references: string[] = [];
+  if (link.status === "abbinata" || link.status === "corrispondenza") {
+    for (const mobile of link.mobiles) {
+      references.push([
+        link.status === "abbinata" ? "SIM abbinata" : "SIM con ICCID corrispondente — non abbinamento CJ valido",
+        mobile.iccid?.trim().replace(/[\s-]/g, ""),
+        mobile.descrizione || mobile.tipologia || "Mobile",
+        mobile.codiceContratto ? `Contratto ${mobile.codiceContratto}` : "",
+        mobile.bisuiteArticleId != null ? `Articolo BiSuite ${mobile.bisuiteArticleId}` : "",
+      ].filter(Boolean).join(" · "));
+    }
+  } else {
+    references.push(link.status === "ambigua" ? "SIM non verificabile: abbinamento ambiguo" : "SIM non verificabile");
+  }
+  const { cbArticle, cbArticleStatus } = link.commercial;
+  if (cbArticleStatus === "identificato" && cbArticle) {
+    references.push([
+      "Riferimento CB verificato per ICCID", cbArticle.category, cbArticle.description,
+      cbArticle.articleId != null ? `Articolo ${cbArticle.articleId}` : "",
+      `ICCID CB: ${cbArticle.iccid}`,
+    ].filter(Boolean).join(" · "));
+  } else if (link.commercial.channel === "cb" || cbArticleStatus === "ambiguo") {
+    references.push(cbArticleStatus === "ambiguo"
+      ? "Articolo CB non verificabile: più riferimenti con lo stesso ICCID"
+      : "Articolo CB non verificabile");
+  }
+  return [
+    channel + (link.commercial.channelCategories.length ? ` (${link.commercial.channelCategories.join(", ")})` : ""),
+    role,
+    references.join("\n"),
   ];
 }
 
@@ -149,11 +194,16 @@ export function contractsBody(
   items: CustomerJourneyItem[],
   withEmoji: boolean,
   journey?: CustomerJourney,
+  commercialSales: CjPhoneCommercialSale[] = [],
 ): (string | number)[][] {
   const rows = journey ? cjJourneyReportRows(journey, items) : items.map(it => ({
     ...it, eventDate: (it.dataAttivazione ?? it.dataInserimento) ? new Date((it.dataAttivazione ?? it.dataInserimento)!).toISOString() : null,
   }));
   const phones = cjPhoneEligibility(rows, cjT0Month(journey?.openedAt ? new Date(journey.openedAt).toISOString() : null, rows));
+  const links = journey ? cjPhoneIccidLinks(
+    cjJourneyReportRows(journey, items), journey.openedAt ? new Date(journey.openedAt).toISOString() : null,
+    journey.triggerBisuiteId, commercialSales,
+  ) : new Map<string, CjPhoneIccidLink>();
   return items.map((it) => [
     withEmoji ? CJ_DRIVER_EMOJI[it.driver as CjDriver] || "" : "",
     driverLabel(it.driver),
@@ -170,6 +220,9 @@ export function contractsBody(
     it.gettoneConfirmed ? "Sì" : "No",
     it.iccid || "—",
     it.driver === "telefono" ? CJ_PHONE_REASONS[phones.get(cjPhoneKey(it))?.kind ?? "sim_non_abbinata"] : "—",
+    ...(it.driver === "telefono" && links.get(cjPhoneKey(it))
+      ? phoneProvenance(links.get(cjPhoneKey(it))!)
+      : it.driver === "telefono" ? ["Non verificabile", "Non verificabile: contesto CJ mancante", "SIM non verificabile"] : ["—", "—", "—"]),
   ]);
 }
 

@@ -226,6 +226,7 @@ test('contractsHead: include ICCID e motivo smartphone, separando la conferma ma
   assert.deepEqual(contractsHead(), [
     '', 'Driver', 'Descrizione', 'Contratto', 'Addetto', 'PDV',
     'IMEI', 'RATA/CANONE', 'Inserito', 'Attivato', 'Stato', 'Esito', 'Gettone confermato', 'ICCID', 'Smartphone CJ',
+    'Canale commerciale', 'Ruolo economico CJ', 'Articolo / SIM verificati',
   ]);
 });
 

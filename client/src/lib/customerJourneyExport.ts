@@ -5,6 +5,7 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { CJ_DRIVER_ORDER } from "@shared/customerJourney";
 import type { CustomerJourney, CustomerJourneyItem, CjDriver } from "@shared/schema";
+import type { CjPhoneCommercialSale } from "@shared/customerJourneyPhoneCommercial";
 import {
   CJ_DRIVER_EMOJI, LIST_FIXED_COLS,
   type CjExportDriverSummary, type CjListJourney,
@@ -23,6 +24,7 @@ export interface JourneyExportData {
   journey: CustomerJourney;
   items: CustomerJourneyItem[];
   drivers: DriverSummary[];
+  phoneCommercialSales?: CjPhoneCommercialSale[];
 }
 
 export interface JourneyListExportData {
@@ -87,7 +89,7 @@ async function buildIconMap(): Promise<Record<string, string>> {
 }
 
 export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
-  const { journey, items, drivers } = data;
+  const { journey, items, drivers, phoneCommercialSales } = data;
   const iconMap = await buildIconMap();
   const doc = new jsPDF();
   const pageW = doc.internal.pageSize.getWidth();
@@ -139,10 +141,11 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
   doc.text(`Contratti (${items.length})`, 14, afterDrivers + 10);
 
   if (items.length > 0) {
+    const contractRows = contractsBody(items, false, journey, phoneCommercialSales);
     autoTable(doc, {
       startY: afterDrivers + 14,
-      head: [contractsHead()],
-      body: contractsBody(items, false, journey),
+      head: [contractsHead().slice(0, 15)],
+      body: contractRows.map(row => row.slice(0, 15)),
       styles: { fontSize: 7.5, cellPadding: 1.5, valign: "middle", overflow: "linebreak" },
       headStyles: { fillColor: [99, 102, 241], fontSize: 7.5 },
       columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 32 } },
@@ -157,6 +160,20 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
         doc.addImage(png, "PNG", x, y, size, size);
       },
     });
+    const provenanceRows = contractRows.filter((_, i) => items[i].driver === "telefono")
+      .map(row => [
+        `${row[2]}\nContratto: ${row[3]}\nICCID smartphone: ${row[13]}`,
+        ...row.slice(15),
+      ]);
+    if (provenanceRows.length > 0) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 8,
+        head: [["Smartphone", ...contractsHead().slice(15)]],
+        body: provenanceRows,
+        styles: { fontSize: 8, cellPadding: 2, valign: "top", overflow: "linebreak" },
+        headStyles: { fillColor: [99, 102, 241] },
+      });
+    }
   }
 
   void pageW;
@@ -164,7 +181,7 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
 }
 
 export function exportJourneyExcel(data: JourneyExportData): void {
-  const { journey, items, drivers } = data;
+  const { journey, items, drivers, phoneCommercialSales } = data;
   const workbook = XLSX.utils.book_new();
 
   const driverRows: (string | number)[][] = [
@@ -178,12 +195,13 @@ export function exportJourneyExcel(data: JourneyExportData): void {
 
   const contractRows: (string | number)[][] = [
     contractsHead(),
-    ...contractsBody(items, true, journey),
+    ...contractsBody(items, true, journey, phoneCommercialSales),
   ];
   const wsContracts = XLSX.utils.aoa_to_sheet(contractRows);
   wsContracts["!cols"] = [
     { wch: 4 }, { wch: 16 }, { wch: 30 }, { wch: 16 }, { wch: 18 }, { wch: 18 },
     { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 9 },
+    { wch: 20 }, { wch: 24 }, { wch: 45 }, { wch: 35 }, { wch: 55 }, { wch: 70 },
   ];
   XLSX.utils.book_append_sheet(workbook, wsContracts, "Contratti");
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(journeyGettoneRows(journey, items)), "Gettoni");

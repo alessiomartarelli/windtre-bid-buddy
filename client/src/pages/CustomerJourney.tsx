@@ -2990,7 +2990,7 @@ function JourneyDetailViewImpl({
   const handleExportPdf = async () => {
     setPdfPending(true);
     try {
-      await exportJourneyPdf({ journey, items, drivers });
+      await exportJourneyPdf({ journey, items, drivers, phoneCommercialSales: detail.phoneCommercialSales });
     } catch (err) {
       toast({
         title: "Errore",
@@ -3004,7 +3004,7 @@ function JourneyDetailViewImpl({
 
   const handleExportExcel = () => {
     try {
-      exportJourneyExcel({ journey, items, drivers });
+      exportJourneyExcel({ journey, items, drivers, phoneCommercialSales: detail.phoneCommercialSales });
     } catch (err) {
       toast({
         title: "Errore",
