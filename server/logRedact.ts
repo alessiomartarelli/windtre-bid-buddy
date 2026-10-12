@@ -42,3 +42,20 @@ export function logJsonReplacer(key: string, value: unknown): unknown {
   }
   return value;
 }
+
+// Omit whole CJ bodies rather than trying to enumerate personal fields:
+// reports, nested diagnostics, mutations and future endpoints can all contain PII.
+// Matches both root API routes and routes under the production base path.
+const CUSTOMER_JOURNEY_API_RE =
+  /\/api\/(customer-journeys|customer-journey-items|customer-journey-config)(?=\/|$)/;
+
+export function isCustomerJourneyLogPath(path: string): boolean {
+  return CUSTOMER_JOURNEY_API_RE.test(path);
+}
+
+export function customerJourneyLogPath(path: string, routePath?: string): string {
+  // Express's registered route is a template, not the actual customer/item ID.
+  if (routePath && isCustomerJourneyLogPath(routePath)) return routePath;
+  const match = path.match(CUSTOMER_JOURNEY_API_RE);
+  return match ? `${match[0]}/[unmatched]` : path;
+}

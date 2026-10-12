@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:cj-window-eligibility": "node --import tsx --test tests/customer-journey-window-eligibility.test.mjs",
+    "test:cj-api-logging": "node --import tsx --test tests/customer-journey-api-logging.test.mjs",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
