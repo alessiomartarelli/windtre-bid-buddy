@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/table";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { useToast } from "@/hooks/use-toast";
+import { cjPhoneIccidLinks } from "@shared/customerJourneyPhoneLink";
+import { SmartphoneIccidLink } from "@/components/customer-journey/SmartphoneIccidLink";
 import {
   Route as RouteIcon, RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Circle, CircleDot,
   Search, User, Building2, Loader2, Coins, Pencil,
@@ -2822,6 +2824,11 @@ function JourneyDetailViewImpl({
   // computeItemValidity così le card non divergono da timeline/gettone.
   const driverValidityModel = computeTimeline(journey, items);
   const driverItemValidity = computeItemValidity(driverValidityModel, journey);
+  const phoneIccidLinks = cjPhoneIccidLinks(
+    cjJourneyReportRows(journey, items),
+    journey.openedAt ? new Date(journey.openedAt).toISOString() : null,
+    journey.triggerBisuiteId,
+  );
   const validDrivers = new Set<string>();
   for (const it of items) {
     if (driverItemValidity.get(it.id)?.counts) validDrivers.add(it.driver);
@@ -3163,10 +3170,12 @@ function JourneyDetailViewImpl({
                           {it.descrizione || it.tipologia || it.categoria || "—"}
                         </span>
                         {it.driver === "telefono" && (
-                          <p className="text-[11px] text-muted-foreground mt-1" data-testid={`phone-reason-${it.id}`}>
-                            {it.iccid ? `ICCID ${it.iccid} · ` : ""}
-                            {driverItemValidity.get(it.id)?.reason ?? CJ_VALIDITY_REASONS[driverItemValidity.get(it.id)?.kind ?? "smartphone_escluso"]}
-                          </p>
+                          <>
+                            {phoneIccidLinks.get(it.id) && <SmartphoneIccidLink itemId={it.id} link={phoneIccidLinks.get(it.id)!} />}
+                            <p className="text-[11px] text-muted-foreground mt-1" data-testid={`phone-reason-${it.id}`}>
+                              {driverItemValidity.get(it.id)?.reason ?? CJ_VALIDITY_REASONS[driverItemValidity.get(it.id)?.kind ?? "smartphone_escluso"]}
+                            </p>
+                          </>
                         )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">

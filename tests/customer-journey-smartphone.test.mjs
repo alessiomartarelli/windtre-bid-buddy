@@ -8,6 +8,10 @@ import { computeTimeline, computeItemValidity } from '../client/src/lib/customer
 import { contractsBody, journeyGettoneRows } from '../shared/customerJourneyExport.ts';
 import { reconcileCjMobile } from '../shared/customerJourneyDiagnostics.ts';
 import { buildCjCohortModel } from '../shared/customerJourneyCohorts.ts';
+import { cjPhoneIccidLinks } from '../shared/customerJourneyPhoneLink.ts';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { SmartphoneIccidLink } from '../client/src/components/customer-journey/SmartphoneIccidLink.tsx';
 
 // Synthetic identifiers, unrelated to the observed production customer/device.
 const A = '89000000000000000001', B = '89000000000000000002', C = '89000000000000000003';
@@ -38,6 +42,43 @@ test('an operator-scoped detail keeps the original opening and labels the later 
 const result = items => buildGettoneJourneys(rows(items))[0];
 const pair = (iccid = B, sale = 'sale-b', id = 10, date = august) =>
   [sim(id, sale, iccid, date), phone(id + 1, sale, iccid, date)];
+
+test('ICCID detail renders both full identifiers for initial and extra pairs without changing revenue', () => {
+  const items = [sim(1, 'sale-a', A), phone(2, 'sale-a', A), ...pair()];
+  const report = rows(items);
+  const links = cjPhoneIccidLinks(report, july, journey.triggerBisuiteId);
+  for (const [id, iccid] of [['phone-2', A], ['phone-11', B]]) {
+    const link = links.get(id);
+    assert.equal(link.status, 'abbinata');
+    assert.equal(link.mobiles.length, 1);
+    const html = renderToStaticMarkup(React.createElement(SmartphoneIccidLink, { link, itemId: id }));
+    assert.match(html, /ICCID smartphone/);
+    assert.match(html, /SIM abbinata/);
+    assert.equal(html.split(iccid).length - 1, 2);
+  }
+  assert.equal(result(items).fatturato, 40);
+});
+
+test('later CB phone shows the referenced initial ICCID without claiming a valid CJ pairing', () => {
+  const items = [sim(1, 'sale-a', A), phone(20, 'cb-sale', A, august)];
+  const link = cjPhoneIccidLinks(rows(items), july).get('phone-20');
+  assert.equal(link.status, 'corrispondenza');
+  assert.equal(link.mobiles[0].iccid, A);
+  const html = renderToStaticMarkup(React.createElement(SmartphoneIccidLink, { link, itemId: 'phone-20' }));
+  assert.match(html, /non abbinamento CJ valido/);
+  assert.equal(result(items).fatturato, 0);
+});
+
+test('ICCID links remain scoped to visible items and report missing or ambiguous matches', () => {
+  const missing = rows([phone(2, 'sale-a', A)]);
+  assert.equal(cjPhoneIccidLinks(missing, july).get('phone-2').status, 'non_verificabile');
+  const invalid = rows([phone(2, 'sale-a', null)]);
+  assert.equal(cjPhoneIccidLinks(invalid, july).get('phone-2').phoneIccid, null);
+  const ambiguous = rows([sim(1, 'sale-a', A), ...pair(B), sim(12, 'sale-b', B, august)]);
+  const link = cjPhoneIccidLinks(ambiguous, july).get('phone-11');
+  assert.equal(link.status, 'ambigua');
+  assert.equal(link.mobiles.length, 2);
+});
 
 test('ICCID is textual, normalized without rounding or losing leading zeros; conflicting labels fail closed', () => {
   const value = '00123456789012345678';
