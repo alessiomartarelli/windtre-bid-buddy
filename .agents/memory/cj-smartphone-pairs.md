@@ -8,3 +8,14 @@ Una vendita successiva dello stesso cliente con nuova SIM B e smartphone abbinat
 **Why:** l'utente ha confermato esplicitamente questo caso commerciale; richiedere l'ICCID iniziale anche agli extra escluderebbe acquisti che vuole riconoscere.
 
 **How to apply:** distinguere sempre la pista Smartphone della CJ iniziale dalle coppie aggiuntive. Non estendere la decisione ai premi smartphone di Gara, Vendite o Canvass.
+
+Il conteggio dei rami SIM richiesto dall'utente comprende un ramo iniziale
+per anagrafica CJ qualificata e un ramo per ogni coppia successiva valida che
+sblocca l'extra. Restano separati clienti unici, SIM totali e rami premio.
+
+**Why:** l'utente vuole sapere quanti rami sono stati effettivamente aperti
+anche quando una stessa anagrafica genera più premi; sommarli ai clienti unici
+falserebbe invece le percentuali di cross-sell.
+
+**How to apply:** includere solo coppie extra ammissibili e deduplicate,
+non SIM aggiuntive da sole o telefoni CB abbinati a SIM anteriori alla CJ.

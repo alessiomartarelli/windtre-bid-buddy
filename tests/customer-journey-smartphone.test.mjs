@@ -83,7 +83,9 @@ test('a later pair with a DIFFERENT ICCID adds precisely 20 €, no extra track/
   assert.equal(detail.saturazionePct, 20);
   const totals = gettoneTotals([g], 100);
   assert.equal(totals.clienti, 1); assert.equal(totals.potenziale, 100);
+  assert.equal(totals.ramiSimAperti, 2);
   const grouped = aggregateGettone([g], () => ({ key: 'store', label: 'Store' }), 100)[0];
+  assert.equal(grouped.ramiSimAperti, 2);
   assert.equal(grouped.gettoneBase, 20); assert.equal(grouped.extraStimato, 20); assert.equal(grouped.potenziale, 100);
   const v = computeItemValidity(computeTimeline(journey, items), journey);
   assert.equal(v.get('phone-11').kind, 'coppia_extra'); assert.equal(v.get('phone-11').counts, false);
@@ -92,6 +94,9 @@ test('a later pair with a DIFFERENT ICCID adds precisely 20 €, no extra track/
   const exported = new Map(journeyGettoneRows(journey, items));
   assert.equal(exported.get('Totale stimato'), g.fatturato);
   assert.equal(exported.get('Extra coppie SIM–smartphone'), 20);
+  assert.equal(exported.get('Rami SIM aperti'), 2);
+  assert.equal(exported.get('Rami iniziali'), 1);
+  assert.equal(exported.get('Rami extra premio'), 1);
   const filters = { typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
   const diagnostic = reconcileCjMobile([], rows(items), [g], filters, '', '');
   assert.equal(diagnostic.confirmed[0].extra, 20);
@@ -105,6 +110,42 @@ test('multiple SIMs on opening receipt: only selected trigger phone counts, no s
     assert.equal(g.gettoneBase, 20); assert.equal(g.extraStimato, 0);
     assert.equal(computeTimeline(journey, order).t0ItemId, 'sim-1');
   }
+});
+
+test('CB smartphones on a SIM from before CJ never inflate July gettone or open extra branches', () => {
+  const june = '2026-06-09T00:00:00.000Z';
+  const oldMobile = sim(40, 'old-sale', C, june);
+  const oldPhone = phone(41, 'old-sale', C, june, { descrizione: 'Smartphone cliente CB' });
+  const cbPhone = phone(42, 'cb-sale', C, july, { descrizione: 'Smartphone CB su SIM precedente' });
+  const items = [oldMobile, oldPhone, sim(1, 'sale-a', A), cbPhone, ...pair()];
+  for (const order of [items, [...items].reverse()]) {
+    const g = result(order);
+    assert.equal(g.gettoneBase, 0);
+    assert.equal(g.extraStimato, 20);
+    assert.equal(g.fatturato, 20);
+    assert.equal(g.extraCoppie, 1);
+    assert.equal(gettoneTotals([g], 100).ramiSimAperti, 2);
+    assert.equal(gettoneTotals([g], 100).clienti, 1);
+  }
+});
+
+test('branch count excludes SIM-only sales, duplicate pairs, invalid or out-of-window pairs', () => {
+  const initial = sim(1, 'sale-a', A);
+  const good = pair();
+  const duplicatePhone = { ...good[1], id: 'duplicate-phone' };
+  const cancelled = pair(C, 'cancelled-sale', 30);
+  cancelled[0].economicState = 'annullato';
+  const items = [initial, sim(5, 'sim-only', C, august), ...good, duplicatePhone, ...cancelled];
+  const g = result(items);
+  assert.equal(g.extraCoppie, 1);
+  assert.equal(gettoneTotals([g], 100).ramiSimAperti, 2);
+  assert.equal(gettoneTotals([], 100).ramiSimAperti, 0);
+  const late = result([initial, ...pair(B, 'late-sale', 50, '2027-02-01T00:00:00.000Z')]);
+  assert.equal(gettoneTotals([late], 100).ramiSimAperti, 1);
+  const second = { ...late, journeyId: 'second-client' };
+  const totals = gettoneTotals([g, second], 100);
+  assert.equal(totals.clienti, 2);
+  assert.equal(totals.ramiSimAperti, 3);
 });
 
 test('SIM alone, phone alone, mismatched ICCID and ambiguous mobile contracts cannot generate extra', () => {

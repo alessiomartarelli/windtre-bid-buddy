@@ -179,6 +179,9 @@ export function journeyGettoneRows(journey: CustomerJourney, items: CustomerJour
 }
 export function gettoneBreakdownRows(g?: CjGettoneJourney): (string | number)[][] {
   return [
+    ["Rami SIM aperti", g ? 1 + (g.extraCoppie ?? 0) : 0],
+    ["Rami iniziali", g ? 1 : 0],
+    ["Rami extra premio", g?.extraCoppie ?? 0],
     ["Gettone base stimato", g?.gettoneBase ?? 0],
     ["Extra coppie SIM–smartphone", g?.extraStimato ?? 0],
     ["Coppie aggiuntive", g?.extraCoppie ?? 0],

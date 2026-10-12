@@ -600,6 +600,8 @@ export function filterGettoneByInsertDate(
 export interface CjGettoneGroup extends CjGettoneBreakdown {
   key: string;
   label: string;
+  // Un ramo iniziale per cliente qualificato + coppie extra valide, deduplicate.
+  ramiSimAperti: number;
   // N. SIM mobile attivate nel periodo (volume item-level).
   simAttivate: number;
   // N. clienti distinti con SIM attiva (journey distinte del gruppo).
@@ -615,6 +617,8 @@ export interface CjGettoneGroup extends CjGettoneBreakdown {
 }
 
 export interface CjGettoneTotals extends CjGettoneBreakdown {
+  // Non è il numero di anagrafiche: comprende anche i rami con premio extra.
+  ramiSimAperti: number;
   // N. SIM mobile attivate nel periodo (volume item-level).
   simAttivate: number;
   // N. clienti distinti con SIM attiva.
@@ -670,6 +674,7 @@ export function aggregateGettone(
       label: e.label,
       simAttivate: e.simAttivate,
       clienti: e.clienti,
+      ramiSimAperti: e.clienti + e.journeys.reduce((sum, j) => sum + (j.extraCoppie ?? 0), 0),
       conProdotti: e.conProdotti,
       fatturato: e.fatturato,
       fatturatoMaturato: e.fatturatoMaturato,
@@ -702,8 +707,10 @@ export function gettoneTotals(
     incremento += gettoneIncremento(j.pisteAttive, j.gettoneBase ?? j.fatturato, addProducts);
     pisteAttive += j.pisteAttive;
   }
-  return { simAttivate, clienti, conProdotti, fatturato, fatturatoMaturato, potenziale: incremento * s, pisteAttive,
-    ...sumCjGettoneBreakdown(journeys) };
+  const breakdown = sumCjGettoneBreakdown(journeys);
+  return { simAttivate, clienti, ramiSimAperti: clienti + breakdown.extraCoppie,
+    conProdotti, fatturato, fatturatoMaturato, potenziale: incremento * s, pisteAttive,
+    ...breakdown };
 }
 
 export function sumCjGettoneBreakdown(journeys: CjGettoneJourney[]): CjGettoneBreakdown {

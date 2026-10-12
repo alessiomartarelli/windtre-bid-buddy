@@ -2184,13 +2184,19 @@ function AnalisiViewImpl({
             <p className="text-xs text-muted-foreground">T0–T6, incluse le SIM successive</p>
           </CardContent>
         </Card>
-        <Card data-testid="card-gettone-clienti">
+        <Card data-testid="card-gettone-clienti" title="Un ramo iniziale per cliente con SIM attiva, più un ramo per ogni coppia aggiuntiva SIM–smartphone valida. Le SIM aggiuntive da sole non aprono un ramo premio.">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Coins className="h-3.5 w-3.5" /> Clienti con SIM attiva
+              <Coins className="h-3.5 w-3.5" /> Rami SIM aperti
             </p>
-            <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-clienti">
-              {totals.clienti}
+            <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-rami-sim">
+              {totals.ramiSimAperti}
+            </p>
+            <p className="text-xs text-muted-foreground" data-testid="text-gettone-rami-breakdown">
+              {totals.clienti} iniziali + {totals.extraCoppie} extra premio
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Clienti unici con SIM attiva: <span data-testid="text-gettone-clienti">{totals.clienti}</span>
             </p>
           </CardContent>
         </Card>
@@ -2217,6 +2223,9 @@ function AnalisiViewImpl({
             </p>
             <p className="text-xs text-muted-foreground" data-testid="text-gettone-breakdown">
               Base {fmtEuro(totals.gettoneBase)} · extra {fmtEuro(totals.extraStimato)} ({totals.extraCoppie} coppie)
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Smartphone solo se abbinati per ICCID alla SIM iniziale o a una nuova SIM extra valida.
             </p>
           </CardContent>
         </Card>
