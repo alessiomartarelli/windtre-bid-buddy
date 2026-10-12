@@ -6,6 +6,7 @@ import {
   CircleHelp, RefreshCw, Search, Store, Users, Wallet,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { routePath } from "@/lib/basePath";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -259,13 +260,15 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
 
   const toggleExpanded = (id: string) => setExpanded(current => current.includes(id) ? current.filter(x => x !== id) : [...current, id]);
   const selectClass = "h-9 w-full sm:w-auto sm:min-w-[170px]";
+  const sessionExpired = query.error instanceof Error && query.error.message.startsWith("401:");
 
   if (query.isLoading) return <div className="space-y-4" aria-label="Caricamento evoluzione clienti">
     <div className="h-24 animate-pulse rounded-xl bg-muted/70" /><div className="h-12 animate-pulse rounded-xl bg-muted/50" /><div className="h-64 animate-pulse rounded-xl bg-muted/50" />
   </div>;
   if (query.isError) return <Card className="border-destructive/30"><CardContent className="flex flex-col items-start gap-3 py-8 sm:flex-row sm:items-center">
-    <AlertTriangle className="h-5 w-5 text-destructive" /><div className="flex-1"><h3 className="font-semibold">Report non disponibile</h3><p className="text-sm text-muted-foreground">Non è stato possibile caricare l’evoluzione dei clienti.</p></div>
-    <Button variant="outline" onClick={() => query.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Riprova</Button>
+    <AlertTriangle className="h-5 w-5 text-destructive" /><div className="flex-1"><h3 className="font-semibold">{sessionExpired ? "Sessione scaduta" : "Report non disponibile"}</h3><p className="text-sm text-muted-foreground">{sessionExpired ? "Accedi di nuovo per caricare l’evoluzione dei clienti." : "Non è stato possibile caricare l’evoluzione dei clienti."}</p></div>
+    {sessionExpired ? <Button variant="outline" asChild><a href={routePath("/auth")}>Accedi di nuovo</a></Button>
+      : <Button variant="outline" onClick={() => query.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Riprova</Button>}
   </CardContent></Card>;
   if (!data || model.customers.length === 0) return <Card><CardContent className="py-12 text-center">
     <CalendarDays className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><h3 className="font-semibold">Nessun gruppo clienti disponibile</h3>

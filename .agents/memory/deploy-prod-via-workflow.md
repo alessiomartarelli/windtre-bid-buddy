@@ -71,3 +71,12 @@ versione o stringhe/regex caratteristiche, non il nome originale dell'helper.
 ha dato un falso negativo anche con il codice corretto già pubblicato.
 **How to apply:** controlli post-deploy sul bundle, da affiancare a verifiche
 dei dati o del comportamento effettivo.
+
+Le richieste frontend devono restare sotto `/mystoredesk/api/`: nel vhost
+onetapp.it, `/api/` appartiene a easycashflows, non a incentive-w3.
+**Why:** una richiesta CJ senza prefisso ha restituito HTTP 200 con HTML
+dell'altra applicazione, causando un errore di parsing presentato come report
+non disponibile. Il solo controllo dello status HTTP non rileva questo errore.
+**How to apply:** verificare anche content-type e percorso effettivo; per i
+test componenti che usano il base path, definire esplicitamente
+`import.meta.env.PROD` e coprire almeno il percorso di produzione.

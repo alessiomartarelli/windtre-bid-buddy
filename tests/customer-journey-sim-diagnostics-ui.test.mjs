@@ -21,7 +21,7 @@ test("SIM diagnostics: React pagination, context changes and retry", { timeout: 
   const bundle = await build({
     entryPoints: ["tests/fixtures/sim-diagnostics-ui.tsx"], bundle: true, write: false,
     platform: "browser", format: "esm", jsx: "automatic",
-    define: { "process.env.NODE_ENV": '"development"' },
+    define: { "process.env.NODE_ENV": '"development"', "import.meta.env.PROD": "true" },
   });
   const server = createServer((req, res) => {
     if (req.url === "/harness.js") {
@@ -37,13 +37,19 @@ test("SIM diagnostics: React pagination, context changes and retry", { timeout: 
   try {
     browser = await launchBrowser();
     const base = `http://127.0.0.1:${server.address().port}`;
-    async function fixture(st, { failSummary = false } = {}) {
+    async function fixture(st, { failSummary = false, unauthorized = false } = {}) {
       const page = await browser.newPage();
       const requests = [], errors = [], gates = [];
       const control = { failSummary, failDetail: false, holdNextDetail: null };
       page.on("pageerror", error => errors.push(error.message));
       await page.route("**/api/customer-journeys/report-mobile-sources?*", async route => {
         const url = new URL(route.request().url());
+        assert.equal(url.pathname, "/mystoredesk/api/customer-journeys/report-mobile-sources",
+          "production diagnostics must stay inside this application's base path");
+        if (unauthorized) {
+          await route.fulfill({ status: 401, json: { message: "Not authenticated" } });
+          return;
+        }
         const f = JSON.parse(url.searchParams.get("filters"));
         const from = url.searchParams.get("from"), to = url.searchParams.get("to");
         const detail = url.searchParams.get("detail") === "1";
@@ -135,6 +141,13 @@ test("SIM diagnostics: React pagination, context changes and retry", { timeout: 
       st.after(close);
       return { page, card, control, requests, section, hold, waitRows, pageNumber, open, next };
     }
+
+    await t.test("expired session offers sign-in instead of retrying the report", async st => {
+      const f = await fixture(st, { unauthorized: true });
+      await f.card.getByRole("alert").getByText("Sessione scaduta.", { exact: false }).waitFor();
+      assert.equal(await f.card.getByRole("link", { name: "Accedi di nuovo" }).getAttribute("href"), "/mystoredesk/auth");
+      assert.equal(await f.card.getByRole("button", { name: "Riprova" }).count(), 0);
+    });
 
     await t.test("summary is lazy; every section is bounded; close/reopen resets to page one", async st => {
       const f = await fixture(st);

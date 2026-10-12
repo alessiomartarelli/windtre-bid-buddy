@@ -44,7 +44,7 @@ test("SIM diagnostics blocks DB changes on new and previously cached pages", { t
   const bundle = await build({
     entryPoints: ["tests/fixtures/sim-diagnostics-version-ui.tsx"], bundle: true, write: false,
     platform: "browser", format: "esm", jsx: "automatic",
-    define: { "process.env.NODE_ENV": '"development"' },
+    define: { "process.env.NODE_ENV": '"development"', "import.meta.env.PROD": "false" },
   });
   const server = createServer((req, res) => {
     res.writeHead(200, { "Content-Type": req.url === "/harness.js" ? "text/javascript" : "text/html" });

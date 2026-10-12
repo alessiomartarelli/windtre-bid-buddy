@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { exportCjDiagnosticsExcel } from "@/lib/customerJourneyDiagnosticsExport";
 import { economicStateLabel, type CjGettoneJourney, type CjListFilters, type CjReportRow } from "@shared/customerJourney";
 import { CJ_SIM_REASONS, type CjSimDiagnosticPage } from "@shared/customerJourneyDiagnostics";
+import { apiUrl, routePath } from "@/lib/basePath";
 
 class DiagnosticVersionChanged extends Error {}
 const euro = (n: number) => n.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
@@ -21,9 +22,10 @@ export default function SimDiagnostics({ filters, from, to, onOpenJourney }: {
   const load = async (detail: boolean, page: number, version: string | undefined, signal?: AbortSignal): Promise<CjSimDiagnosticPage> => {
     const requestParams = new URLSearchParams(params);
     if (version) requestParams.set("version", version);
-    const response = await fetch(`/api/customer-journeys/report-mobile-sources?${requestParams}&detail=${detail ? 1 : 0}&page=${page}`,
+    const response = await fetch(apiUrl(`/api/customer-journeys/report-mobile-sources?${requestParams}&detail=${detail ? 1 : 0}&page=${page}`),
       { credentials: "include", signal });
     if (response.status === 409) throw new DiagnosticVersionChanged("I dati vendite o CJ sono cambiati.");
+    if (response.status === 401) throw new Error("401: Sessione scaduta");
     if (!response.ok) throw new Error("Dettaglio SIM non disponibile");
     return response.json();
   };
@@ -50,6 +52,7 @@ export default function SimDiagnostics({ filters, from, to, onOpenJourney }: {
     setGeneration(v => v + 1);
   };
   const d = query.data?.diagnostics;
+  const sessionExpired = query.error instanceof Error && query.error.message.startsWith("401:");
   if (detailQuery.error instanceof DiagnosticVersionChanged) {
     return <Card data-testid="cj-sim-diagnostics">
       <CardHeader><CardTitle className="text-base">SIM, esclusioni ed esiti economici</CardTitle></CardHeader>
@@ -66,8 +69,10 @@ export default function SimDiagnostics({ filters, from, to, onOpenJourney }: {
         <Button variant="outline" size="sm" data-testid="cj-sim-diagnostics-export" disabled>Scarica diagnostica Excel</Button>
       </CardHeader>
       <CardContent>
-      {query.isError ? <div role="alert">Dettaglio SIM non disponibile.
-        <Button variant="outline" size="sm" onClick={reload}>Riprova</Button>
+      {query.isError ? <div role="alert">
+        {sessionExpired ? "Sessione scaduta. Accedi di nuovo per caricare il dettaglio SIM." : "Dettaglio SIM non disponibile."}
+        {sessionExpired ? <Button variant="outline" size="sm" asChild><a href={routePath("/auth")}>Accedi di nuovo</a></Button>
+          : <Button variant="outline" size="sm" onClick={reload}>Riprova</Button>}
       </div> : <p className="text-sm">Caricamento diagnostica SIM…</p>}
     </CardContent></Card>;
   }
