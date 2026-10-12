@@ -1,6 +1,7 @@
 import type { Express, RequestHandler } from "express";
 import { type Server } from "http";
 import { storage, type CjItemDetailsUpdate, CJ_DEFAULT_TRIGGER_DATE, formatCjTriggerDate } from "./storage";
+import { getCjCbSimReferences } from "./customerJourneyCbSimReferences";
 import { createDrmsOutcomeRunner } from "./cjDrmsOutcomeRunner";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
@@ -4342,7 +4343,11 @@ export async function registerRoutes(
       }));
       const drivers = summarizeDrivers(summaryItems, cjT0Month(journey.openedAt?.toISOString() ?? null, summaryItems));
 
-      res.json({ journey, items, drivers });
+      const cbSimReferences = await getCjCbSimReferences(
+        profile.organizationId, items,
+        profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null,
+      );
+      res.json({ journey, items, drivers, cbSimReferences });
     } catch (error) {
       console.error("Customer journey detail error:", error);
       res.status(500).json({ error: "Errore nel recupero della customer journey" });

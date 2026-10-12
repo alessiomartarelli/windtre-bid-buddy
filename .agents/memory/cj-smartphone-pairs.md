@@ -19,3 +19,13 @@ falserebbe invece le percentuali di cross-sell.
 
 **How to apply:** includere solo coppie extra ammissibili e deduplicate,
 non SIM aggiuntive da sole o telefoni CB abbinati a SIM anteriori alla CJ.
+
+L'ICCID della SIM associata deve essere visibile anche per MOBILE e CB,
+non soltanto sotto lo smartphone. I riferimenti commerciali CB non diventano
+piste CJ e un dato mancante non va ricavato da un telefono dello stesso cliente.
+
+**Why:** l'utente ha ribadito esplicitamente che la visibilità dell'ICCID non
+deve essere limitata agli smartphone.
+
+**How to apply:** distinguere sempre identificativo della SIM, canale
+commerciale e ammissibilità al gettone; mantenere il perimetro autorizzato.

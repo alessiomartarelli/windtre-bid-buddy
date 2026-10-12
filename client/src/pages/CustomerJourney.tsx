@@ -24,6 +24,8 @@ import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { useToast } from "@/hooks/use-toast";
 import { cjPhoneIccidLinks } from "@shared/customerJourneyPhoneLink";
 import { SmartphoneIccidLink } from "@/components/customer-journey/SmartphoneIccidLink";
+import { SimIccid, CbSimReferences } from "@/components/customer-journey/SimIccid";
+import { CJ_CB_REFERENCE_CATEGORIES, type CjCbSimReference } from "@shared/customerJourneyCbSimReferences";
 import {
   Route as RouteIcon, RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Circle, CircleDot,
   Search, User, Building2, Loader2, Coins, Pencil,
@@ -112,6 +114,7 @@ interface JourneyDetail {
   journey: CustomerJourney;
   items: CustomerJourneyItem[];
   drivers: DriverSummary[];
+  cbSimReferences?: CjCbSimReference[];
 }
 
 interface CjConfig {
@@ -3130,6 +3133,8 @@ function JourneyDetailViewImpl({
 
       <JourneyBreakdown journey={journey} items={items} drivers={drivers} />
 
+      <CbSimReferences references={detail.cbSimReferences ?? []} />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Contratti ({items.length})</CardTitle>
@@ -3169,6 +3174,9 @@ function JourneyDetailViewImpl({
                         <span className="block truncate" title={it.descrizione || ""}>
                           {it.descrizione || it.tipologia || it.categoria || "—"}
                         </span>
+                        {(it.driver === "mobile" || CJ_CB_REFERENCE_CATEGORIES.some(c => c === it.categoria?.trim().toUpperCase())) && (
+                          <SimIccid iccid={it.iccid} testId={`sim-iccid-${it.id}`} />
+                        )}
                         {it.driver === "telefono" && (
                           <>
                             {phoneIccidLinks.get(it.id) && <SmartphoneIccidLink itemId={it.id} link={phoneIccidLinks.get(it.id)!} />}

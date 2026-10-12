@@ -12,6 +12,8 @@ import { cjPhoneIccidLinks } from '../shared/customerJourneyPhoneLink.ts';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SmartphoneIccidLink } from '../client/src/components/customer-journey/SmartphoneIccidLink.tsx';
+import { SimIccid, CbSimReferences } from '../client/src/components/customer-journey/SimIccid.tsx';
+import { cjCbSimReference } from '../shared/customerJourneyCbSimReferences.ts';
 
 // Synthetic identifiers, unrelated to the observed production customer/device.
 const A = '89000000000000000001', B = '89000000000000000002', C = '89000000000000000003';
@@ -42,6 +44,31 @@ test('an operator-scoped detail keeps the original opening and labels the later 
 const result = items => buildGettoneJourneys(rows(items))[0];
 const pair = (iccid = B, sale = 'sale-b', id = 10, date = august) =>
   [sim(id, sale, iccid, date), phone(id + 1, sale, iccid, date)];
+
+test('Mobile and CB show full SIM ICCID independently of smartphones', () => {
+  const mobile = renderToStaticMarkup(React.createElement(SimIccid, { iccid: A, testId: 'mobile-iccid' }));
+  assert.match(mobile, /ICCID SIM abbinata/);
+  assert.ok(mobile.includes(A));
+  for (const categoria of ['MIA TIED', 'MIA UNTIED', 'RIVINCOLO']) {
+    const reference = cjCbSimReference('synthetic-cb', {
+      categoria, descrizione: 'Riferimento sintetico', dettaglio: { venditaInfo1: `ICCID: ${B}` },
+    }, august, 'PDV sintetico');
+    const html = renderToStaticMarkup(React.createElement(CbSimReferences, { references: [reference] }));
+    assert.ok(html.includes(B));
+    assert.ok(html.includes(categoria));
+    assert.match(html, /Non aggiungono piste o gettoni/);
+  }
+  assert.equal(cjCbSimReference('other', { categoria: 'ENERGIA W3' }, null, null), null);
+});
+
+test('Missing or conflicting Mobile/CB ICCID is explicit and never inferred from a smartphone', () => {
+  const html = renderToStaticMarkup(React.createElement(SimIccid, { iccid: null, testId: 'missing' }));
+  assert.match(html, /Non disponibile o non verificabile/);
+  const cb = cjCbSimReference('conflict', { categoria: 'RIVINCOLO',
+    dettaglio: { venditaInfo1: `ICCID: ${A}`, venditaInfo2: `ICCID: ${B}` } }, null, null);
+  assert.equal(cb.iccid, null);
+  assert.match(renderToStaticMarkup(React.createElement(CbSimReferences, { references: [cb] })), /Non disponibile o non verificabile/);
+});
 
 test('ICCID detail renders both full identifiers for initial and extra pairs without changing revenue', () => {
   const items = [sim(1, 'sale-a', A), phone(2, 'sale-a', A), ...pair()];
