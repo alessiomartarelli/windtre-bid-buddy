@@ -22,6 +22,7 @@ const {
   nextCjDriverFilterMode,
   isCjDriverFilterActive,
   cjSearchMatches,
+  cjJourneySearchHay,
   isCjItemActive,
   CJ_GETTONE_TABLE,
   CJ_MAX_PISTE,
@@ -39,6 +40,49 @@ const {
   summarizeDriversWithPhase,
   monthOfIso,
 } = await import('../shared/customerJourney.ts');
+
+test('business search finds company and contact without changing the title or other filters', () => {
+  const journey = {
+    ragioneSociale: 'Azienda Esempio', nominativo: 'LUCA VERDI',
+    nome: 'Luca', cognome: 'Verdi', customerKey: 'TEST-BUSINESS',
+    telefono: '0000000000', codiceCliente: 'CLIENTE-TEST',
+  };
+  const title = journey.ragioneSociale;
+  const value = {
+    customerType: 'azienda', pdvs: ['Negozio test'], addetti: ['Addetto test'],
+    states: ['inserito'], searchHay: cjJourneySearchHay(journey, title),
+  };
+  const filters = {
+    typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti',
+    stateFilter: 'tutti', search: '',
+  };
+  for (const search of ['azienda esempio', ' LUCA VERDI ', 'verdi', 'TEST-BUSINESS', '0000000000', 'CLIENTE-TEST']) {
+    assert.equal(matchesCjFilters(value, { ...filters, search }), true, search);
+  }
+  assert.equal(matchesCjFilters(value, { ...filters, search: 'altro referente' }), false);
+  assert.equal(matchesCjFilters(value, { ...filters, search: 'luca', typeFilter: 'privato' }), false);
+  assert.equal(matchesCjFilters(value, { ...filters, search: 'luca', pdvFilter: ['Altro negozio'] }), false);
+  assert.equal(matchesCjFilters(value, { ...filters, search: 'luca', addettoFilter: 'Altro addetto' }), false);
+  assert.equal(matchesCjFilters(value, { ...filters, search: 'luca', stateFilter: 'ko' }), false);
+  assert.equal(journey.ragioneSociale, title);
+});
+
+test('journey search handles separate contact fields, individuals and missing optional data', () => {
+  const journey = {
+    ragioneSociale: null, nominativo: null, nome: 'Anna', cognome: 'Rossi',
+    customerKey: 'TEST-PRIVATE', telefono: null, codiceCliente: null,
+  };
+  const hay = cjJourneySearchHay(journey, 'Anna Rossi');
+  assert.equal(cjSearchMatches(hay, 'anna rossi'), true);
+  assert.equal(cjSearchMatches(hay, 'rossi'), true);
+  assert.equal(cjSearchMatches(hay, 'test-private'), true);
+  assert.equal(cjSearchMatches(hay, ''), true);
+  assert.equal(hay.includes('null'), false);
+  assert.equal(hay.includes('undefined'), false);
+  assert.equal(cjSearchMatches(cjJourneySearchHay({
+    ...journey, ragioneSociale: 'Altra azienda', nome: null, cognome: null,
+  }, 'Altra azienda'), 'anna'), false);
+});
 
 // Helper: costruisce una riga report con default sensati.
 function row(over = {}) {

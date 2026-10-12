@@ -130,6 +130,19 @@ export function cjSearchMatches(hay: string, search: string): boolean {
   return (hay || "").toLowerCase().includes(q);
 }
 
+/** Search includes the business contact even when the card title is a company name. */
+export function cjJourneySearchHay(
+  journey: Pick<CustomerJourney,
+    "ragioneSociale" | "nominativo" | "nome" | "cognome" | "customerKey" | "telefono" | "codiceCliente">,
+  title: string,
+): string {
+  return [
+    title, journey.ragioneSociale, journey.nominativo,
+    [journey.nome, journey.cognome].filter(Boolean).join(" "),
+    journey.customerKey, journey.telefono, journey.codiceCliente,
+  ].filter(Boolean).join(" ");
+}
+
 // Forma minima filtrabile: una journey espone array di PDV/addetti/stati fra i
 // suoi item, una riga report espone un singolo valore (wrappato in array dal
 // chiamante). Così lo stesso predicato copre entrambe le viste.

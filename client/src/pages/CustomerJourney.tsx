@@ -37,7 +37,7 @@ import {
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ECONOMIC_STATE_LABELS,
   isCjItemActive, economicStateLabel, economicStateDisplayLabel, isCjEconomicPresumedPaid, CJ_PRESUMED_PAID_LABEL, CJ_PRESUMED_PAID_NOTE,
-  aggregateReport, matchesCjFilters,
+  aggregateReport, matchesCjFilters, cjJourneySearchHay,
   CJ_NON_MOBILE_DRIVERS, matchesCjDriverFilter, nextCjDriverFilterMode, isCjDriverFilterActive,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
   buildGettoneJourneys, buildGettoneAuditDetails, filterGettoneByDate, filterGettoneByInsertDate,
@@ -914,9 +914,7 @@ export default function CustomerJourneyPage() {
     pdvs: j.pdvs ?? [],
     addetti: j.addetti ?? [],
     states: j.states ?? [],
-    searchHay: [
-      journeyTitle(j), j.customerKey, j.telefono, j.codiceCliente,
-    ].filter(Boolean).join(" "),
+    searchHay: cjJourneySearchHay(j, journeyTitle(j)),
   }, { ...activeFilters, typeFilter: "tutti" })
     && matchesCjDriverFilter(
       (j.drivers ?? []).filter((d) => d.activated).map((d) => d.driver),
