@@ -60,3 +60,18 @@ with the month's sales misleading even when no eligible article is missing.
 show later purchases separately. Also distinguish a gettone calculated from
 contracts with positive DRMS outcomes from proof that the gettone itself was
 paid; presumed smartphone liquidation is not payment confirmation.
+
+## Product-SIM reconciliation reference
+
+For this reconciliation, the user chose the CJ matured-product measure rather
+than merely active cross-sell products. CJ associates cross-sell maturity with
+the journey/customer; its SIM volume is the active eligible mobile SIM count
+for that journey, not a product-to-physical-SIM link. The matured KPI includes
+presumed smartphones under the app's existing rule and is not proof of payment.
+
+**Why:** the user explicitly asked to use “maturato” as the reference after
+active-product counts were presented.
+
+**How to apply:** when updating this workbook, filter to journeys with at least
+one matured cross-sell product, count their active eligible mobile SIMs, and
+label the journey-level association and smartphone presumption clearly.

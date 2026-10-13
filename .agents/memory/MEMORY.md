@@ -7,7 +7,7 @@
 - [Test org cleanup leak](test-org-cleanup-leak.md) — cleanupOrg deve cancellare TUTTI i figli org-scoped prima dell'org; FK NO ACTION + .catch silenzioso = org di test vuote che restano nel DB dev.
 - [CJ validità ↔ gettone parity](cj-validity-gettone-parity.md) — scheda badges e gettone DEVONO condividere helper UTC + regole T0; "attivante" solo se driver mobile.
 - [CustomerJourney page perf](cj-page-perf-memoization.md) — keep derived data memoized; use stable EMPTY_* module constants (not `?? []`) so memos don't bust; useCallback handlers so sub-view memo works.
-- [CJ gettone cohort & KPI](cj-gettone-cohort.md) — analisi gettoni: cohort = solo journey con ≥1 SIM mobile attiva; tieni separati simAttivate (volume) e clienti (distinti).
+- [CJ gettone cohort & KPI](cj-gettone-cohort.md) — separa volume SIM e clienti; per questa riconciliazione il riferimento richiesto è il maturato, non il solo attivo.
 - [CJ analisi mensile delle coorti](cj-monthly-cohort-analysis.md) — distinguere mese apertura clienti, mese acquisti successivi e mese riconoscimento economico; rendere visibile chi prosegue il cross-sell.
 - [CJ audit per società](cj-audit-perimeter.md) — società ≠ tenant; nomi PDV BiSuite ≠ nomi struttura. Verificare associazioni prima di comunicare conteggi vuoti.
 - [BiSuite ragione sociale](bisuite-ragione-sociale.md) — clienti azienda: BiSuite non dà la ragione sociale strutturata (campi vuoti, rawData=dealer); ricavala dall'email + manuale, normalizza prima del fallback `??`.
