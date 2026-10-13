@@ -76,6 +76,9 @@ export interface CjReportRow {
   customerType: string;
   cliente: string;
   pdv: string;
+  pdvOrigine?: string | null;
+  pdvDestinazione?: string | null;
+  ragioneSociale?: string | null;
   addetto: string;
   state: CjItemState;
   // Stato economico (esito DRMS/manuale) o null. Concorre con `state` a
@@ -102,9 +105,14 @@ export interface CjReportRow {
 // journey. Servono a popolare i menù dei filtri e a filtrare le schede.
 export interface CjJourneyFacets {
   pdvs: string[];
+  pdvOrigini: string[];
+  pdvDestinazioni: string[];
   addetti: string[];
   states: string[];
 }
+
+/** Reserved filter value for items whose actual destination PDV is missing. */
+export const CJ_NO_DESTINATION_FILTER_VALUE = "__CJ_NO_DESTINATION__";
 
 // === Filtri condivisi fra "Schede clienti" e "Reportistica" (Task #189) ===
 // I due tab della pagina Customer Journey condividono gli stessi filtri
@@ -116,6 +124,12 @@ export interface CjListFilters {
   typeFilter: string;
   // Multi-selezione PDV (Task #466): vuoto = tutti, selezioni = OR.
   pdvFilter: string[];
+  // Filtri PDV distinti: vuoto = tutti, selezioni multiple in OR.
+  pdvOrigineFilter?: string[];
+  // CJ_NO_DESTINATION_FILTER_VALUE seleziona gli item senza destinazione reale.
+  pdvDestinazioneFilter?: string[];
+  // Sotto-stringa case-insensitive sulla sola ragione sociale.
+  ragioneSocialeFilter?: string;
   // "tutti" | <addetto>
   addettoFilter: string;
   // "tutti" | <stato item>
@@ -149,6 +163,9 @@ export function cjJourneySearchHay(
 export interface CjFilterable {
   customerType: string;
   pdvs: string[];
+  pdvOrigini?: string[];
+  pdvDestinazioni?: string[];
+  ragioneSociale?: string | null;
   addetti: string[];
   states: string[];
   searchHay: string;
@@ -164,6 +181,11 @@ export interface CjFilterable {
 export function matchesCjFilters(v: CjFilterable, f: CjListFilters): boolean {
   if (f.typeFilter !== "tutti" && v.customerType !== f.typeFilter) return false;
   if (f.pdvFilter.length > 0 && !f.pdvFilter.some((p) => v.pdvs.includes(p))) return false;
+  const pdvOrigineFilter = f.pdvOrigineFilter ?? [];
+  if (pdvOrigineFilter.length > 0 && !pdvOrigineFilter.some((p) => (v.pdvOrigini ?? []).includes(p))) return false;
+  const pdvDestinazioneFilter = f.pdvDestinazioneFilter ?? [];
+  if (pdvDestinazioneFilter.length > 0 && !pdvDestinazioneFilter.some((p) => (v.pdvDestinazioni ?? []).includes(p))) return false;
+  if (!cjSearchMatches(v.ragioneSociale ?? "", f.ragioneSocialeFilter ?? "")) return false;
   if (f.addettoFilter !== "tutti" && !v.addetti.includes(f.addettoFilter)) return false;
   if (f.stateFilter !== "tutti" && !v.states.includes(f.stateFilter)) return false;
   return cjSearchMatches(v.searchHay, f.search);
@@ -859,8 +881,11 @@ export function cjJourneyReportRows(journey: CustomerJourney, items: CustomerJou
   return items.map(it => ({
     ...it, itemId: it.id, journeyId: journey.id, customerKey: journey.customerKey,
     customerType: journey.customerType, cliente: journey.nominativo ?? journey.customerKey,
+    ragioneSociale: journey.ragioneSociale ?? null,
     triggerBisuiteId: journey.triggerBisuiteId,
     pdv: it.pdvDestinazione || it.pdvOrigine || "", addetto: it.addetto ?? "",
+    pdvOrigine: (it.pdvOrigine ?? "").trim() || null,
+    pdvDestinazione: (it.pdvDestinazione ?? "").trim() || null,
     state: it.state as CjItemState, economicState: it.economicState as CjEconomicState | null,
     drmsOutcomeState: it.drmsOutcomeState as CjEconomicState | null,
     driver: it.driver as CjDriver, valore: Number(it.importo) || 0,

@@ -39,6 +39,7 @@ const {
   classifyDriverPhase,
   summarizeDriversWithPhase,
   monthOfIso,
+  CJ_NO_DESTINATION_FILTER_VALUE,
 } = await import('../shared/customerJourney.ts');
 
 test('business search finds company and contact without changing the title or other filters', () => {
@@ -320,6 +321,37 @@ test('matchesCjFilters: facet vuoti esclusi da filtro specifico', () => {
   const empty = { customerType: 'privato', pdvs: [], addetti: [], states: [], searchHay: '' };
   assert.equal(matchesCjFilters(empty, { typeFilter: 'tutti', pdvFilter: ['PDV Roma'], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' }), false);
   assert.equal(matchesCjFilters(empty, { typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' }), true);
+});
+
+test('matchesCjFilters: origine, destinazione senza fallback e ragione sociale sono indipendenti', () => {
+  const base = {
+    typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti',
+    stateFilter: 'tutti', search: '',
+  };
+  const noDestination = {
+    customerType: 'azienda',
+    pdvs: ['PDV Origine'],
+    pdvOrigini: ['PDV Origine'],
+    pdvDestinazioni: [CJ_NO_DESTINATION_FILTER_VALUE],
+    ragioneSociale: 'Gamma Energia Srl',
+    addetti: ['Anna'], states: ['inserito'], searchHay: 'Gamma Energia Srl',
+  };
+
+  assert.equal(matchesCjFilters(noDestination, {
+    ...base,
+    pdvOrigineFilter: ['PDV Origine'],
+    pdvDestinazioneFilter: [CJ_NO_DESTINATION_FILTER_VALUE],
+    ragioneSocialeFilter: 'ENERGIA',
+  }), true, 'origin and partial case-insensitive company-name filters match');
+  assert.equal(matchesCjFilters(noDestination, {
+    ...base, pdvDestinazioneFilter: ['PDV Origine'],
+  }), false, 'the origin must never be treated as the destination');
+  assert.equal(matchesCjFilters(noDestination, {
+    ...base, pdvOrigineFilter: ['PDV Destinazione'],
+  }), false, 'destination values must not leak into the origin facet');
+  assert.equal(matchesCjFilters(noDestination, {
+    ...base, ragioneSocialeFilter: 'altra società',
+  }), false, 'the dedicated company filter must match only ragione sociale');
 });
 
 // ===========================================================================

@@ -4210,6 +4210,8 @@ export async function registerRoutes(
         valore: values.get(j.id) ?? 0,
         gettone: gettoni.get(j.id),
         pdvs: facets.get(j.id)?.pdvs ?? [],
+        pdvOrigini: facets.get(j.id)?.pdvOrigini ?? [],
+        pdvDestinazioni: facets.get(j.id)?.pdvDestinazioni ?? [],
         addetti: facets.get(j.id)?.addetti ?? [],
         states: facets.get(j.id)?.states ?? [],
       }));
@@ -4266,6 +4268,11 @@ export async function registerRoutes(
         filters = JSON.parse(req.query.filters ?? '{"typeFilter":"tutti","pdvFilter":[],"addettoFilter":"tutti","stateFilter":"tutti","search":""}');
         if (!filters || !["tutti", "privato", "azienda"].includes(filters.typeFilter)
           || !Array.isArray(filters.pdvFilter) || !filters.pdvFilter.every(v => typeof v === "string")
+          || (filters.pdvOrigineFilter != null
+            && (!Array.isArray(filters.pdvOrigineFilter) || !filters.pdvOrigineFilter.every(v => typeof v === "string")))
+          || (filters.pdvDestinazioneFilter != null
+            && (!Array.isArray(filters.pdvDestinazioneFilter) || !filters.pdvDestinazioneFilter.every(v => typeof v === "string")))
+          || (filters.ragioneSocialeFilter != null && typeof filters.ragioneSocialeFilter !== "string")
           || !["addettoFilter", "stateFilter", "search"].every(k => typeof (filters as any)[k] === "string")) throw new Error();
       } catch {
         return res.status(400).json({ error: "Filtri non validi" });

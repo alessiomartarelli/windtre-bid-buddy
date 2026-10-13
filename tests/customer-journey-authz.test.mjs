@@ -12,6 +12,8 @@ import {
   cleanupOrg,
   newPool,
 } from './helpers/uiTest.mjs';
+// Keep the route test runnable directly under Node without a TS loader.
+const CJ_NO_DESTINATION_FILTER_VALUE = '__CJ_NO_DESTINATION__';
 
 // Test suite Customer Journey authorization (Task #160).
 // Regola security-critical: gli operatori vedono SOLO i clienti collegati ai
@@ -191,16 +193,26 @@ test('scenario 3: GET /api/customer-journeys/report enforces per-operator isolat
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
       nome: 'Cliente Mario',
+      customerType: 'azienda',
+      ragioneSociale: 'Mario Telecom Srl',
       addetto: 'MARIO ROSSI',
       pdv: 'PDV Milano',
-      items: [{ driver: 'fisso', importo: '100.50' }],
+      items: [{
+        driver: 'fisso', importo: '100.50',
+        pdvOrigine: 'PDV origine Milano', pdvDestinazione: 'PDV Milano',
+      }],
     });
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFLUIGI').toUpperCase(),
       nome: 'Cliente Luigi',
+      customerType: 'azienda',
+      ragioneSociale: 'Luigi Servizi Srl',
       addetto: 'LUIGI VERDI',
       pdv: 'PDV Roma',
-      items: [{ driver: 'fisso', importo: '200.00' }],
+      items: [{
+        driver: 'fisso', importo: '200.00',
+        pdvOrigine: 'PDV origine Roma', pdvDestinazione: 'PDV Roma',
+      }],
     });
 
     // (a) admin => entrambe le righe.
@@ -234,6 +246,9 @@ test('scenario 3: GET /api/customer-journeys/report enforces per-operator isolat
     assert.equal(matching.body.length, 1, 'operator must see exactly their own report rows');
     assert.equal(matching.body[0].addetto, 'MARIO ROSSI', 'operator report row must be Mario, not Luigi');
     assert.equal(matching.body[0].pdv, 'PDV Milano', 'report row carries the item PDV');
+    assert.equal(matching.body[0].pdvOrigine, 'PDV origine Milano');
+    assert.equal(matching.body[0].pdvDestinazione, 'PDV Milano');
+    assert.equal(matching.body[0].ragioneSociale, 'Mario Telecom Srl');
     assert.equal(matching.body[0].valore, 100.5, 'report row carries the numeric valore');
 
     // (d) super_admin => entrambe.
@@ -265,12 +280,26 @@ test('scenario 4: list facets isolate per-operator on a mixed-addetto journey', 
       nome: 'Cliente Misto',
       addetto: 'MARIO ROSSI',
       pdv: 'PDV Milano',
-      items: [{ driver: 'fisso', importo: '100.50' }],
+      items: [{
+        driver: 'fisso', importo: '100.50',
+        pdvOrigine: 'PDV origine Milano', pdvDestinazione: 'PDV Milano',
+      }],
+    });
+    // Missing destination is an explicit destination facet, while its origin
+    // remains independent and does not leak through a colleague's item.
+    await addJourneyItem(pool, session.orgId, jid, {
+      addetto: 'MARIO ROSSI',
+      driver: 'energia',
+      pdvOrigine: 'PDV Milano',
+      pdvDestinazione: null,
+      state: 'inserito',
     });
     await addJourneyItem(pool, session.orgId, jid, {
       addetto: 'LUIGI VERDI',
       driver: 'energia',
       pdv: 'PDV Roma',
+      pdvOrigine: 'PDV origine Roma',
+      pdvDestinazione: 'PDV Roma',
       importo: '50.00',
       state: 'attivato',
     });
@@ -285,6 +314,8 @@ test('scenario 4: list facets isolate per-operator on a mixed-addetto journey', 
     assert.ok(adminJ, 'admin must see the mixed journey');
     assert.deepEqual([...adminJ.addetti].sort(), ['LUIGI VERDI', 'MARIO ROSSI'], 'admin facet has both addetti');
     assert.deepEqual([...adminJ.pdvs].sort(), ['PDV Milano', 'PDV Roma'], 'admin facet has both PDVs');
+    assert.deepEqual([...adminJ.pdvOrigini].sort(), ['PDV Milano', 'PDV origine Milano', 'PDV origine Roma']);
+    assert.deepEqual([...adminJ.pdvDestinazioni].sort(), ['PDV Milano', 'PDV Roma', CJ_NO_DESTINATION_FILTER_VALUE].sort());
 
     // (b) operatore con solo MARIO => facet con solo i suoi valori, niente Luigi.
     await setRole(pool, session.profileId, 'operatore', ['MARIO ROSSI']);
@@ -296,6 +327,8 @@ test('scenario 4: list facets isolate per-operator on a mixed-addetto journey', 
     assert.ok(opJ, 'operator with matching addetto must still see the journey');
     assert.deepEqual(opJ.addetti, ['MARIO ROSSI'], 'operator facet must NOT leak Luigi addetto');
     assert.deepEqual(opJ.pdvs, ['PDV Milano'], 'operator facet must NOT leak PDV Roma');
+    assert.deepEqual([...opJ.pdvOrigini].sort(), ['PDV Milano', 'PDV origine Milano']);
+    assert.deepEqual([...opJ.pdvDestinazioni].sort(), ['PDV Milano', CJ_NO_DESTINATION_FILTER_VALUE].sort());
     assert.ok(!opJ.states.includes('attivato'), 'operator facet must NOT leak Luigi item state');
   } finally {
     await cleanupOrg(pool, session);

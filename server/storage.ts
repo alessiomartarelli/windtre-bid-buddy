@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, cjDrmsOutcomeRuns, type CjDrmsOutcomeRun, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { MOBILE_CATEGORIES, driverFromCategory, isCjMobileEligible, cjT0Month, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
+import { MOBILE_CATEGORIES, CJ_NO_DESTINATION_FILTER_VALUE, driverFromCategory, isCjMobileEligible, cjT0Month, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
 import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
 import type { CjCohortData, CjCohortRow } from "@shared/customerJourneyCohorts";
 import { CJ_PRESUMED_PAID_DRIVERS } from "@shared/customerJourney";
@@ -1506,15 +1506,28 @@ export class DatabaseStorage implements IStorage {
       economicState: customerJourneyItems.economicState,
     }).from(customerJourneyItems)
       .where(whereClause);
-    const tmp = new Map<string, { pdvs: Set<string>; addetti: Set<string>; states: Set<string> }>();
+    const tmp = new Map<string, {
+      pdvs: Set<string>;
+      pdvOrigini: Set<string>;
+      pdvDestinazioni: Set<string>;
+      addetti: Set<string>;
+      states: Set<string>;
+    }>();
     for (const r of rows) {
       let e = tmp.get(r.journeyId);
       if (!e) {
-        e = { pdvs: new Set(), addetti: new Set(), states: new Set() };
+        e = {
+          pdvs: new Set(), pdvOrigini: new Set(), pdvDestinazioni: new Set(),
+          addetti: new Set(), states: new Set(),
+        };
         tmp.set(r.journeyId, e);
       }
       const pdv = (r.pdvDestinazione || r.pdvOrigine || "").trim();
       if (pdv) e.pdvs.add(pdv);
+      const pdvOrigine = (r.pdvOrigine || "").trim();
+      if (pdvOrigine) e.pdvOrigini.add(pdvOrigine);
+      const pdvDestinazione = (r.pdvDestinazione || "").trim();
+      e.pdvDestinazioni.add(pdvDestinazione || CJ_NO_DESTINATION_FILTER_VALUE);
       const addetto = (r.addetto || "").trim();
       if (addetto) e.addetti.add(addetto);
       // Il filtro "stato" della lista copre sia gli stati operativi sia quelli
@@ -1526,6 +1539,8 @@ export class DatabaseStorage implements IStorage {
       const e = tmp.get(id);
       out.set(id, {
         pdvs: e ? Array.from(e.pdvs) : [],
+        pdvOrigini: e ? Array.from(e.pdvOrigini) : [],
+        pdvDestinazioni: e ? Array.from(e.pdvDestinazioni) : [],
         addetti: e ? Array.from(e.addetti) : [],
         states: e ? Array.from(e.states) : [],
       });
@@ -1611,7 +1626,10 @@ export class DatabaseStorage implements IStorage {
         customerKey: r.customerKey,
         customerType: r.customerType,
         cliente,
+        ragioneSociale: r.ragioneSociale ?? null,
         pdv: (r.pdvDestinazione || r.pdvOrigine || "").trim(),
+        pdvOrigine: (r.pdvOrigine || "").trim() || null,
+        pdvDestinazione: (r.pdvDestinazione || "").trim() || null,
         addetto: (r.addetto || "").trim(),
         state: r.state as CjItemState,
         economicState: (r.economicState as CjEconomicState | null) ?? null,

@@ -37,7 +37,7 @@ import {
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ECONOMIC_STATE_LABELS,
   isCjItemActive, economicStateLabel, economicStateDisplayLabel, isCjEconomicPresumedPaid, CJ_PRESUMED_PAID_LABEL, CJ_PRESUMED_PAID_NOTE,
-  aggregateReport, matchesCjFilters, cjJourneySearchHay,
+  aggregateReport, matchesCjFilters, cjJourneySearchHay, CJ_NO_DESTINATION_FILTER_VALUE,
   CJ_NON_MOBILE_DRIVERS, matchesCjDriverFilter, nextCjDriverFilterMode, isCjDriverFilterActive,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
   buildGettoneJourneys, buildGettoneAuditDetails, filterGettoneByDate, filterGettoneByInsertDate,
@@ -82,6 +82,8 @@ type JourneyListItem = CustomerJourney & {
   drivers: DriverSummary[];
   valore?: number;
   pdvs?: string[];
+  pdvOrigini?: string[];
+  pdvDestinazioni?: string[];
   addetti?: string[];
   states?: string[];
   gettone?: CjGettoneJourney;
@@ -562,6 +564,9 @@ export default function CustomerJourneyPage() {
   const [typeFilter, setTypeFilter] = useState<"tutti" | "privato" | "azienda">("tutti");
   // Multi-selezione negozi (Task #466): vuoto = tutti, selezioni = OR.
   const [pdvFilter, setPdvFilter] = useState<string[]>([]);
+  const [pdvOrigineFilter, setPdvOrigineFilter] = useState<string[]>([]);
+  const [pdvDestinazioneFilter, setPdvDestinazioneFilter] = useState<string[]>([]);
+  const [ragioneSocialeFilter, setRagioneSocialeFilter] = useState("");
   const [addettoFilter, setAddettoFilter] = useState<string>("tutti");
   const [stateFilter, setStateFilter] = useState<string>("tutti");
   // Filtro per driver acquistati (solo schede): per pista "any" | "con" | "senza".
@@ -883,6 +888,30 @@ export default function CustomerJourneyPage() {
     () => pdvOptions.map((p) => ({ value: p, label: p })),
     [pdvOptions],
   );
+  const pdvOrigineOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const j of journeys) for (const p of j.pdvOrigini ?? []) if (p) s.add(p);
+    for (const r of reportRows) if (r.pdvOrigine) s.add(r.pdvOrigine);
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "it"));
+  }, [journeys, reportRows]);
+  const pdvOrigineFilterOptions = useMemo(
+    () => pdvOrigineOptions.map((p) => ({ value: p, label: p })),
+    [pdvOrigineOptions],
+  );
+  const pdvDestinazioneFilterOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const j of journeys) for (const p of j.pdvDestinazioni ?? []) if (p) s.add(p);
+    for (const r of reportRows) {
+      const destination = (r.pdvDestinazione ?? "").trim();
+      s.add(destination || CJ_NO_DESTINATION_FILTER_VALUE);
+    }
+    return Array.from(s)
+      .map((value) => ({
+        value,
+        label: value === CJ_NO_DESTINATION_FILTER_VALUE ? "Senza destinazione" : value,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "it"));
+  }, [journeys, reportRows]);
   const addettoOptions = useMemo(() => {
     const s = new Set<string>();
     for (const j of journeys) for (const a of j.addetti ?? []) if (a) s.add(a);
@@ -900,8 +929,9 @@ export default function CustomerJourneyPage() {
   }, [journeys, reportRows]);
 
   const activeFilters: CjListFilters = useMemo(() => ({
-    typeFilter, pdvFilter, addettoFilter, stateFilter, search,
-  }), [typeFilter, pdvFilter, addettoFilter, stateFilter, search]);
+    typeFilter, pdvFilter, pdvOrigineFilter, pdvDestinazioneFilter,
+    ragioneSocialeFilter, addettoFilter, stateFilter, search,
+  }), [typeFilter, pdvFilter, pdvOrigineFilter, pdvDestinazioneFilter, ragioneSocialeFilter, addettoFilter, stateFilter, search]);
 
   // Lista schede: una journey espone gli array di facet (PDV/addetti/stati)
   // raccolti fra i suoi item.
@@ -912,6 +942,9 @@ export default function CustomerJourneyPage() {
   const filteredNoType = useMemo(() => journeys.filter((j) => matchesCjFilters({
     customerType: j.customerType,
     pdvs: j.pdvs ?? [],
+    pdvOrigini: j.pdvOrigini ?? [],
+    pdvDestinazioni: j.pdvDestinazioni ?? [],
+    ragioneSociale: j.ragioneSociale ?? null,
     addetti: j.addetti ?? [],
     states: j.states ?? [],
     searchHay: cjJourneySearchHay(j, journeyTitle(j)),
@@ -981,9 +1014,14 @@ export default function CustomerJourneyPage() {
   const reportFiltered = useMemo(() => reportRows.filter((r) => matchesCjFilters({
     customerType: r.customerType,
     pdvs: r.pdv ? [r.pdv] : [],
+    pdvOrigini: r.pdvOrigine ? [r.pdvOrigine] : [],
+    pdvDestinazioni: r.pdvDestinazione?.trim()
+      ? [r.pdvDestinazione.trim()]
+      : [CJ_NO_DESTINATION_FILTER_VALUE],
+    ragioneSociale: r.ragioneSociale ?? null,
     addetti: r.addetto ? [r.addetto] : [],
     states: [r.state, r.economicState].filter((x): x is CjItemState | CjEconomicState => !!x),
-    searchHay: [r.cliente, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "),
+    searchHay: [r.cliente, r.ragioneSociale, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "),
   }, activeFilters)), [reportRows, activeFilters]);
 
   const reportGroups = useMemo(() => aggregateReport(reportFiltered, (r) => {
@@ -1056,12 +1094,17 @@ export default function CustomerJourneyPage() {
 
   const hasActiveFilters =
     typeFilter !== "tutti" || pdvFilter.length > 0 ||
+    pdvOrigineFilter.length > 0 || pdvDestinazioneFilter.length > 0 ||
+    !!ragioneSocialeFilter.trim() ||
     addettoFilter !== "tutti" || stateFilter !== "tutti" || !!search.trim() ||
     !!dateFrom || !!dateTo || isCjDriverFilterActive(driverFilter);
 
   const resetFilters = useCallback(() => {
     setTypeFilter("tutti");
     setPdvFilter([]);
+    setPdvOrigineFilter([]);
+    setPdvDestinazioneFilter([]);
+    setRagioneSocialeFilter("");
     setAddettoFilter("tutti");
     setStateFilter("tutti");
     setSearch("");
@@ -1450,6 +1493,39 @@ export default function CustomerJourneyPage() {
                   searchPlaceholder="Cerca negozio..."
                   emptyText="Nessun negozio."
                   testid="select-filter-negozio"
+                />
+              </div>
+              <div className="w-full sm:w-[220px]">
+                <MultiSelectFilter
+                  values={pdvOrigineFilter}
+                  onChange={setPdvOrigineFilter}
+                  options={pdvOrigineFilterOptions}
+                  allLabel="Tutte le origini"
+                  countLabel={(n) => `${n} origini`}
+                  searchPlaceholder="Cerca PDV origine..."
+                  emptyText="Nessun PDV origine."
+                  testid="select-filter-pdv-origine"
+                />
+              </div>
+              <div className="w-full sm:w-[220px]">
+                <MultiSelectFilter
+                  values={pdvDestinazioneFilter}
+                  onChange={setPdvDestinazioneFilter}
+                  options={pdvDestinazioneFilterOptions}
+                  allLabel="Tutte le destinazioni"
+                  countLabel={(n) => `${n} destinazioni`}
+                  searchPlaceholder="Cerca PDV destinazione..."
+                  emptyText="Nessun PDV destinazione."
+                  testid="select-filter-pdv-destinazione"
+                />
+              </div>
+              <div className="w-full sm:max-w-[220px]">
+                <Input
+                  aria-label="Filtra per ragione sociale"
+                  placeholder="Ragione sociale..."
+                  value={ragioneSocialeFilter}
+                  onChange={(e) => setRagioneSocialeFilter(e.target.value)}
+                  data-testid="input-filter-ragione-sociale"
                 />
               </div>
               <Select value={addettoFilter} onValueChange={setAddettoFilter}>

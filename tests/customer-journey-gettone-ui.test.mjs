@@ -13,6 +13,7 @@ import {
   setCjTriggerDate,
   cleanupOrg,
 } from './helpers/uiTest.mjs';
+const { CJ_NO_DESTINATION_FILTER_VALUE } = await import('../shared/customerJourney.ts');
 
 // Test suite UI per l'espansione del dettaglio dell'Analisi gettoni
 // (Task #194). Protegge da regressioni l'interazione di espansione/chiusura
@@ -964,6 +965,112 @@ test('scenario 9: the gettone trigger floor is enforced for operators too', asyn
       await page.getByTestId(`row-gettone-${PRE_ADDETTO}`).count(),
       0, 'la riga PRE-trigger deve essere esclusa dal floor anche per l\'operatore',
     );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 10 (Task #648): filtri indipendenti per PDV origine/destinazione e
+// ragione sociale, applicati sia alle Schede sia al Dettaglio report.
+// ===========================================================================
+test('scenario 10: origin, destination and company filters stay independent across Schede and Reportistica', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Filter UI Test', organizationName: uniq('CJFilterUI') });
+  const browser = await launchBrowser();
+  const token = crypto.randomBytes(3).toString('hex').toUpperCase();
+  const marioOrigin = `ORIGINE MILANO ${token}`;
+  const marioDestination = `DESTINAZIONE MILANO ${token}`;
+  const luigiOrigin = `ORIGINE ROMA ${token}`;
+  const luigiDestination = `DESTINAZIONE ROMA ${token}`;
+  const marioCompany = `ALFA TELECOM ${token} SRL`;
+  let marioId;
+  let luigiId;
+  try {
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
+    marioId = await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFORIGINE').toUpperCase(),
+      nome: 'Contatto Mario',
+      customerType: 'azienda',
+      ragioneSociale: marioCompany,
+      addetto: MARIO_ADDETTO,
+      items: [
+        { driver: 'mobile', state: 'inserito', pdvOrigine: marioOrigin, pdvDestinazione: marioDestination },
+        { driver: 'energia', state: 'inserito', importo: '50.00', pdvOrigine: marioOrigin, pdvDestinazione: marioDestination },
+        { driver: 'fisso', state: 'inserito', importo: '20.00', pdvOrigine: marioOrigin, pdvDestinazione: null },
+      ],
+    });
+    luigiId = await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFDESTINAZIONE').toUpperCase(),
+      nome: 'Contatto Luigi',
+      customerType: 'azienda',
+      ragioneSociale: `BETA SERVIZI ${token} SRL`,
+      addetto: LUIGI_ADDETTO,
+      items: [
+        { driver: 'mobile', state: 'inserito', pdvOrigine: luigiOrigin, pdvDestinazione: luigiDestination },
+        { driver: 'energia', state: 'inserito', importo: '30.00', pdvOrigine: luigiOrigin, pdvDestinazione: luigiDestination },
+      ],
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/customer-journey`, { waitUntil: 'networkidle' });
+
+    // Le Schede usano il PDV origine e la ragione sociale dedicata.
+    await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByTestId(`card-journey-${luigiId}`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId('select-filter-pdv-origine').click();
+    await page.getByTestId(`option-select-filter-pdv-origine-${marioOrigin}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible' });
+    assert.equal(await page.getByTestId(`card-journey-${luigiId}`).count(), 0, 'origin filter must hide the other journey');
+
+    await page.getByTestId('button-reset-filters').click();
+    await page.getByTestId(`card-journey-${luigiId}`).waitFor({ state: 'visible' });
+    await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
+    await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible' });
+    assert.equal(await page.getByTestId(`card-journey-${luigiId}`).count(), 0, 'partial case-insensitive ragione sociale filter must hide the other journey');
+
+    // Reportistica uses the actual destination, with missing destination as
+    // an explicit option; origin is never substituted for it.
+    await page.getByTestId('button-reset-filters').click();
+    await page.getByTestId('tab-report').click();
+    await page.getByTestId('button-report-tab-dettaglio').click();
+    await page.getByTestId(`row-report-${marioDestination}`).waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId(`row-report-${luigiDestination}`).waitFor({ state: 'visible', timeout: 10000 });
+
+    await page.getByTestId('select-filter-pdv-destinazione').click();
+    await page.getByTestId(`option-select-filter-pdv-destinazione-${marioDestination}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId(`row-report-${marioDestination}`).waitFor({ state: 'visible' });
+    assert.equal(await page.getByTestId(`row-report-${marioOrigin}`).count(), 0, 'destination filter must not match an origin-only row');
+    assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0, 'destination filter must hide unrelated destinations');
+    await page.getByTestId('button-report-tab-analisi').click();
+    await page.getByTestId('button-gettone-dim-addetto').click();
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).count(), 0, 'the Analisi table must share destination filtering');
+    await page.getByTestId('button-report-tab-dettaglio').click();
+
+    await page.getByTestId('button-reset-filters').click();
+    await page.getByTestId('select-filter-pdv-destinazione').click();
+    await page.getByTestId(`option-select-filter-pdv-destinazione-${CJ_NO_DESTINATION_FILTER_VALUE}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible' });
+    assert.equal(await page.getByTestId(`row-report-${marioDestination}`).count(), 0, 'missing destination must not use the origin as a fallback');
+    assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0, 'missing destination filter must hide rows with real destinations');
+
+    await page.getByTestId('select-filter-pdv-origine').click();
+    await page.getByTestId(`option-select-filter-pdv-origine-${marioOrigin}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
+    await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible' });
+    assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0);
 
     await page.close();
     await context.close();

@@ -259,26 +259,27 @@ export async function setCjTriggerDate(pool, orgId, date) {
   );
 }
 
-// Inserisce una journey privata con N item. `items` = [{driver, state, importo?,
-// addetto?, pdv?}]; addetto/pdv di default presi dai parametri della journey.
+// Inserisce una journey con N item. `items` = [{driver, state, importo?,
+// addetto?, pdv?, pdvOrigine?, pdvDestinazione?}]; i valori per addetto/PDV
+// possono essere impostati sulla journey e sovrascritti per singolo item.
 // `openedAt` (opzionale, ISO date string o Date) imposta la data di attivazione
 // SIM (T0); default `now()`. Ritorna l'id (uuid) della journey.
 // `triggerSaleId` (opzionale) = vendita BiSuite che ha aperto la journey:
 // gli item con lo stesso `bisuiteSaleId` formano lo scontrino trigger.
 // `triggerBisuiteId` (opzionale) = id numerico BiSuite della vendita trigger:
 // alternativa a `triggerSaleId`, abbinata al `bisuiteId` degli item.
-export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, openedAt = null, dataInserimento = null, triggerSaleId = null, triggerBisuiteId = null, items = [] }) {
+export async function seedJourney(pool, orgId, { customerKey, nome, customerType = 'privato', ragioneSociale = null, addetto = null, pdv = null, pdvOrigine = null, pdvDestinazione = undefined, openedAt = null, dataInserimento = null, triggerSaleId = null, triggerBisuiteId = null, items = [] }) {
   const cj = await pool.query(
-    `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at, trigger_sale_id, trigger_bisuite_id)
-       VALUES ($1, $2, 'privato', $3, 'aperta', COALESCE($4::timestamptz, now()), $5, $6)
+    `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, ragione_sociale, status, opened_at, trigger_sale_id, trigger_bisuite_id)
+       VALUES ($1, $2, $3, $4, $5, 'aperta', COALESCE($6::timestamptz, now()), $7, $8)
      RETURNING id`,
-    [orgId, customerKey, nome, openedAt, triggerSaleId, triggerBisuiteId],
+    [orgId, customerKey, customerType, nome, ragioneSociale, openedAt, triggerSaleId, triggerBisuiteId],
   );
   const journeyId = cj.rows[0].id;
   for (const it of items) {
     // `dataInserimento` di journey come default per gli item (override per-item
     // possibile); serve al filtro a intervallo per data inserimento.
-    await addJourneyItem(pool, orgId, journeyId, { addetto, pdv, dataInserimento, ...it });
+    await addJourneyItem(pool, orgId, journeyId, { addetto, pdv, pdvOrigine, pdvDestinazione, dataInserimento, ...it });
   }
   return journeyId;
 }
@@ -303,14 +304,14 @@ export async function seedValenze(pool, orgId, { month, year, sectionId, rows, f
 // Ritorna l'id dell'item creato.
 // `bisuiteId` (opzionale) = id numerico BiSuite della vendita (per il match
 // con `triggerBisuiteId` della journey).
-export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito', dataInserimento = null, bisuiteSaleId = null, bisuiteId = null, categoria = null, descrizione = null, tipologia = null, iccid = null, cjTriggerMobile = false }) {
+export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, pdvOrigine = null, pdvDestinazione = pdv, importo = null, state = 'inserito', dataInserimento = null, bisuiteSaleId = null, bisuiteId = null, categoria = null, descrizione = null, tipologia = null, iccid = null, cjTriggerMobile = false }) {
   const r = await pool.query(
     `INSERT INTO customer_journey_items
-       (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo,
+       (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_origine, pdv_destinazione, importo,
         bisuite_sale_id, bisuite_id, categoria, descrizione, tipologia, iccid, cj_trigger_mobile)
-     VALUES ($1, $2, $3, $4, $5, COALESCE($8::timestamptz, now()), $6, $7, $9, $10, $11, $12, $13, $14, $15)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($9::timestamptz, now()), $6, $7, $8, $10, $11, $12, $13, $14, $15, $16)
      RETURNING id`,
-    [journeyId, orgId, driver, addetto, state, pdv, importo, dataInserimento, bisuiteSaleId, bisuiteId, categoria, descrizione, tipologia, iccid, cjTriggerMobile],
+    [journeyId, orgId, driver, addetto, state, pdvOrigine, pdvDestinazione, importo, dataInserimento, bisuiteSaleId, bisuiteId, categoria, descrizione, tipologia, iccid, cjTriggerMobile],
   );
   return r.rows[0].id;
 }

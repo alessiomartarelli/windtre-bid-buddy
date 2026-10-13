@@ -1,5 +1,5 @@
 import {
-  cjT0Month, gettoneForPiste, isCjItemActive, isCjMobileEligible,
+  CJ_NO_DESTINATION_FILTER_VALUE, cjT0Month, gettoneForPiste, isCjItemActive, isCjMobileEligible,
   matchesCjFilters, pisteInWindow,
   type CjGettoneJourney, type CjListFilters, type CjReportRow,
 } from "./customerJourney";
@@ -57,11 +57,17 @@ export function inCjInsertPeriod(date: string | null, from: string, to: string):
 }
 
 export function matchesDiagnosticFilters(
-  r: Pick<CjReportRow, "customerType" | "pdv" | "addetto" | "state" | "economicState" | "cliente" | "customerKey">,
+  r: Pick<CjReportRow,
+    "customerType" | "pdv" | "pdvOrigine" | "pdvDestinazione" | "ragioneSociale" |
+    "addetto" | "state" | "economicState" | "cliente" | "customerKey">,
   filters: CjListFilters,
 ) {
+  const destination = (r.pdvDestinazione ?? "").trim();
   return matchesCjFilters({
     customerType: r.customerType, pdvs: r.pdv ? [r.pdv] : [],
+    pdvOrigini: r.pdvOrigine ? [r.pdvOrigine] : [],
+    pdvDestinazioni: [destination || CJ_NO_DESTINATION_FILTER_VALUE],
+    ragioneSociale: r.ragioneSociale ?? null,
     addetti: r.addetto ? [r.addetto] : [],
     states: [r.state, r.economicState].filter((s): s is NonNullable<typeof s> => !!s),
     searchHay: [r.cliente, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "),
@@ -86,7 +92,16 @@ export function createCjMobileClassifier(
   return (source: CjMobileSource): CjSimDetail | null => {
     if (!inCjInsertPeriod(source.insertedAt, from, to)) return null;
     const row = source.articleId == null ? undefined : linked.get(`${source.saleId}:${source.articleId}`);
-    const facet = row ?? { ...source, state: "inserito" as const, economicState: source.cancelled ? "annullato" as const : null };
+    const facet = row ?? {
+      ...source,
+      // For unlinked BiSuite sales the source PDV is the sale's origin. There
+      // is no Customer Journey destination, so never copy origin into it.
+      pdvOrigine: source.pdv,
+      pdvDestinazione: null,
+      ragioneSociale: null,
+      state: "inserito" as const,
+      economicState: source.cancelled ? "annullato" as const : null,
+    };
     if (!matchesDiagnosticFilters(facet, filters)) return null;
     let reason: CjSimReason;
     if (source.cancelled) reason = "cancelled";
