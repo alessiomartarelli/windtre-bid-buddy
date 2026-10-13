@@ -420,18 +420,19 @@ test('duplicates are deduplicated per activation association, multiple distinct 
   assert.equal(result([...items].reverse()).extraStimato, 40);
 });
 
-test('both members must be active and dated T0–T6, including annulled/KO/reversed and missing dates', () => {
+test('both members must be active and dated T0–T5, including annulled/KO/reversed and missing dates', () => {
   const initial = sim(1, 'sale-a', A);
   for (const target of [0, 1]) for (const over of [
     { state: 'ko' }, { economicState: 'annullato' }, { economicState: 'stornato' },
     { state: 'annullato' }, { dataInserimento: null },
-    { dataInserimento: '2027-02-01T00:00:00.000Z' },
+    { dataInserimento: '2027-01-01T00:00:00.000Z' },
     { dataInserimento: '2026-06-01T00:00:00.000Z' },
   ]) {
     const later = pair(); later[target] = { ...later[target], ...over };
     assert.equal(result([initial, ...later]).extraStimato, 0, JSON.stringify({ target, over }));
   }
-  assert.equal(result([initial, ...pair(B, 'sale-b', 10, '2027-01-31T00:00:00.000Z')]).extraStimato, 20);
+  assert.equal(result([initial, ...pair(B, 'sale-b', 10, '2026-12-31T00:00:00.000Z')]).extraStimato, 20);
+  assert.equal(result([initial, ...pair(B, 'sale-b', 10, '2027-01-01T00:00:00.000Z')]).extraStimato, 0);
 });
 
 test('estimated, explicit, presumed and manually confirmed amounts remain distinct for both members', () => {

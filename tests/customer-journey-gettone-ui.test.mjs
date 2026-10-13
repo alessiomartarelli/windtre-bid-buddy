@@ -252,7 +252,7 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
     const estimatedText = await estimatedDialog.innerText();
     assert.ok(estimatedText.includes('Scaglioni del gettone base'));
     assert.ok(estimatedText.includes('Contratti ammissibili'));
-    assert.ok(estimatedText.includes('T0–T6'));
+    assert.ok(estimatedText.includes('T0–T5'));
     await estimatedDialog.getByTestId(`button-gettone-audit-open-${jMario}`).click();
     await page.getByTestId('button-back').waitFor({ state: 'visible', timeout: 10000 });
     await page.getByTestId('text-detail-title').waitFor({ state: 'visible', timeout: 15000 });

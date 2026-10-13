@@ -32,7 +32,7 @@ export const CJ_SIM_REASONS = {
   unlinked: "Articolo non agganciato alla CJ",
   negative: "Esito economico annullato / stornato",
   ko: "Stato operativo KO",
-  window: "Fuori finestra T0–T6",
+  window: "Fuori finestra T0–T5",
   cohort: "Cliente fuori dal periodo di acquisizione selezionato",
 } as const;
 export type CjSimReason = keyof typeof CJ_SIM_REASONS;

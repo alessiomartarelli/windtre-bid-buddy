@@ -73,8 +73,8 @@ test("inactive mobile remains in denominator, ineligible data/Tourist SIM cannot
   assert.equal(buildCjCohortModel([{ ...mobile, tipologia: "SIM DATI" }]).customers.length, 0);
   assert.equal(buildCjCohortModel([{ ...mobile, descrizione: "Tourist" }]).customers.length, 0);
 });
-test("solar T6 inclusive; sales beyond it excluded and opening trigger applied", () => {
-  const m = model(row("f", "fisso", "2027-01-31"), row("e", "energia", "2027-02-01"));
+test("solar T5 inclusive; sales in T6 excluded and opening trigger applied", () => {
+  const m = model(row("f", "fisso", "2026-12-31"), row("e", "energia", "2027-01-01"));
   assert.equal(m.events.length, 1);
   assert.equal(m.events[0].generated, 20);
   assert.equal(buildCjCohortModel([mobile], "2026-08-01").customers.length, 0);

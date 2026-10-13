@@ -35,10 +35,10 @@ test('CJ eligibility: BiSuite data, Tourist and alarm SIM signals are excluded w
   ]) assert.equal(isCjMobileEligible(a), true, JSON.stringify(a));
 });
 
-test('solar window includes days before the SIM in T0, all T6, excludes previous month and T7', () => {
+test('solar window includes days before the SIM in T0 through T5, excludes previous month and T6', () => {
   const month = monthOfIso(t0);
-  for (const d of ['2026-07-01', '2026-07-05', '2027-01-31T23:59:59.999Z']) assert.equal(pisteInWindow(d, month), true);
-  for (const d of ['2026-06-30T23:59:59.999Z', '2027-02-01T00:00:00.000Z']) assert.equal(pisteInWindow(d, month), false);
+  for (const d of ['2026-07-01', '2026-07-05', '2026-12-31T23:59:59.999Z']) assert.equal(pisteInWindow(d, month), true);
+  for (const d of ['2026-06-30T23:59:59.999Z', '2027-01-01T00:00:00.000Z']) assert.equal(pisteInWindow(d, month), false);
   // Existing policy for unlocatable dates is unchanged.
   assert.equal(pisteInWindow(null, month), true);
   assert.equal(pisteInWindow('bad', month), true);
@@ -61,7 +61,7 @@ function checkParity(items, openedAt = t0) {
   return { validity, gettone, summary };
 }
 
-test('card, summaries, confirmed gettone, SIM volumes and historical items share T0–T6 and eligibility', () => {
+test('card, summaries, confirmed gettone, SIM volumes and historical items share T0–T5 and eligibility', () => {
   const items = [
     item('excluded', 'mobile', '2026-07-01', article('TIED IVA', 'VOCE IVA', 'Professional Data 100')),
     item('tourist', 'mobile', '2026-07-02', article('ALTRE GA', 'GA TURISTICHE', 'Tourist')),
@@ -69,7 +69,8 @@ test('card, summaries, confirmed gettone, SIM volumes and historical items share
     item('sim', 'mobile', t0, article('TIED CF', 'VOCE EASYPAY', 'Voce 100GB')),
     item('previous', 'fisso', '2026-06-30T23:59:59.999Z'),
     item('beforeSim', 'fisso', '2026-07-05'),
-    item('t6', 'energia', '2027-01-31T23:59:59.999Z'),
+    item('t5', 'energia', '2026-12-31T23:59:59.999Z'),
+    item('t6', 'energia', '2027-01-01T00:00:00.000Z'),
     item('t7', 'telefono', '2027-02-01T00:00:00.000Z'),
     item('lateSim', 'mobile', '2027-02-01', article('UNTIED', 'VOCE', 'Voce')),
     item('protetti', 'protetti', '2026-08-01', article('ALLARMI', 'ALLARMI', 'Windtre Protetti')),
@@ -85,6 +86,7 @@ test('card, summaries, confirmed gettone, SIM volumes and historical items share
   assert.equal(validity.get('sim').kind, 'attivante');
   assert.equal(validity.get('beforeSim').counts, true);
   assert.equal(validity.get('previous').kind, 'fuori_periodo');
+  assert.equal(validity.get('t6').kind, 'fuori_periodo');
   assert.equal(validity.get('t7').kind, 'smartphone_escluso');
   assert.match(validity.get('t7').reason, /non SMARTPHONE/);
   assert.equal(summary.find(d => d.driver === 'telefono').activated, false);
@@ -94,6 +96,21 @@ test('card, summaries, confirmed gettone, SIM volumes and historical items share
   assert.deepEqual(exported.find(row => row[1] === 'Smartphone').slice(2), ['Attivabile', 0]);
   assert.equal(activeDriverCount({ drivers: summary }), 4, 'list export: SIM plus the same three valid drivers');
   assert.equal(computeTimeline({ openedAt: t0, triggerSaleId: 'excluded' }, items).t0ItemId, 'sim');
+});
+
+test('a subsequent T6 SIM does not restart the original customer window', () => {
+  const items = [
+    item('initial-sim', 'mobile', t0, article('TIED CF', 'VOCE EASYPAY', 'Voce 100GB')),
+    item('later-sim', 'mobile', '2027-01-01', article('TIED CF', 'VOCE EASYPAY', 'Voce 100GB')),
+    item('t5', 'fisso', '2026-12-31'),
+    item('t6', 'energia', '2027-01-01'),
+  ];
+  const { validity, gettone } = checkParity(items);
+  assert.equal(gettone.length, 1, 'later SIMs remain in the same customer journey');
+  assert.equal(gettone[0].simAttive, 1, 'the T6 SIM does not become a new T0');
+  assert.equal(gettone[0].pisteAttive, 1, 'only the T5 contract contributes');
+  assert.equal(validity.get('t5').counts, true);
+  assert.equal(validity.get('t6').kind, 'fuori_periodo');
 });
 
 test('excluded SIMs cannot form a cohort or become the T0 fallback; missing event dates keep existing policy', () => {

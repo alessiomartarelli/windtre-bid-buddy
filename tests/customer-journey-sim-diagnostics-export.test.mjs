@@ -63,20 +63,20 @@ test("actual XLSX contains summary, exclusive exclusions, articles, contracts an
   assert.equal(summary.Avvertenza, CJ_DIAGNOSTICS_PAYMENT_WARNING);
 });
 
-test("period, subsequent, cumulative T0–T6 and missing-source discrepancy survive XLSX round trip", () => {
+test("period, subsequent, cumulative T0–T5 and missing-source discrepancy survive XLSX round trip", () => {
   const rows = [row(1), row(2, { insertedAt: "2026-08-01", eventDate: "2026-08-01" }),
-    row(3, { insertedAt: "2027-01-31", eventDate: "2027-01-31" }),
-    row(4, { insertedAt: "2027-02-01", eventDate: "2027-02-01" }),
+    row(3, { insertedAt: "2026-12-31", eventDate: "2026-12-31" }),
+    row(4, { insertedAt: "2027-01-01", eventDate: "2027-01-01" }),
     row(5, { insertedAt: null }), row(6, { insertedAt: "2026-06-30", eventDate: "2026-07-01" })];
   const { summary, sheets } = exported([], rows, filters, from, to, buildGettoneJourneys([row(1)]));
   assert.equal(summary["SIM valide nel periodo"], 1);
   assert.equal(summary["SIM successive (dopo il «al»)"], 2);
   assert.equal(summary["Altre SIM cumulative (precedenti o senza data)"], 2);
-  assert.equal(summary["SIM valide cumulative T0–T6"], 5);
+  assert.equal(summary["SIM valide cumulative T0–T5"], 5);
   assert.equal(summary["Discrepanza SIM CJ nel periodo − articoli ammessi BiSuite"], 1);
   assert.deepEqual(sheets["Contratti SIM CJ"].map(r => r["Periodo inserimento"]),
     ["Nel periodo", "Successiva", "Successiva", "Precedente o senza data", "Precedente o senza data"]);
-  assert.ok(!sheets["Contratti SIM CJ"].some(r => r.Contratto === "0004"), "T7 is outside the exported CJ perimeter");
+  assert.ok(!sheets["Contratti SIM CJ"].some(r => r.Contratto === "0004"), "T6 is outside the exported CJ perimeter");
 });
 
 test("DRMS, manual override/reset and confirmed checkbox are separate from presumed smartphone gettone", () => {

@@ -11,7 +11,7 @@ export function isCjJourneyQualified(journey: {
 /**
  * Date-filter fallback for exited clients only. Active clients keep the existing
  * gettone insertion-date derivation; inactive clients use their oldest eligible
- * SIM insertion date in the original T0–T6 window, never openedAt as a date.
+ * SIM insertion date in the original T0–T5 window, never openedAt as a date.
  */
 export function cjUnqualifiedInsertDates(rows: readonly CjReportRow[]): Map<string, string | null> {
   const grouped = new Map<string, CjReportRow[]>();

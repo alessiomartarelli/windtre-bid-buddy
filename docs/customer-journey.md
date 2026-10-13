@@ -226,7 +226,7 @@ Altri dispositivi e smartphone non associati restano nello storico con motivo.
 Una **vendita successiva** con nuova SIM ammissibile e smartphone nella
 stessa vendita, con ICCID identico nella coppia, aggiunge **20 €**. Può avere
 ICCID diverso dalla SIM iniziale. Entrambi devono essere attivi e datati
-nella finestra T0–T6; SIM sola, telefono solo, KO, annullo, storno, fuori
+nella finestra T0–T5; SIM sola, telefono solo, KO, annullo, storno, fuori
 finestra e associazioni ambigue non generano extra. Duplicati dello stesso
 contratto/associazione non moltiplicano il premio. Più coppie verificabili
 con ICCID distinti producono più extra, senza nuove CJ o nuove piste.

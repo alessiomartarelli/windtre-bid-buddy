@@ -206,7 +206,7 @@ test('scheda cliente: vendita trigger senza SIM (triggerBisuiteId) → T0 resta 
   await runDirtyTriggerScenario({ via: 'bisuiteId' });
 });
 
-test('scheda e analisi: stesso mese prima della SIM, T6 incluso, T7 ed escluse non contribuiscono', async () => {
+test('scheda e analisi: stesso mese prima della SIM, T5 incluso, T6 e successive non contribuiscono', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_window_ui', fullName: 'CJ Window UI' });
   const browser = await launchBrowser();
@@ -223,7 +223,8 @@ test('scheda e analisi: stesso mese prima della SIM, T6 incluso, T7 ed escluse n
     const excluded = await insert('mobile', '2026-07-01', 'Professional Data 100', { categoria: 'TIED IVA', bisuiteSaleId: saleId });
     const sim = await insert('mobile', '2026-07-20T10:00:00Z', 'Voce 100 GB', { categoria: 'TIED CF', bisuiteSaleId: saleId });
     const before = await insert('fisso', '2026-07-05', 'Superfibra');
-    const t6 = await insert('energia', '2027-01-31T23:59:59.999Z', 'Luce');
+    const t5 = await insert('energia', '2026-12-31T23:59:59.999Z', 'Luce');
+    const t6 = await insert('energia', '2027-01-01T00:00:00Z', 'Luce fuori finestra');
     const t7 = await insert('telefono', '2027-02-01T00:00:00Z', 'Smartphone storico');
     await pool.query(`UPDATE customer_journey_items SET economic_state='pagato' WHERE journey_id=$1`, [journeyId]);
     const context = await newAuthedContext(browser, session);
@@ -233,8 +234,8 @@ test('scheda e analisi: stesso mese prima della SIM, T6 incluso, T7 ed escluse n
     await page.getByTestId('card-timeline').waitFor({ state: 'visible' });
     assert.equal((await page.getByTestId(`timeline-validity-${sim}`).innerText()).trim(), 'Attivante');
     assert.equal((await page.getByTestId(`timeline-validity-${excluded}`).innerText()).trim(), 'SIM esclusa');
-    for (const id of [before, t6]) assert.equal((await page.getByTestId(`timeline-validity-${id}`).innerText()).trim(), 'Conta');
-    assert.equal((await page.getByTestId(`timeline-validity-${t7}`).innerText()).trim(), 'Non conta');
+    for (const id of [before, t5]) assert.equal((await page.getByTestId(`timeline-validity-${id}`).innerText()).trim(), 'Conta');
+    for (const id of [t6, t7]) assert.equal((await page.getByTestId(`timeline-validity-${id}`).innerText()).trim(), 'Non conta');
     assert.equal(await page.getByTestId('driver-fisso').getAttribute('data-status'), 'valido');
     assert.equal(await page.getByTestId('driver-energia').getAttribute('data-status'), 'valido');
     assert.notEqual(await page.getByTestId('driver-telefono').getAttribute('data-status'), 'valido');

@@ -92,7 +92,7 @@ vuota (`empty`); (2) driver sconosciuto ⇒ fallback colore grigio
 (`triggerSaleId`/`triggerBisuiteId`), fallback prima attivazione mobile,
 fallback primo evento in assoluto, `openedAt` esplicito; (4) stati
 ko/stornato/annullato attenuati (`isFadedState`); (5) asse mesi esteso
-oltre T0–T6 (eventi dopo T6 e prima di T0) + label mese a cavallo d'anno;
+oltre T0–T5 (eventi dopo T5 e prima di T0) + label mese a cavallo d'anno;
 (6) raggruppamento per PDV (destinazione→origine→N/D) ordinato per
 conteggio; (7) `itemEventDate` (attivazione→inserimento→null, data
 malformata ⇒ null). Step di validation `cj-timeline-tests`

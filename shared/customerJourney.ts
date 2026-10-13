@@ -89,7 +89,7 @@ export interface CjReportRow {
   openedAt: string | null;
   // Data evento dell'item (data attivazione, fallback data inserimento), ISO
   // string o null. Serve a stabilire se il contratto rientra nella finestra del
-  // gettone (mesi solari T0–T6 inclusi).
+  // gettone (mesi solari T0–T5 inclusi).
   eventDate: string | null;
   // Data di INSERIMENTO dell'item (`dataInserimento`), ISO string o null.
   // Distinta da `eventDate`/`openedAt` (che usano l'attivazione): l'analisi
@@ -282,7 +282,7 @@ export type CjReconcileResult = {
 
 export const CJ_T0_SHIFT_NOTIFICATION_STATUS = "cj_t0_shift" as const;
 export const CJ_GETTONE_TABLE: number[] = [0, 20, 30, 40, 100, 120];
-export const CJ_WINDOW_MONTHS = 6;
+export const CJ_WINDOW_MONTHS = 5;
 
 // I 5 driver NON-mobile che concorrono al gettone (la mobile è il trigger,
 // non conta come pista cross-sell).
@@ -362,8 +362,8 @@ export function monthOfIso(iso: string | null | undefined): number | null {
 }
 
 // Una pista cross-sell rientra nella finestra del gettone se il suo contratto è
-// nel mese solare T0 o nei sei mesi successivi inclusi. I contratti fuori
-// T0–T6 NON contano. In assenza di T0 o di data evento (dato non
+// nel mese solare T0 o nei cinque mesi successivi inclusi. I contratti fuori
+// T0–T5 NON contano. In assenza di T0 o di data evento (dato non
 // collocabile) non si penalizza: la pista conta comunque.
 export function pisteInWindow(eventDate: string | null, t0Month: number | null): boolean {
   if (t0Month == null) return true;
@@ -506,7 +506,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     .filter(([, e]) => e.simAttive >= 1)
     .map(([journeyId, e]) => {
       // T0 = mese di apertura journey; fallback alla prima SIM mobile attiva,
-      // poi al primo evento in assoluto. Solo i mesi solari T0–T6 inclusi
+      // poi al primo evento in assoluto. Solo i mesi solari T0–T5 inclusi
       // contano come pista cross-sell.
       const t0Month = t0ByJourney.get(journeyId) ?? null;
       const activeDrivers = new Set<CjDriver>();
@@ -630,7 +630,7 @@ export function buildGettoneAuditDetails(
         contractsByTrack[row.driver] = (contractsByTrack[row.driver] ?? 0) + 1;
         tracks.add(row.driver);
       }
-      // Include all mobile SIMs in T0–T6, all admitted base contracts and all
+      // Include all mobile SIMs in T0–T5, all admitted base contracts and all
       // phones (including rejected ones, whose reason is the point of detail).
       if (row.driver !== "telefono" && row.driver !== "mobile" && !eligible) continue;
       if (row.driver === "mobile" && !eligible && !isCjMobileEligible(row)) continue;
@@ -974,8 +974,8 @@ function cjSummaryItemInScope(it: CjSummaryItem, t0Month: number | null): boolea
  * - se `myAddetti` è valorizzato (operatore) e l'addetto dell'item NON è fra i
  *   miei ⇒ candidato `altrui`;
  * - altrimenti se il contratto è nel periodo della journey (mese >= T0, stessa
- *   regola del gettone `pisteInWindow`, fino a T6 incluso) ⇒ candidato `periodo`;
- * - altrimenti (fuori T0–T6) ⇒ candidato `precedente` (nome storico della fase).
+ *   regola del gettone `pisteInWindow`, fino a T5 incluso) ⇒ candidato `periodo`;
+ * - altrimenti (fuori T0–T5) ⇒ candidato `precedente` (nome storico della fase).
  * Precedenza per il singolo driver (una sola pastiglia): periodo > altrui >
  * precedente — se ho attivato io qualcosa nel periodo vince il verde.
  * `myAddetti == null` (admin/super_admin) ⇒ nessun concetto di "altrui".
@@ -1165,7 +1165,7 @@ export const CJ_PHONE_REASONS: Record<CjPhoneKind, string> = {
   sim_non_abbinata: "Nessuna SIM ammissibile con lo stesso ICCID; extra solo per vendite successive.",
   abbinamento_ambiguo: "Più attivazioni distinte con lo stesso ICCID: abbinamento ambiguo.",
   stato_non_valido: "Smartphone o SIM abbinata KO, annullato o stornato.",
-  fuori_periodo: "Smartphone o SIM abbinata fuori dalla finestra T0–T6, oppure senza data verificabile.",
+  fuori_periodo: "Smartphone o SIM abbinata fuori dalla finestra T0–T5, oppure senza data verificabile.",
   duplicato: "Associazione SIM–smartphone già conteggiata: nessun premio duplicato.",
 };
 export interface CjPhoneEligibility {

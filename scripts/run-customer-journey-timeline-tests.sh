@@ -3,7 +3,7 @@
 # (tests/customer-journey-timeline.test.mjs).
 #
 # Logica pura del tracciamento temporale della scheda cliente
-# (`client/src/lib/customerJourneyTimeline.ts`): asse mesi T0–T6, rilevamento
+# (`client/src/lib/customerJourneyTimeline.ts`): asse mesi T0–T5, rilevamento
 # T0, stati attenuati, raggruppamento per PDV. Sono funzioni pure: NON serve
 # né il dev server né il DB, il modulo TS viene caricato via loader `tsx`.
 

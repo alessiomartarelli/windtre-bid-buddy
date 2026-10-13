@@ -93,12 +93,12 @@ export default function SimDiagnostics({ filters, from, to, onOpenJourney }: {
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
           Clienti selezionati per prima SIM valida inserita nel periodo. I volumi cumulativi e gli esiti riguardano
-          i loro articoli autorizzati nella finestra T0–T6, con gli stessi filtri del report.
+          i loro articoli autorizzati nella finestra T0–T5, con gli stessi filtri del report.
         </p>
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
           {[
             ["Clienti distinti", d.clients], ["SIM valide nel periodo", d.period],
-            ["SIM successive (dopo il «al»)", d.later], ["SIM valide cumulative T0–T6", d.cumulative],
+            ["SIM successive (dopo il «al»)", d.later], ["SIM valide cumulative T0–T5", d.cumulative],
           ].map(([label, value]) => <div key={label} className="rounded-md bg-muted/40 p-3">
             <dt className="text-xs text-muted-foreground">{label}</dt><dd className="font-semibold tabular-nums">{value}</dd>
           </div>)}
@@ -119,7 +119,7 @@ export default function SimDiagnostics({ filters, from, to, onOpenJourney }: {
         </div>
         <p className="text-xs text-muted-foreground">Sono calcoli sui contratti, non una prova di bonifico o di liquidazione effettiva del gettone CJ.</p>
         <div>
-          <h3 className="text-sm font-semibold">Esiti DRMS delle SIM dei clienti selezionati (T0–T6)</h3>
+          <h3 className="text-sm font-semibold">Esiti DRMS delle SIM dei clienti selezionati (T0–T5)</h3>
           <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
             {[
               ["Pagato DRMS", d.outcomes.drmsPaid], ["Riaccreditato DRMS", d.outcomes.drmsRecredited],

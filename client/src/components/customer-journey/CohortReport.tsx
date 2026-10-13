@@ -272,7 +272,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
   </CardContent></Card>;
   if (!data || model.customers.length === 0) return <Card><CardContent className="py-12 text-center">
     <CalendarDays className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><h3 className="font-semibold">Nessun gruppo clienti disponibile</h3>
-    <p className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">Non risultano journey con SIM mobile eleggibile nel periodo T0–T6 {triggerDate ? `dal mese ${triggerDate.slice(0, 7)}` : ""}.</p>
+    <p className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">Non risultano journey con SIM mobile eleggibile nel periodo T0–T5 {triggerDate ? `dal mese ${triggerDate.slice(0, 7)}` : ""}.</p>
     <Button variant="outline" className="mt-4" onClick={() => query.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Aggiorna</Button>
   </CardContent></Card>;
 
@@ -290,7 +290,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     <section className="overflow-hidden rounded-xl border border-border bg-gradient-to-br from-primary/10 via-card to-card p-4 sm:p-6">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div className="max-w-3xl">
-          <div className="mb-2 flex flex-wrap items-center gap-2"><Badge variant="outline" className="border-primary/30 bg-primary/5">STORICO COMMERCIALE</Badge><span className="text-xs text-muted-foreground">Confronto mensile · finestra solare T0–T6</span></div>
+          <div className="mb-2 flex flex-wrap items-center gap-2"><Badge variant="outline" className="border-primary/30 bg-primary/5">STORICO COMMERCIALE</Badge><span className="text-xs text-muted-foreground">Confronto mensile · finestra solare T0–T5</span></div>
           <h2 className="text-2xl font-semibold tracking-tight">Evoluzione clienti</h2>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -348,7 +348,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       <h3 className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-200"><AlertTriangle className="h-4 w-4" />Metodo, qualità e perimetro dello storico</h3>
       <ul className="mt-2 grid gap-1.5 text-xs leading-relaxed text-muted-foreground sm:grid-cols-2">
         <li>Gli stock commerciali sono ricalcolati sugli stati validi oggi, non sono fotografie storiche di chiusura mensile; il denominatore include journey inattive ma eleggibili.</li>
-        <li>La finestra commerciale è solare T0–T6. Le competenze DRMS usano il mese di competenza, mai la data di caricamento.</li>
+        <li>La finestra commerciale è solare T0–T5. Le competenze DRMS usano il mese di competenza, mai la data di caricamento.</li>
         <li>Una perdita mensile usa solo la competenza DRMS o una decisione manuale esplicita. Date non ricostruibili restano separate; mai dedotte da data di aggiornamento.</li>
         <li>Per la progressione, il mese di osservazione e il filtro venditore evento non cambiano il gruppo clienti né la sequenza delle vendite.</li>
         <li>Una pista ripetuta genera zero bonus marginale. Gli euro esposti non sono commissioni individuali.</li>

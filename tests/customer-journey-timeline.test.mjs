@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 //   - rilevamento T0: trigger BiSuite, fallback primo mobile, fallback primo
 //     evento in assoluto;
 //   - stati ko/stornato/annullato attenuati;
-//   - asse mesi esteso quando un evento cade fuori dalla finestra T0–T6;
+//   - asse mesi esteso quando un evento cade fuori dalla finestra T0–T5;
 //   - raggruppamento per PDV (destinazione => origine => N/D).
 
 const {
@@ -30,8 +30,8 @@ const {
   computeItemValidity,
   CJ_VALIDITY_LABELS,
   CJ_VALIDITY_REASONS,
-  cjT6Deadline,
-  cjDaysToT6,
+  cjT5Deadline,
+  cjDaysToT5,
   cjScadenzaSortValue,
   cjScadenzaInfo,
   cjOpenedFromTriggerDate,
@@ -228,21 +228,21 @@ test('scenario 4: ko/stornato/annullato are faded states', () => {
 });
 
 // ===========================================================================
-// SCENARIO 5: asse mesi esteso oltre la finestra T0–T6.
+// SCENARIO 5: asse mesi esteso oltre la finestra T0–T5.
 // ===========================================================================
-test('scenario 5: month axis spans at least T0..T6', () => {
-  // Un solo evento (T0): l'asse copre comunque T0..T6 => 7 colonne.
+test('scenario 5: month axis spans at least T0..T5', () => {
+  // Un solo evento (T0): l'asse copre comunque T0..T5 => 6 colonne.
   const items = [
     item({ id: 'mob', driver: 'mobile', dataAttivazione: '2026-07-01T00:00:00.000Z' }),
   ];
   const model = computeTimeline(journey(), items);
-  assert.equal(model.months.length, 7, 'default axis is T0..T6 (7 months)');
+  assert.equal(model.months.length, 6, 'default axis is T0..T5 (6 months)');
   assert.equal(model.months[0], model.t0mi, 'axis starts at T0');
-  assert.equal(model.months[6], model.t6mi, 'axis ends at T6');
+  assert.equal(model.months[5], model.t5mi, 'axis ends at T5');
 });
 
-test('scenario 5b: axis extends when an event falls after T6', () => {
-  // Mobile a luglio 2026 (T0); un evento a marzo 2027 = T8 (oltre T6).
+test('scenario 5b: axis extends when an event falls after T5', () => {
+  // Mobile a luglio 2026 (T0); un evento a marzo 2027 = T8 (oltre T5).
   const items = [
     item({ id: 'mob', driver: 'mobile', dataAttivazione: '2026-07-01T00:00:00.000Z' }),
     item({ id: 'late', driver: 'fisso', dataAttivazione: '2027-03-01T00:00:00.000Z' }),
@@ -447,91 +447,91 @@ test('scenario 8c: CJ_VALIDITY_LABELS/REASONS coprono tutti i kind', () => {
 });
 
 // ===========================================================================
-// Scadenza T6 (Task #232): cjT6Deadline / cjDaysToT6 / cjScadenzaSortValue.
-// La finestra cross-sell va da T0 (mese di apertura) a T6 incluso; la scadenza
-// è l'ULTIMO giorno del mese di T6. Calcoli in UTC.
+// Scadenza T5: cjT5Deadline / cjDaysToT5 / cjScadenzaSortValue.
+// La finestra cross-sell va da T0 (mese di apertura) a T5 incluso; la scadenza
+// è l'ULTIMO giorno del mese di T5. Calcoli in UTC.
 // ===========================================================================
-test('cjT6Deadline: ultimo giorno del mese di T0+6 (UTC)', () => {
-  // T0 = luglio 2026 => T6 = gennaio 2027 => scadenza 31/01/2027.
-  const dl = cjT6Deadline('2026-07-15T10:00:00.000Z');
-  assert.equal(dl.getUTCFullYear(), 2027);
-  assert.equal(dl.getUTCMonth(), 0, 'gennaio');
-  assert.equal(dl.getUTCDate(), 31, 'ultimo giorno di gennaio');
+test('cjT5Deadline: ultimo giorno del mese di T0+5 (UTC)', () => {
+  // T0 = luglio 2026 => T5 = dicembre 2026 => scadenza 31/12/2026.
+  const dl = cjT5Deadline('2026-07-15T10:00:00.000Z');
+  assert.equal(dl.getUTCFullYear(), 2026);
+  assert.equal(dl.getUTCMonth(), 11, 'dicembre');
+  assert.equal(dl.getUTCDate(), 31, 'ultimo giorno di dicembre');
 });
 
-test('cjT6Deadline: gestisce il mese a 30 giorni e l anno bisestile', () => {
-  // T0 = agosto 2027 => T6 = febbraio 2028 (bisestile) => 29/02/2028.
-  const dl = cjT6Deadline('2027-08-01T00:00:00.000Z');
+test('cjT5Deadline: gestisce il mese a 30 giorni e l anno bisestile', () => {
+  // T0 = settembre 2027 => T5 = febbraio 2028 (bisestile) => 29/02/2028.
+  const dl = cjT5Deadline('2027-09-01T00:00:00.000Z');
   assert.equal(dl.getUTCMonth(), 1, 'febbraio');
   assert.equal(dl.getUTCDate(), 29, 'febbraio 2028 bisestile');
 });
 
-test('cjT6Deadline: null senza data di apertura', () => {
-  assert.equal(cjT6Deadline(null), null);
-  assert.equal(cjT6Deadline(undefined), null);
-  assert.equal(cjT6Deadline(''), null);
+test('cjT5Deadline: null senza data di apertura', () => {
+  assert.equal(cjT5Deadline(null), null);
+  assert.equal(cjT5Deadline(undefined), null);
+  assert.equal(cjT5Deadline(''), null);
 });
 
-test('cjDaysToT6: positivo prima, 0 il giorno, negativo dopo la scadenza', () => {
-  // T0 luglio 2026 => scadenza 31/01/2027 (mese di T6). Conteggio in giorni di
-  // CALENDARIO: dal 21/01 al 31/01 sono 10 giorni.
-  const before = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-01-21T00:00:00.000Z'));
-  assert.equal(before, 10, '10 giorni di calendario dal 21/01 al 31/01');
-  const sameDay = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-01-31T00:00:00.000Z'));
+test('cjDaysToT5: positivo prima, 0 il giorno, negativo dopo la scadenza', () => {
+  // T0 luglio 2026 => scadenza 31/12/2026 (mese di T5). Conteggio in giorni di
+  // CALENDARIO: dal 21/12 al 31/12 sono 10 giorni.
+  const before = cjDaysToT5('2026-07-15T00:00:00.000Z', new Date('2026-12-21T00:00:00.000Z'));
+  assert.equal(before, 10, '10 giorni di calendario dal 21/12 al 31/12');
+  const sameDay = cjDaysToT5('2026-07-15T00:00:00.000Z', new Date('2026-12-31T00:00:00.000Z'));
   assert.equal(sameDay, 0, 'il giorno della scadenza => "Scade oggi"');
-  const after = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-02-05T00:00:00.000Z'));
+  const after = cjDaysToT5('2026-07-15T00:00:00.000Z', new Date('2027-01-05T00:00:00.000Z'));
   assert.ok(after < 0, 'scaduta => negativo');
 });
 
-// Regressione Task #233: la scadenza T6 è ancorata alle 23:59:59.999 UTC ma va
-// VISUALIZZATA come l'ultimo giorno del mese di T6 a prescindere dal fuso. Una
-// journey aperta a giugno deve dare scadenza 31 dicembre (non 1 gennaio) e il
+// La scadenza T5 è ancorata alle 23:59:59.999 UTC ma va VISUALIZZATA come
+// l'ultimo giorno del mese di T5 a prescindere dal fuso. Una journey aperta a
+// giugno deve dare scadenza 30 novembre (non 1 dicembre) e il
 // conteggio giorni non deve guadagnare un giorno extra per l'orario UTC.
-test('Task #233: journey aperta a giugno => scadenza 31/12 (no roll a 01/01)', () => {
+test('journey aperta a giugno => scadenza 30/11 (no roll a 01/12)', () => {
   // Esempio di riferimento: PATRIZIO LEONI, aperta il 29/06/2026.
-  const dl = cjT6Deadline('2026-06-29T08:00:00.000Z');
+  const dl = cjT5Deadline('2026-06-29T08:00:00.000Z');
   assert.equal(dl.getUTCFullYear(), 2026);
-  assert.equal(dl.getUTCMonth(), 11, 'dicembre (mese di T6)');
-  assert.equal(dl.getUTCDate(), 31, 'ultimo giorno di dicembre');
-  // Formattazione UTC-stable: NON deve rotolare a 01/01/2027 nemmeno con un fuso
+  assert.equal(dl.getUTCMonth(), 10, 'novembre (mese di T5)');
+  assert.equal(dl.getUTCDate(), 30, 'ultimo giorno di novembre');
+  // Formattazione UTC-stable: NON deve rotolare a 01/12/2026 nemmeno con un fuso
   // est di UTC (qui forziamo Europe/Rome via timeZone esplicito).
   assert.equal(
     dl.toLocaleDateString('it-IT', { timeZone: 'UTC' }),
-    '31/12/2026',
-    'la scadenza T6 mostrata è 31/12/2026',
+    '30/11/2026',
+    'la scadenza T5 mostrata è 30/11/2026',
   );
   // ...mentre la formattazione SBAGLIATA (locale, senza timeZone UTC) in un fuso
-  // est di UTC produrrebbe il bug 01/01/2027.
+  // est di UTC produrrebbe il bug 01/12/2026.
   assert.equal(
     dl.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }),
-    '01/01/2027',
+    '01/12/2026',
     'controprova: la formattazione locale faceva rotolare la data',
   );
 });
 
-test('Task #233: luglio => 31/01, dicembre => 30/06 anno dopo', () => {
-  const lug = cjT6Deadline('2026-07-15T23:00:00.000Z');
-  assert.equal(lug.toLocaleDateString('it-IT', { timeZone: 'UTC' }), '31/01/2027');
-  const dic = cjT6Deadline('2026-12-10T00:00:00.000Z');
-  // dicembre 2026 + 6 mesi = giugno 2027 => 30/06/2027.
-  assert.equal(dic.toLocaleDateString('it-IT', { timeZone: 'UTC' }), '30/06/2027');
+test('luglio => 31/12, dicembre => 31/05 anno dopo', () => {
+  const lug = cjT5Deadline('2026-07-15T23:00:00.000Z');
+  assert.equal(lug.toLocaleDateString('it-IT', { timeZone: 'UTC' }), '31/12/2026');
+  const dic = cjT5Deadline('2026-12-10T00:00:00.000Z');
+  // dicembre 2026 + 5 mesi = maggio 2027 => 31/05/2027.
+  assert.equal(dic.toLocaleDateString('it-IT', { timeZone: 'UTC' }), '31/05/2027');
 });
 
-test('Task #233: conteggio giorni indipendente dall ora del giorno (no extra)', () => {
-  // T0 giugno 2026 => scadenza 31/12/2026. Qualunque sia l'ora di "now" nello
+test('conteggio giorni indipendente dall ora del giorno (no extra)', () => {
+  // T0 giugno 2026 => scadenza 30/11/2026. Qualunque sia l'ora di "now" nello
   // stesso giorno di calendario, il conteggio deve essere identico.
   const opened = '2026-06-29T08:00:00.000Z';
-  const morning = cjDaysToT6(opened, new Date('2026-12-30T06:00:00.000Z'));
-  const evening = cjDaysToT6(opened, new Date('2026-12-30T22:30:00.000Z'));
-  assert.equal(morning, 1, 'dal 30/12 manca 1 giorno alla scadenza 31/12');
+  const morning = cjDaysToT5(opened, new Date('2026-11-29T06:00:00.000Z'));
+  const evening = cjDaysToT5(opened, new Date('2026-11-29T22:30:00.000Z'));
+  assert.equal(morning, 1, 'dal 29/11 manca 1 giorno alla scadenza 30/11');
   assert.equal(evening, 1, 'stesso giorno => stesso conteggio, niente giorno extra');
   // Il giorno della scadenza, a qualsiasi ora, => 0 ("Scade oggi").
-  assert.equal(cjDaysToT6(opened, new Date('2026-12-31T00:30:00.000Z')), 0);
-  assert.equal(cjDaysToT6(opened, new Date('2026-12-31T23:30:00.000Z')), 0);
+  assert.equal(cjDaysToT5(opened, new Date('2026-11-30T00:30:00.000Z')), 0);
+  assert.equal(cjDaysToT5(opened, new Date('2026-11-30T23:30:00.000Z')), 0);
 });
 
-test('cjDaysToT6: null senza data', () => {
-  assert.equal(cjDaysToT6(null, new Date('2027-01-01T00:00:00.000Z')), null);
+test('cjDaysToT5: null senza data', () => {
+  assert.equal(cjDaysToT5(null, new Date('2027-01-01T00:00:00.000Z')), null);
 });
 
 test('cjScadenzaSortValue: journey sature finiscono in fondo (+Infinity)', () => {
@@ -543,7 +543,7 @@ test('cjScadenzaSortValue: journey sature finiscono in fondo (+Infinity)', () =>
 });
 
 test('cjScadenzaSortValue: journey aperte ordinate per giorni residui', () => {
-  const now = new Date('2027-01-01T00:00:00.000Z');
+  const now = new Date('2026-11-01T00:00:00.000Z');
   const urgente = cjScadenzaSortValue({ openedAt: '2026-07-15T00:00:00.000Z', pisteAttive: 1, maxPiste: 5, now });
   const rilassata = cjScadenzaSortValue({ openedAt: '2026-09-15T00:00:00.000Z', pisteAttive: 1, maxPiste: 5, now });
   assert.ok(urgente < rilassata, 'meno giorni residui = più urgente = valore minore');

@@ -34,10 +34,10 @@ test("inactive insertion dates never fall back to opening or activation", () => 
   assert.equal(cjUnqualifiedInsertDates([item("different")]).get("different"), "2026-07-10T00:00:00Z");
 });
 
-test("data SIM and mobile outside T0–T6 cannot supply a membership date", () => {
+test("data SIM and mobile outside T0–T5 cannot supply a membership date", () => {
   const dates = cjUnqualifiedInsertDates([
     item("data", { tipologia: "SIM DATI" }),
-    item("outside", { eventDate: "2027-02-01T00:00:00Z" }),
+    item("outside", { eventDate: "2027-01-01T00:00:00Z" }),
     item("fixed", { driver: "fisso" }),
   ]);
   assert.equal(dates.size, 0);

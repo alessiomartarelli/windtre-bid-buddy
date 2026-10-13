@@ -59,7 +59,7 @@ import {
   computeTimeline, groupByNegozio, cjDriverColor, isFadedState,
   monthIndex, monthIndexLabel, itemNegozio,
   computeItemValidity, CJ_VALIDITY_LABELS, CJ_VALIDITY_REASONS,
-  cjDaysToT6, cjT6Deadline, cjScadenzaSortValue, cjScadenzaInfo,
+  cjDaysToT5, cjT5Deadline, cjScadenzaSortValue, cjScadenzaInfo,
   cjOpenedFromTriggerDate,
   type CjScadenzaTone,
 } from "@/lib/customerJourneyTimeline";
@@ -101,7 +101,7 @@ const SORT_LABELS: Record<SortKey, string> = {
   nome: "Nome cliente",
   completamento: "% completamento",
   valore: "Valore cliente",
-  scadenza: "In scadenza (T6)",
+  scadenza: "In scadenza (T5)",
 };
 
 interface ItemDetailsPayload {
@@ -224,7 +224,7 @@ function fmtDate(d: string | Date | null | undefined): string {
 }
 
 // Formatta una data usando le sue componenti UTC: serve per le date "ancorate"
-// in UTC (es. la scadenza T6 = fine mese alle 23:59:59.999 UTC) così la
+// in UTC (es. la scadenza T5 = fine mese alle 23:59:59.999 UTC) così la
 // localizzazione italiana (UTC+1/+2) non le faccia rotolare al giorno dopo.
 function fmtDateUTC(d: Date | null | undefined): string {
   if (!d || Number.isNaN(d.getTime())) return "—";
@@ -320,7 +320,7 @@ function useDocumentOffset<T extends HTMLElement>(ref: React.RefObject<T>): numb
   return offset;
 }
 
-// Classi Tailwind per tono scadenza T6 (bordo+testo), condivise fra card lista
+// Classi Tailwind per tono scadenza T5 (bordo+testo), condivise fra card lista
 // e scheda di dettaglio così i colori restano allineati.
 const CJ_SCADENZA_TONE_CLASS: Record<CjScadenzaTone, string> = {
   red: "border-red-500/40 text-red-600 dark:text-red-400",
@@ -375,12 +375,12 @@ const JourneyCard = memo(function JourneyCard({
   const activeCount = drivers.filter((d) => d.activated).length;
   const total = drivers.length;
   const pct = Math.round((activeCount / total) * 100);
-  // Scadenza T6: badge sempre visibile per le journey ancora "aperte" (verde se
+  // Scadenza T5: badge sempre visibile per le journey ancora "aperte" (verde se
   // c'è tempo), con anello di evidenza SOLO quando è urgente (scaduta, oggi o
   // entro 30 giorni) → così si notano subito i clienti in scadenza da
   // contattare senza nascondere l'informazione sugli altri.
   const scadenza =
-    j.status === "aperta" ? cjScadenzaInfo(cjDaysToT6(j.openedAt)) : null;
+    j.status === "aperta" ? cjScadenzaInfo(cjDaysToT5(j.openedAt)) : null;
   const scadenzaUrgente = scadenza?.urgent ? scadenza : null;
   return (
     <Card
@@ -427,8 +427,8 @@ const JourneyCard = memo(function JourneyCard({
                 data-testid={`badge-scadenza-${j.id}`}
                 title={
                   scadenza.urgent
-                    ? "Cliente in scadenza da contattare (T6)"
-                    : "Scadenza per completare il cross-sell (T6)"
+                    ? "Cliente in scadenza da contattare (T5)"
+                    : "Scadenza per completare il cross-sell (T5)"
                 }
               >
                 <Calendar className="h-3 w-3 mr-1" />
@@ -2192,7 +2192,7 @@ function AnalisiViewImpl({
             <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-sim">
               {totals.simAttivate}
             </p>
-            <p className="text-xs text-muted-foreground">T0–T6, incluse le SIM successive</p>
+            <p className="text-xs text-muted-foreground">T0–T5, incluse le SIM successive</p>
           </CardContent>
         </Card>
         <Card data-testid="card-gettone-clienti" title="Un ramo iniziale per cliente con SIM attiva, più un ramo per ogni coppia aggiuntiva SIM–smartphone valida. Le SIM aggiuntive da sole non aprono un ramo premio.">
@@ -2450,7 +2450,7 @@ function AnalisiViewImpl({
               Dettaglio gettone {detailMode === "stimato" ? "stimato" : "maturato"}
             </DialogTitle>
             <DialogDescription>
-              {auditCustomers.length} clienti della coorte selezionata. Sono inclusi anche gli acquisti successivi nella finestra T0–T6;
+              {auditCustomers.length} clienti della coorte selezionata. Sono inclusi anche gli acquisti successivi nella finestra T0–T5;
               valgono gli stessi filtri e lo stesso perimetro autorizzato delle card. Il calcolo è consultivo e non avvia riconciliazioni.
             </DialogDescription>
           </DialogHeader>
@@ -2593,7 +2593,7 @@ function CustomerJourneyTimeline({
     <Card data-testid="card-timeline">
       <CardHeader>
         <CardDescription>
-          Contano i prodotti dei mesi solari T0–T6 inclusi, anche prima della SIM nello stesso mese.
+          Contano i prodotti dei mesi solari T0–T5 inclusi, anche prima della SIM nello stesso mese.
           SIM dati, Tourist e SIM allarme sono escluse. Lo storico fuori periodo resta visibile.
         </CardDescription>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -2975,10 +2975,10 @@ function JourneyDetailViewImpl({
   const driverAttiviCount = CJ_DRIVER_ORDER.filter(
     (d) => driverMap.get(d)?.activated && !validDrivers.has(d),
   ).length;
-  // Scadenza T6: giorni residui per chiudere il cross-sell (fine mese di T6).
-  const daysToT6 = cjDaysToT6(journey.openedAt);
-  const t6Deadline = cjT6Deadline(journey.openedAt);
-  const scadenzaInfo = cjScadenzaInfo(daysToT6);
+  // Scadenza T5: giorni residui per chiudere il cross-sell (fine mese di T5).
+  const daysToT5 = cjDaysToT5(journey.openedAt);
+  const t5Deadline = cjT5Deadline(journey.openedAt);
+  const scadenzaInfo = cjScadenzaInfo(daysToT5);
   const [editItem, setEditItem] = useState<CustomerJourneyItem | null>(null);
   const { toast } = useToast();
   const [pdfPending, setPdfPending] = useState(false);
@@ -3069,7 +3069,7 @@ function JourneyDetailViewImpl({
                   >
                     <Calendar className="h-3.5 w-3.5 mr-1.5" />
                     {scadenzaInfo.label}
-                    {t6Deadline ? ` · T6 ${fmtDateUTC(t6Deadline)}` : ""}
+                    {t5Deadline ? ` · T5 ${fmtDateUTC(t5Deadline)}` : ""}
                   </Badge>
                 </div>
               )}

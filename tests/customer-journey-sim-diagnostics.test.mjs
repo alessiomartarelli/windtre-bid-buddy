@@ -28,12 +28,15 @@ const run = (sources, rows, f = filters) => {
   return reconcileCjMobile(sources, rows, selected, f, from, to);
 };
 
-test("one customer, two months, T6 boundary and visible unlinked discrepancy", () => {
+test("one customer, T5 included and T6 excluded with visible unlinked discrepancy", () => {
   const rows = [row(1), row(2, { insertedAt: "2026-08-01", eventDate: "2026-08-01" }),
-    row(3, { insertedAt: "2027-02-01", eventDate: "2027-02-01" })];
-  const d = run([source(1), source(2, { insertedAt: "2026-08-01" })], rows);
-  assert.deepEqual([d.clients, d.period, d.later, d.cumulative], [1, 1, 1, 2]);
+    row(3, { insertedAt: "2026-07-15", eventDate: "2027-01-01" }),
+    row(4, { insertedAt: "2026-12-31", eventDate: "2026-12-31" })];
+  const d = run([source(1), source(2, { insertedAt: "2026-08-01" }),
+    source(3, { insertedAt: "2026-07-15" })], rows);
+  assert.deepEqual([d.clients, d.period, d.later, d.cumulative], [1, 1, 2, 3]);
   assert.equal(d.discrepancy, 0);
+  assert.equal(d.counts.window, 1, "T6 articles are visible as outside the commercial window");
   const missingSource = run([], rows);
   assert.equal(missingSource.discrepancy, 1, "missing source must not be concealed");
 });

@@ -77,7 +77,7 @@ export interface TimelineModel {
   empty: boolean;
   t0Date: Date | null;
   t0mi: number;
-  t6mi: number;
+  t5mi: number;
   startMi: number;
   endMi: number;
   months: number[];
@@ -85,7 +85,7 @@ export interface TimelineModel {
   rows: TimelineRow[];
 }
 
-// Costruisce il modello della timeline (asse mesi T0–T6 esteso, riga T0, righe
+// Costruisce il modello della timeline (asse mesi T0–T5 esteso, riga T0, righe
 // per contratto). È il cuore testabile del componente CustomerJourneyTimeline.
 export function computeTimeline(
   journey: CustomerJourney,
@@ -111,7 +111,7 @@ export function computeTimeline(
       items,
       t0Date: null,
       t0mi: 0,
-      t6mi: 0,
+      t5mi: 0,
       startMi: 0,
       endMi: 0,
       months: [],
@@ -121,10 +121,10 @@ export function computeTimeline(
   }
 
   const t0mi = monthIndex(t0Date);
-  const t6mi = t0mi + CJ_WINDOW_MONTHS;
+  const t5mi = t0mi + CJ_WINDOW_MONTHS;
   const eventMis = withDate.map((d) => monthIndex(d.date));
   const startMi = Math.min(t0mi, ...eventMis);
-  const endMi = Math.max(t6mi, ...eventMis);
+  const endMi = Math.max(t5mi, ...eventMis);
   const months: number[] = [];
   for (let mi = startMi; mi <= endMi; mi++) months.push(mi);
 
@@ -178,7 +178,7 @@ export function computeTimeline(
     items,
     t0Date,
     t0mi,
-    t6mi,
+    t5mi,
     startMi,
     endMi,
     months,
@@ -193,10 +193,10 @@ export function computeTimeline(
 //   - "attivante": la SIM mobile che ha aperto la journey (T0). È il trigger,
 //     non una pista cross-sell.
 //   - "valida": pista cross-sell che conta (driver non-mobile, stato attivo,
-//     contratto nei mesi solari T0–T6 inclusi, primo del suo driver in finestra).
+//     contratto nei mesi solari T0–T5 inclusi, primo del suo driver in finestra).
 //   - "non_pista": SIM mobile aggiuntiva (non è una pista cross-sell).
 //   - "stato_non_valido": stato ko/annullato/stornato.
-//   - "fuori_periodo": contratto di un mese precedente a T0 o successivo a T6.
+//   - "fuori_periodo": contratto di un mese precedente a T0 o successivo a T5.
 //   - "driver_duplicato": pista già conteggiata per quel driver (es. 2ª
 //     fornitura energia o 2º contratto stesso driver in finestra).
 export type CjItemValidityKind =
@@ -219,7 +219,7 @@ export interface CjItemValidity {
 
 // Calcola la validità di tutti gli item, anche quelli senza data.
 // Usa ESATTAMENTE il criterio del gettone condiviso (`buildGettoneJourneys`):
-// piste = driver non-mobile distinti attivi nei mesi solari T0–T6 inclusi
+// piste = driver non-mobile distinti attivi nei mesi solari T0–T5 inclusi
 // (`pisteInWindow`, mesi UTC). Il mese di T0 segue la
 // stessa precedenza del gettone: apertura journey, poi prima SIM mobile ATTIVA,
 // poi primo evento in assoluto. La SIM mobile che apre la journey (trigger
@@ -314,31 +314,31 @@ export const CJ_VALIDITY_REASONS: Record<CjItemValidityKind, string> = {
   valida: "Pista cross-sell valida: conta per la journey e per il gettone.",
   non_pista: "SIM mobile aggiuntiva: non è una pista cross-sell.",
   stato_non_valido: "Stato ko/annullato/stornato: non conta per il gettone.",
-  fuori_periodo: "Contratto fuori dai mesi solari T0–T6 inclusi: non conta per il gettone.",
+  fuori_periodo: "Contratto fuori dai mesi solari T0–T5 inclusi: non conta per il gettone.",
   sim_esclusa: "SIM dati, Tourist o allarme: esclusa da apertura, coorte e conteggi SIM della Customer Journey.",
   smartphone_escluso: "Smartphone non abbinato alla SIM iniziale o coppia non valida.",
   coppia_extra: "Coppia SIM–smartphone successiva: +20 €, non aumenta le piste iniziali.",
   driver_duplicato: "Pista dello stesso tipo già conteggiata per questo cliente.",
 };
 
-// === Scadenza T6 della journey (Task #232) ===
+// === Scadenza T5 della journey (Task #232) ===
 // La finestra cross-sell di una journey va da T0 (mese di apertura/attivazione
-// SIM) a T6 incluso (T0 + 6 mesi): un contratto nel mese di T6 conta ancora.
+// SIM) a T5 incluso (T0 + 5 mesi): un contratto nel mese di T5 conta ancora.
 // La "scadenza" per chiudere il cross-sell è quindi l'ULTIMO giorno del mese
-// di T6. Calcoli in UTC, coerenti con `monthOfIso`.
+// di T5. Calcoli in UTC, coerenti con `monthOfIso`.
 
-// Ultimo istante utile per chiudere il cross-sell: fine del mese di T6
-// (T0 + 6 mesi). null se manca la data di apertura.
-export function cjT6Deadline(openedAt: string | Date | null | undefined): Date | null {
+// Ultimo istante utile per chiudere il cross-sell: fine del mese di T5
+// (T0 + 5 mesi). null se manca la data di apertura.
+export function cjT5Deadline(openedAt: string | Date | null | undefined): Date | null {
   const t0 = toDateOrNull(openedAt);
   if (!t0) return null;
   const y = t0.getUTCFullYear();
   const m = t0.getUTCMonth();
-  // Giorno 0 del mese (m+7) = ultimo giorno del mese (m+6) = mese di T6.
+  // Giorno 0 del mese (m+6) = ultimo giorno del mese (m+5) = mese di T5.
   return new Date(Date.UTC(y, m + CJ_WINDOW_MONTHS + 1, 0, 23, 59, 59, 999));
 }
 
-// Giorni residui (interi) fino alla scadenza T6.
+// Giorni residui (interi) fino alla scadenza T5.
 // Positivo = mancano N giorni; 0 = scade oggi; negativo = scaduta da N giorni.
 // null se manca la data di apertura.
 //
@@ -346,18 +346,18 @@ export function cjT6Deadline(openedAt: string | Date | null | undefined): Date |
 // visualizzare la scadenza), così il conteggio resta coerente con la data
 // mostrata e non guadagna un giorno extra per via dell'orario 23:59:59.999 UTC
 // della scadenza né per lo sfasamento di fuso orario.
-export function cjDaysToT6(
+export function cjDaysToT5(
   openedAt: string | Date | null | undefined,
   now: Date = new Date(),
 ): number | null {
-  const dl = cjT6Deadline(openedAt);
+  const dl = cjT5Deadline(openedAt);
   if (!dl) return null;
   const deadlineDay = Date.UTC(dl.getUTCFullYear(), dl.getUTCMonth(), dl.getUTCDate());
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return Math.round((deadlineDay - today) / 86_400_000);
 }
 
-// Tono grafico + etichetta della scadenza T6, derivati dai giorni residui.
+// Tono grafico + etichetta della scadenza T5, derivati dai giorni residui.
 // Unica sorgente di verità condivisa fra la card della lista e la scheda di
 // dettaglio, così i due punti non divergono. `urgent` = da contattare
 // (scaduta, scade oggi o entro 30 giorni); i casi non urgenti (>30 giorni)
@@ -370,34 +370,34 @@ export interface CjScadenzaInfo {
   days: number;
 }
 export function cjScadenzaInfo(
-  daysToT6: number | null | undefined,
+  daysToT5: number | null | undefined,
 ): CjScadenzaInfo | null {
-  if (daysToT6 == null) return null;
-  if (daysToT6 < 0) {
-    const n = Math.abs(daysToT6);
+  if (daysToT5 == null) return null;
+  if (daysToT5 < 0) {
+    const n = Math.abs(daysToT5);
     return {
       tone: "red",
       label: `Scaduta da ${n} ${n === 1 ? "giorno" : "giorni"}`,
       urgent: true,
-      days: daysToT6,
+      days: daysToT5,
     };
   }
-  if (daysToT6 === 0) {
+  if (daysToT5 === 0) {
     return { tone: "amber", label: "Scade oggi", urgent: true, days: 0 };
   }
-  if (daysToT6 <= 30) {
+  if (daysToT5 <= 30) {
     return {
       tone: "amber",
-      label: `Scade tra ${daysToT6} ${daysToT6 === 1 ? "giorno" : "giorni"}`,
+      label: `Scade tra ${daysToT5} ${daysToT5 === 1 ? "giorno" : "giorni"}`,
       urgent: true,
-      days: daysToT6,
+      days: daysToT5,
     };
   }
   return {
     tone: "emerald",
-    label: `Scade tra ${daysToT6} giorni`,
+    label: `Scade tra ${daysToT5} giorni`,
     urgent: false,
-    days: daysToT6,
+    days: daysToT5,
   };
 }
 
@@ -420,7 +420,7 @@ export function cjOpenedFromTriggerDate(
 
 // Valore di ordinamento per il criterio "In scadenza" della lista schede.
 // Priorità (valore più basso = più urgente) alle journey NON ancora chiuse
-// (meno di `maxPiste` piste cross-sell) con meno giorni residui a T6. Le
+// (meno di `maxPiste` piste cross-sell) con meno giorni residui a T5. Le
 // journey già sature, senza data o GIÀ scadute (non più chiudibili) finiscono
 // in fondo (+Infinity), così la modalità ascendente mostra prima ciò su cui
 // vale la pena lavorare.
@@ -431,7 +431,7 @@ export function cjScadenzaSortValue(opts: {
   now?: Date;
 }): number {
   if (opts.pisteAttive >= opts.maxPiste) return Number.POSITIVE_INFINITY;
-  const days = cjDaysToT6(opts.openedAt, opts.now ?? new Date());
+  const days = cjDaysToT5(opts.openedAt, opts.now ?? new Date());
   if (days == null || days < 0) return Number.POSITIVE_INFINITY;
   return days;
 }

@@ -9,6 +9,12 @@ Una vendita successiva dello stesso cliente con nuova SIM B e smartphone abbinat
 
 **How to apply:** distinguere sempre la pista Smartphone della CJ iniziale dalle coppie aggiuntive. Non estendere la decisione ai premi smartphone di Gara, Vendite o Canvass.
 
+La finestra commerciale della CJ è solare, inclusiva da T0 a T5. Una SIM successiva non riavvia T0; la finestra degli esiti DRMS è indipendente e non cambia con questa regola.
+
+**Why:** la scelta confermata è una sola journey per cliente, con T0–T5 per cliente, lasciando invariato l'orizzonte DRMS.
+
+**How to apply:** mantieni il T0 della journey originaria anche per SIM successive e aggiorna insieme calcolo, validità, timeline, etichette ed export; non accorciare né spostare la finestra DRMS.
+
 Il conteggio dei rami SIM richiesto dall'utente comprende un ramo iniziale
 per anagrafica CJ qualificata e un ramo per ogni coppia successiva valida che
 sblocca l'extra. Restano separati clienti unici, SIM totali e rami premio.
