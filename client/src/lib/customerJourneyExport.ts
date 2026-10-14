@@ -232,11 +232,15 @@ export async function exportJourneyListPdf(data: JourneyListExportData): Promise
 
   doc.setFontSize(10);
   doc.setTextColor(110, 110, 110);
-  doc.text(listSubtitle(journeys, filterLabel, new Date()), 14, 25);
+  const subtitleLines = doc.splitTextToSize(
+    listSubtitle(journeys, filterLabel, new Date()),
+    doc.internal.pageSize.getWidth() - 28,
+  );
+  doc.text(subtitleLines, 14, 25);
 
   const totalDrivers = CJ_DRIVER_ORDER.length;
   autoTable(doc, {
-    startY: 30,
+    startY: Math.max(30, 25 + subtitleLines.length * 5),
     head: [listPdfHead()],
     body: listPdfBody(journeys),
     styles: { fontSize: 8, cellPadding: 1.8, valign: "middle", overflow: "linebreak" },

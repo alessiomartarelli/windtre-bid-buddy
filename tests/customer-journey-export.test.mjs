@@ -26,6 +26,7 @@ const {
   itemStateLabel,
   rataCanone,
   activeDriverCount,
+  cjAppliedFilterMetadata,
   detailMeta,
   driverTableHead,
   driverTableBody,
@@ -41,7 +42,7 @@ const {
   listExcelBody,
 } = await import('../shared/customerJourneyExport.ts');
 
-const { CJ_DRIVER_ORDER } = await import('../shared/customerJourney.ts');
+const { CJ_DRIVER_ORDER, CJ_NO_DESTINATION_FILTER_VALUE } = await import('../shared/customerJourney.ts');
 
 // Helper: scheda (journey) con default sensati.
 function journey(over = {}) {
@@ -305,6 +306,48 @@ test('listExcelHeaderRows: include filterLabel solo se presente', () => {
   // senza filtro: una riga in meno
   assert.equal(noFilter.length, withFilter.length - 1);
   assert.deepEqual(noFilter[2], [`Esportato il ${fmtDate(date)}`]);
+});
+
+test('cjAppliedFilterMetadata: lists active filters, labels missing destination, omits unset filters', () => {
+  const defaults = {
+    typeFilter: 'tutti',
+    pdvFilter: [],
+    addettoFilter: 'tutti',
+    stateFilter: 'tutti',
+    search: '',
+  };
+  assert.deepEqual(cjAppliedFilterMetadata(defaults), []);
+
+  const metadata = cjAppliedFilterMetadata({
+    ...defaults,
+    typeFilter: 'azienda',
+    pdvFilter: ['Milano'],
+    pdvOrigineFilter: ['Roma'],
+    pdvDestinazioneFilter: [CJ_NO_DESTINATION_FILTER_VALUE, 'Torino'],
+    ragioneSocialeFilter: ' Acme ',
+    addettoFilter: 'Anna',
+    stateFilter: 'pagato',
+    search: 'Energia',
+  }, '2026-07-01', '2026-07-31');
+  assert.deepEqual(metadata, [
+    { label: 'Tipo cliente', value: 'Business' },
+    { label: 'PDV', value: 'Milano' },
+    { label: 'PDV origine', value: 'Roma' },
+    { label: 'PDV destinazione', value: 'Senza destinazione · Torino' },
+    { label: 'Ragione sociale', value: 'Acme' },
+    { label: 'Addetto', value: 'Anna' },
+    { label: 'Stato', value: 'pagato' },
+    { label: 'Ricerca', value: 'Energia' },
+    { label: 'Inserimento SIM dal', value: '2026-07-01' },
+    { label: 'Inserimento SIM al', value: '2026-07-31' },
+  ]);
+
+  const filterLabel = metadata.map(({ label, value }) => `${label}: ${value}`).join(' · ');
+  const exportedAt = new Date('2026-07-10T00:00:00.000Z');
+  assert.match(listSubtitle([listJourney()], filterLabel, exportedAt), /PDV origine: Roma/);
+  assert.match(listSubtitle([listJourney()], filterLabel, exportedAt), /PDV destinazione: Senza destinazione · Torino/);
+  assert.ok(listExcelHeaderRows([listJourney()], filterLabel, exportedAt).some(([text]) =>
+    String(text).includes('Ragione sociale: Acme')));
 });
 
 // ===========================================================================

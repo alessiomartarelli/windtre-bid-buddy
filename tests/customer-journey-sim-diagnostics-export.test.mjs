@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as XLSX from "xlsx";
-import { buildGettoneJourneys, filterGettoneByInsertDate } from "../shared/customerJourney.ts";
+import { buildGettoneJourneys, filterGettoneByInsertDate, CJ_NO_DESTINATION_FILTER_VALUE } from "../shared/customerJourney.ts";
 import { reconcileCjMobile, CJ_SIM_REASONS } from "../shared/customerJourneyDiagnostics.ts";
 import { CJ_DIAGNOSTICS_PAYMENT_WARNING } from "../shared/customerJourneyDiagnosticsExport.ts";
 import { buildCjDiagnosticsWorkbook } from "../client/src/lib/customerJourneyDiagnosticsExport.ts";
@@ -132,6 +132,23 @@ test("every active filter is recorded and respected; export never fetches or wid
   assert.equal(empty.summary["Clienti distinti"], 0);
   assert.ok(Object.values(empty.sheets).slice(1).every(sheet => sheet.length === 0));
   for (const name of empty.wb.SheetNames.slice(1)) assert.ok(empty.wb.Sheets[name]["!ref"], "empty detail retains headers");
+});
+
+test("diagnostic XLSX records active origin, destination and company filters, but omits them when unset", () => {
+  const active = exported([], [], {
+    ...filters,
+    pdvOrigineFilter: ["Roma"],
+    pdvDestinazioneFilter: [CJ_NO_DESTINATION_FILTER_VALUE, "Torino"],
+    ragioneSocialeFilter: "Acme",
+  });
+  assert.equal(active.summary["PDV origine"], "Roma");
+  assert.equal(active.summary["PDV destinazione"], "Senza destinazione · Torino");
+  assert.equal(active.summary["Ragione sociale"], "Acme");
+
+  const unset = exported([], [], filters);
+  assert.ok(!Object.hasOwn(unset.summary, "PDV origine"));
+  assert.ok(!Object.hasOwn(unset.summary, "PDV destinazione"));
+  assert.ok(!Object.hasOwn(unset.summary, "Ragione sociale"));
 });
 
 test("open date range exports explicit instructions and text stays text, never an Excel formula", () => {

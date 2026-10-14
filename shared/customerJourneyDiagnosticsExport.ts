@@ -1,5 +1,6 @@
 import { economicStateLabel, isCjItemActive, type CjListFilters } from "./customerJourney";
 import { CJ_SIM_REASONS, inCjInsertPeriod, type reconcileCjMobile } from "./customerJourneyDiagnostics";
+import { cjAppliedFilterMetadata } from "./customerJourneyExport";
 
 export type CjSimDiagnostics = ReturnType<typeof reconcileCjMobile>;
 export type DiagnosticCell = string | number;
@@ -25,6 +26,9 @@ export function buildCjDiagnosticsSheets(
     "Stato operativo", "Esito DRMS", "Stato economico utilizzato", "Origine stato utilizzato",
     "Discrepanza manuale / DRMS", "Spunta manuale gettone confermato",
   ];
+  const additionalFilterRows = cjAppliedFilterMetadata(filters)
+    .filter(({ label }) => ["PDV origine", "PDV destinazione", "Ragione sociale"].includes(label))
+    .map(({ label, value }): DiagnosticCell[] => [label, value]);
   return [
     {
       name: "Riepilogo",
@@ -36,6 +40,7 @@ export function buildCjDiagnosticsSheets(
         ["PDV", filters.pdvFilter.join(" · ") || "Tutti"],
         ["Addetto", filters.addettoFilter], ["Stato", filters.stateFilter],
         ["Ricerca", filters.search],
+        ...additionalFilterRows,
         ["Perimetro", "Solo dati autorizzati, stessi filtri di Analisi gettoni. Clienti acquisiti nel periodo; articoli dei clienti nella finestra solare T0–T5 inclusi."],
         ["Date", "Periodo SIM e articoli BiSuite: data inserimento. Finestra T0–T5: data evento e mese T0 della CJ, in UTC."],
         ["Clienti distinti", d.clients],

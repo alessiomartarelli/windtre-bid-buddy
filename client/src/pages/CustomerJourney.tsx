@@ -67,7 +67,7 @@ import {
   exportJourneyPdf, exportJourneyExcel,
   exportJourneyListPdf, exportJourneyListExcel,
 } from "@/lib/customerJourneyExport";
-import { journeyGettoneRows } from "@shared/customerJourneyExport";
+import { cjAppliedFilterMetadata, journeyGettoneRows } from "@shared/customerJourneyExport";
 import CohortReport from "@/components/customer-journey/CohortReport";
 import SimDiagnostics from "@/components/customer-journey/SimDiagnostics";
 
@@ -1195,16 +1195,15 @@ export default function CustomerJourneyPage() {
 
   const listFilterLabel = useMemo(() => {
     const parts: string[] = [cjMembership === "active" ? "Schede clienti · Attivi in CJ" : "Schede clienti · Non più qualificati"];
-    if (typeFilter === "privato") parts.push("Solo privati");
-    else if (typeFilter === "azienda") parts.push("Solo business");
-    if (search.trim()) parts.push(`Ricerca: "${search.trim()}"`);
+    parts.push(...cjAppliedFilterMetadata(activeFilters, dateFrom, dateTo)
+      .map(({ label, value }) => `${label}: ${value}`));
     const con = CJ_NON_MOBILE_DRIVERS.filter((d) => driverFilter[d] === "con").map((d) => CJ_DRIVER_LABELS[d]);
     const senza = CJ_NON_MOBILE_DRIVERS.filter((d) => driverFilter[d] === "senza").map((d) => CJ_DRIVER_LABELS[d]);
     if (con.length) parts.push(`Con: ${con.join(", ")}`);
     if (senza.length) parts.push(`Senza: ${senza.join(", ")}`);
     parts.push(`Ordine: ${SORT_LABELS[sortKey]} ${sortDir === "asc" ? "↑" : "↓"}`);
     return parts.join(" · ");
-  }, [cjMembership, typeFilter, search, driverFilter, sortKey, sortDir]);
+  }, [cjMembership, activeFilters, dateFrom, dateTo, driverFilter, sortKey, sortDir]);
 
   const handleExportListPdf = useCallback(async () => {
     setListPdfPending(true);

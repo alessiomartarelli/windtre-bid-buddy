@@ -1,7 +1,7 @@
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, economicStateDisplayLabel,
   cjJourneyReportRows, buildGettoneJourneys, cjPhoneEligibility, cjPhoneKey, cjT0Month, CJ_PHONE_REASONS,
-  type CjGettoneJourney,
+  CJ_NO_DESTINATION_FILTER_VALUE, type CjGettoneJourney, type CjListFilters,
 } from "./customerJourney";
 import type { CustomerJourney, CustomerJourneyItem, CjDriver } from "./schema";
 import { cjPhoneIccidLinks, type CjPhoneIccidLink } from "./customerJourneyPhoneLink";
@@ -40,6 +40,43 @@ export type CjListJourney = CustomerJourney & { drivers: CjExportDriverSummary[]
 // tabella PDF dell'elenco, usato per mappare l'indice colonna ↔ driver nei
 // callback di disegno delle icone.
 export const LIST_FIXED_COLS = 5;
+
+export interface CjAppliedFilterMetadata {
+  label: string;
+  value: string;
+}
+
+/** Human-readable, active-only metadata shared by the Schede and diagnostics exports. */
+export function cjAppliedFilterMetadata(
+  filters: CjListFilters,
+  dateFrom = "",
+  dateTo = "",
+): CjAppliedFilterMetadata[] {
+  const metadata: CjAppliedFilterMetadata[] = [];
+  const add = (label: string, value: string | undefined) => {
+    const normalized = value?.trim();
+    if (normalized) metadata.push({ label, value: normalized });
+  };
+  const addMany = (label: string, values: string[] | undefined, display?: (value: string) => string) => {
+    const selected = (values ?? []).map((value) => display?.(value) ?? value).filter(Boolean);
+    if (selected.length) metadata.push({ label, value: selected.join(" · ") });
+  };
+
+  if (filters.typeFilter !== "tutti") {
+    add("Tipo cliente", filters.typeFilter === "privato" ? "Privati" : "Business");
+  }
+  addMany("PDV", filters.pdvFilter);
+  addMany("PDV origine", filters.pdvOrigineFilter);
+  addMany("PDV destinazione", filters.pdvDestinazioneFilter, (value) =>
+    value === CJ_NO_DESTINATION_FILTER_VALUE ? "Senza destinazione" : value);
+  add("Ragione sociale", filters.ragioneSocialeFilter);
+  if (filters.addettoFilter !== "tutti") add("Addetto", filters.addettoFilter);
+  if (filters.stateFilter !== "tutti") add("Stato", filters.stateFilter);
+  add("Ricerca", filters.search);
+  add("Inserimento SIM dal", dateFrom);
+  add("Inserimento SIM al", dateTo);
+  return metadata;
+}
 
 /** Data localizzata it-IT, "—" se nulla/non valida. */
 export function fmtDate(d: string | Date | null | undefined): string {
