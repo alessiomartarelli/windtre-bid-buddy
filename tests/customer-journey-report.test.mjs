@@ -354,6 +354,58 @@ test('matchesCjFilters: origine, destinazione senza fallback e ragione sociale s
   }), false, 'the dedicated company filter must match only ragione sociale');
 });
 
+test('report rows keep missing destination distinct from real destinations under company search', () => {
+  const rows = [
+    {
+      id: 'no-destination', customerType: 'azienda', pdv: 'PDV Origine',
+      pdvOrigine: 'PDV Origine', pdvDestinazione: null,
+      ragioneSociale: 'Gamma Energia Srl', addetto: 'Anna', state: 'inserito',
+      economicState: null, cliente: 'Gamma', customerKey: 'GAMMA-1',
+    },
+    {
+      id: 'real-destination', customerType: 'azienda', pdv: 'PDV Origine',
+      pdvOrigine: 'PDV Origine', pdvDestinazione: 'PDV Destinazione',
+      ragioneSociale: 'Gamma Energia Srl', addetto: 'Anna', state: 'inserito',
+      economicState: null, cliente: 'Gamma', customerKey: 'GAMMA-2',
+    },
+    {
+      id: 'other-company', customerType: 'azienda', pdv: 'PDV Origine',
+      pdvOrigine: 'PDV Origine', pdvDestinazione: null,
+      ragioneSociale: 'Altra Società', addetto: 'Anna', state: 'inserito',
+      economicState: null, cliente: 'Altro', customerKey: 'ALTRO-1',
+    },
+  ];
+  const base = {
+    typeFilter: 'tutti', pdvFilter: [], pdvOrigineFilter: ['PDV Origine'],
+    addettoFilter: 'tutti', stateFilter: 'tutti', search: '',
+    ragioneSocialeFilter: 'eNeRgIa',
+  };
+  const filterReportRows = (filters) => rows.filter((r) => {
+    const destination = (r.pdvDestinazione ?? '').trim();
+    return matchesCjFilters({
+      customerType: r.customerType,
+      pdvs: r.pdv ? [r.pdv] : [],
+      pdvOrigini: r.pdvOrigine ? [r.pdvOrigine] : [],
+      pdvDestinazioni: [destination || CJ_NO_DESTINATION_FILTER_VALUE],
+      ragioneSociale: r.ragioneSociale,
+      addetti: [r.addetto],
+      states: [r.state],
+      searchHay: [r.cliente, r.ragioneSociale, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(' '),
+    }, filters);
+  });
+
+  assert.deepEqual(
+    filterReportRows({ ...base, pdvDestinazioneFilter: [CJ_NO_DESTINATION_FILTER_VALUE] }).map(r => r.id),
+    ['no-destination'],
+    'the no-destination bucket must not fall back to the shared origin PDV',
+  );
+  assert.deepEqual(
+    filterReportRows({ ...base, pdvDestinazioneFilter: ['PDV Destinazione'] }).map(r => r.id),
+    ['real-destination'],
+    'a real destination remains a separate match while company search stays partial and case-insensitive',
+  );
+});
+
 // ===========================================================================
 // COERENZA SCHEDE vs REPORT — stesso filtro, stessa decisione.
 // Una journey con 2 item (Roma+attivato, Milano+ko) e le sue 2 righe report.

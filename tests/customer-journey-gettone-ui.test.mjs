@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import {
   BASE,
   uniq,
@@ -14,6 +15,19 @@ import {
   cleanupOrg,
 } from './helpers/uiTest.mjs';
 const { CJ_NO_DESTINATION_FILTER_VALUE } = await import('../shared/customerJourney.ts');
+const XLSXmod = await import('xlsx');
+const XLSX = XLSXmod.default ?? XLSXmod;
+
+function pdfTextTokens(buf) {
+  const raw = buf.toString('latin1');
+  const tokens = [];
+  const re = /\(((?:\\.|[^\\()])*)\)\s*Tj/g;
+  let match;
+  while ((match = re.exec(raw)) !== null) {
+    tokens.push(match[1].replace(/\\([()\\])/g, '$1'));
+  }
+  return tokens;
+}
 
 // Test suite UI per l'espansione del dettaglio dell'Analisi gettoni
 // (Task #194). Protegge da regressioni l'interazione di espansione/chiusura
@@ -989,12 +1003,14 @@ test('scenario 10: origin, destination and company filters stay independent acro
   const luigiOrigin = `ORIGINE ROMA ${token}`;
   const luigiDestination = `DESTINAZIONE ROMA ${token}`;
   const marioCompany = `ALFA TELECOM ${token} SRL`;
+  const marioKey = uniq('CFORIGINE').toUpperCase();
+  const luigiKey = uniq('CFDESTINAZIONE').toUpperCase();
   let marioId;
   let luigiId;
   try {
     await setCjTriggerDate(pool, session.orgId, '2026-01-01');
     marioId = await seedJourney(pool, session.orgId, {
-      customerKey: uniq('CFORIGINE').toUpperCase(),
+      customerKey: marioKey,
       nome: 'Contatto Mario',
       customerType: 'azienda',
       ragioneSociale: marioCompany,
@@ -1006,7 +1022,7 @@ test('scenario 10: origin, destination and company filters stay independent acro
       ],
     });
     luigiId = await seedJourney(pool, session.orgId, {
-      customerKey: uniq('CFDESTINAZIONE').toUpperCase(),
+      customerKey: luigiKey,
       nome: 'Contatto Luigi',
       customerType: 'azienda',
       ragioneSociale: `BETA SERVIZI ${token} SRL`,
@@ -1030,6 +1046,43 @@ test('scenario 10: origin, destination and company filters stay independent acro
     await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId(`card-journey-${luigiId}`).count(), 0, 'origin filter must hide the other journey');
 
+    // I download di Schede devono contenere lo stesso insieme di clienti
+    // mostrato dalla UI quando origine, destinazione e ragione sociale sono
+    // selezionati insieme (ricerca parziale e case-insensitive).
+    await page.getByTestId('select-filter-pdv-destinazione').click();
+    await page.getByTestId(`option-select-filter-pdv-destinazione-${marioDestination}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
+    await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible' });
+    assert.equal(await page.getByTestId(`card-journey-${luigiId}`).count(), 0);
+    const visibleJourneyNames = await page.locator('[data-testid^="card-journey-"]').evaluateAll(cards =>
+      cards.filter(card => card.getClientRects().length > 0).map(card => {
+        const id = card.getAttribute('data-testid').slice('card-journey-'.length);
+        return document.querySelector(`[data-testid="text-journey-name-${id}"]`)?.textContent?.trim();
+      }).filter(Boolean));
+
+    const excelPending = page.waitForEvent('download');
+    await page.getByTestId('button-export-list-excel').click();
+    const excelDownload = await excelPending;
+    const excelBook = XLSX.read(fs.readFileSync(await excelDownload.path()), { type: 'buffer' });
+    const excelRows = XLSX.utils.sheet_to_json(excelBook.Sheets.Elenco, { header: 1, defval: '' });
+    const excelHeaderIndex = excelRows.findIndex(row => row[0] === 'Cliente');
+    assert.notEqual(excelHeaderIndex, -1, 'Excel list must contain the client header');
+    assert.deepEqual(
+      excelRows.slice(excelHeaderIndex + 1).map(row => row[0]).filter(Boolean),
+      visibleJourneyNames,
+      'Excel client rows must exactly match the visible Schede cards',
+    );
+
+    const pdfPending = page.waitForEvent('download');
+    await page.getByTestId('button-export-list-pdf').click();
+    const pdfDownload = await pdfPending;
+    const pdfText = pdfTextTokens(fs.readFileSync(await pdfDownload.path())).join(' ').replace(/\s+/g, '');
+    for (const name of visibleJourneyNames) {
+      assert.ok(pdfText.includes(name.replace(/\s+/g, '')), `PDF must include visible client ${name}`);
+    }
+    assert.ok(!pdfText.includes(`BETASERVIZI${token}SRL`), 'PDF must not include the filtered-out client');
+
     await page.getByTestId('button-reset-filters').click();
     await page.getByTestId(`card-journey-${luigiId}`).waitFor({ state: 'visible' });
     await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
@@ -1048,6 +1101,10 @@ test('scenario 10: origin, destination and company filters stay independent acro
     await page.getByTestId('select-filter-pdv-destinazione').click();
     await page.getByTestId(`option-select-filter-pdv-destinazione-${marioDestination}`).click();
     await page.keyboard.press('Escape');
+    await page.getByTestId('select-filter-pdv-origine').click();
+    await page.getByTestId(`option-select-filter-pdv-origine-${marioOrigin}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
     await page.getByTestId(`row-report-${marioDestination}`).waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId(`row-report-${marioOrigin}`).count(), 0, 'destination filter must not match an origin-only row');
     assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0, 'destination filter must hide unrelated destinations');
@@ -1055,6 +1112,26 @@ test('scenario 10: origin, destination and company filters stay independent acro
     await page.getByTestId('button-gettone-dim-addetto').click();
     await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).count(), 0, 'the Analisi table must share destination filtering');
+
+    // Anche l'Excel disponibile in Reportistica usa origine, destinazione e
+    // ricerca parziale sulla ragione sociale, come la tabella filtrata.
+    await page.getByTestId('cj-sim-diagnostics-export').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="cj-sim-diagnostics-export"]');
+      return button && !button.disabled;
+    });
+    const reportExcelPending = page.waitForEvent('download');
+    await page.getByTestId('cj-sim-diagnostics-export').click();
+    const reportExcelDownload = await reportExcelPending;
+    const reportWorkbook = XLSX.read(fs.readFileSync(await reportExcelDownload.path()), { type: 'buffer' });
+    const contractRows = XLSX.utils.sheet_to_json(reportWorkbook.Sheets['Contratti SIM CJ'], { header: 1, defval: '' });
+    const contractHeaderIndex = contractRows.findIndex(row => row[0] === 'ID CJ');
+    assert.notEqual(contractHeaderIndex, -1, 'Reportistica Excel must contain the CJ contracts sheet');
+    const exportedCustomerKeys = contractRows.slice(contractHeaderIndex + 1)
+      .filter(row => row[0])
+      .map(row => row[5]);
+    assert.deepEqual(exportedCustomerKeys, [marioKey], 'Reportistica Excel must include only the filtered customer');
+    assert.ok(!exportedCustomerKeys.includes(luigiKey), 'the filtered-out customer must not enter the Reportistica export');
     await page.getByTestId('button-report-tab-dettaglio').click();
 
     await page.getByTestId('button-reset-filters').click();
@@ -1071,6 +1148,11 @@ test('scenario 10: origin, destination and company filters stay independent acro
     await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
     await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0);
+    assert.equal(
+      await page.getByTestId('text-report-contratti-' + marioOrigin).innerText(),
+      '1',
+      'the no-destination filter keeps only Mario’s origin-attributed contract',
+    );
 
     await page.close();
     await context.close();
