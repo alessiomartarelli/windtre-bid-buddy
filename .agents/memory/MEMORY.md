@@ -46,7 +46,7 @@
 - [Aspetto UI test races](aspetto-ui-test-races.md) — attendi il sync iniziale UiPrefs (marker+DB) prima dei click; mai Promise.all su due click stessa pagina, race vere via fetch paralleli.
 - [Fake timers & pg-pool](fake-timer-harness-foreign-timers.md) — harness fake-setTimeout: identifica i timer sotto test dal loro callback (pg-pool ne arma di estranei); mock storage completo; exit esplicito nelle suite che importano storage.
 - [Validation UI flakes](validation-ui-suite-flakes.md) — full validation fa flakare suite Playwright a caso (networkidle 30s, Vite sotto carico); ri-esegui le suite singolarmente prima di sospettare regressioni.
-- [BiSuite CB/IVA source category](bisuite-cb-iva-source-category.md) — cambi piano e pezzi IVA per categoria BiSuite di origine (classifyCategory+coupon), MAI per pista post-regole (KPI custom/listino VF rimappano).
+- [BiSuite CB/IVA source category](bisuite-cb-iva-source-category.md) — CB include le migrazioni ammesse (non Coupon Caring), con due etichette escluse; VF resta allowlist Upselling.
 - [BiSuite partnership twins](bisuite-partnership-twins.md) — mergeWithDefaultRules twins ogni regola CB su pista partnership; aggrega/filtra per pista o i veri eventi CB si contano doppi (caring escluso dai twin).
 - [Task merge regressions](task-merge-regressions.md) — le merge automatiche possono ripristinare componenti vecchi, iniettare righe-hint e portare suite con semantiche stantie; backup in gitsafe-backup/main.
 - [Accent preset triad](accent-preset-triad.md) — nuovo preset = appearance.ts + index.html + shared/uiPrefs.ts (whitelist server, rifiuto silenzioso) + restart workflow.

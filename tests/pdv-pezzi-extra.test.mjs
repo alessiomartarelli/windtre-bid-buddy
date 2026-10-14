@@ -1,7 +1,7 @@
 // Task #398 — test della logica pura dei contatori extra della Tabella
 // PDV × Pista (Pezzi) di Vendite BiSuite (shared/pdvPezziExtra.ts):
-// IVA (isPezzoIva), CB (solo cambi piano: pista 'cb', quindi MIA TIED/UNTIED
-// non Coupon Caring + RIVINCOLO), Telefoni (categoria TELEFONIA) e importi
+// IVA (isPezzoIva), CB (cambi piano, rivincoli e migrazioni ammesse),
+// Telefoni (categoria TELEFONIA) e importi
 // Accessori/Servizi netto IVA (÷1.22, imponibile con fallback prezzo).
 // Verifica anche la coerenza con classifySaleArticles (pipeline reale della
 // pagina Vendite BiSuite).
@@ -17,6 +17,7 @@ import {
 } from '../shared/pdvPezziExtra.ts';
 import { classifySaleArticles } from '../shared/bisuiteClassification.ts';
 import { derivePdvDrilldownMetrics } from '../shared/pdvDrilldownMetrics.ts';
+import { aggregateMappedSales } from '../server/bisuiteMappedSales.ts';
 
 const approx = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} != ${b}`);
 
@@ -162,6 +163,55 @@ test('CB: per categoria di origine, non per pista post-regole (parità dashboard
   accumulaPezziExtra(c, { pista: 'mobile', categoriaNome: 'MIA TIED' });
   accumulaPezziExtra(c, { categoriaNome: 'RIVINCOLO' });
   assert.equal(c.cb, 2, 'MIA TIED/RIVINCOLO contano anche se la pista è rimappata');
+});
+
+test('CB: conta le migrazioni ma esclude le due descrizioni non ammesse', () => {
+  const articoli = [
+    {
+      categoria: { nome: 'MIGRAZIONE EXTRA TRAMITE ASK' },
+      tipologia: { nome: 'MIGRAZIONE FIBRA' },
+      descrizione: 'Migrazione FTTH',
+    },
+    {
+      categoria: { nome: 'MIGRAZIONE BUSINESS 1928' },
+      descrizione: 'MIGRAZIONE BUSINESS 1928',
+    },
+    {
+      categoria: { nome: 'MIGRAZIONE EXTRA TRAMITE ASK' },
+      descrizione: 'RICHIESTA INSERIMENTO MIGRAZIONE SU TOOL ASK',
+    },
+    {
+      categoria: { nome: 'MIGRAZIONE EXTRA TRAMITE ASK' },
+      descrizione: 'MIGRAZIONE BUSINESS 1928 PROMO',
+    },
+    {
+      categoria: { nome: 'MIGRAZIONE' },
+      tipologia: { nome: 'RICHIESTA INSERIMENTO MIGRAZIONE SU TOOL ASK' },
+      descrizione: 'Migrazione fibra',
+    },
+  ];
+
+  const classified = classifySaleArticles({ articoli });
+  assert.equal(classified.countByPista.cb, 2, 'only the two exact exclusion labels are omitted');
+
+  const counters = emptyPezziExtra();
+  for (const article of classified.articles) accumulaPezziExtra(counters, article);
+  assert.equal(counters.cb, 2, 'the Vendite extra counter follows the same migration exclusions');
+
+  const drilldown = derivePdvDrilldownMetrics({ articoli });
+  assert.deepEqual(drilldown.breakdowns, [
+    { pista: 'cb', label: 'MIGRAZIONE EXTRA TRAMITE ASK', value: 2 },
+  ]);
+
+  const mapped = aggregateMappedSales([{
+    dataVendita: new Date('2026-10-01T10:00:00Z'),
+    totale: '0',
+    codicePos: 'POS-MIG',
+    nomeNegozio: 'Negozio Migrazioni',
+    ragioneSociale: 'RS Test',
+    rawData: { articoli },
+  }], []);
+  assert.equal(mapped.byPdv['POS-MIG'].cbCambiPiano, 2, 'the server PDV counter applies the same exclusions');
 });
 
 test('Telefoni: categoria TELEFONIA', () => {

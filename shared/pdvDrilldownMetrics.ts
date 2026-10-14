@@ -1,6 +1,8 @@
 import {
   classifyCategory,
+  isCbMigration,
   isCouponCaring,
+  isExcludedCbMigration,
   isPezzoIva,
   type PistaCanvass,
 } from './bisuiteClassification';
@@ -147,7 +149,13 @@ export function derivePdvDrilldownMetrics(rawData: unknown): PdvDrilldownDerived
     const categoria = String(article.categoria?.nome || '').trim();
     const tipologia = String(article.tipologia?.nome || '').trim();
     if (isCouponCaring(categoria, tipologia)) continue;
-    const sourcePista = classifyCategory(categoria)?.pista;
+    const descrizione = String(article.descrizione || '');
+    const excludedMigration = isExcludedCbMigration(categoria, tipologia, descrizione);
+    const sourcePista = excludedMigration
+      ? undefined
+      : isCbMigration(categoria, tipologia)
+        ? 'cb'
+        : classifyCategory(categoria)?.pista;
     const breakdownLabel = sourcePista === 'assicurazioni'
       ? (tipologia || categoria)
       : sourcePista === 'mobile' || sourcePista === 'fisso' || sourcePista === 'cb'
@@ -164,7 +172,7 @@ export function derivePdvDrilldownMetrics(rawData: unknown): PdvDrilldownDerived
       isPezzoIva({
         pista: sourcePista,
         categoriaNome: categoria,
-        descrizione: String(article.descrizione || ''),
+        descrizione,
       })
     ) {
       businessByPista[sourcePista] = (businessByPista[sourcePista] || 0) + 1;

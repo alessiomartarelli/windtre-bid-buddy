@@ -231,26 +231,32 @@ await test("applyNettoIvaAccessoriServizi: netto IVA solo su ACCESSORI e Servizi
   assert.equal(cat(lordo.prodottiByCategoria, "ACCESSORI").importo, 61);
 });
 
-await test("pezzi CB = SOLO MIA TIED + MIA UNTIED + RIVINCOLO (altre categorie CB escluse)", () => {
+await test("pezzi CB includono le migrazioni ammesse ed escludono le due descrizioni richieste", () => {
   const a = aggregateDailyReport([
     sale({
-      totale: "70",
+      totale: "80",
       articoli: [
         art("ALTRI EVENTI CB", 10),
         art("WINDTRE SECURITY PRO CB", 5),
         art("ADD-ON CB", 5),
-        art("MIGRAZIONE EXTRA TRAMITE ASK", 5),
+        art("MIGRAZIONE EXTRA TRAMITE ASK", 5, { descrizione: "MIGRAZIONE FTTH" }),
+        art("MIGRAZIONE BUSINESS 1928", 5, { descrizione: "MIGRAZIONE BUSINESS 1928" }),
+        art("MIGRAZIONE EXTRA TRAMITE ASK", 5, {
+          descrizione: "RICHIESTA INSERIMENTO MIGRAZIONE SU TOOL ASK",
+        }),
         art("RIVINCOLO", 30),
         art("MIA TIED", 10),
         art("MIA UNTIED", 5),
       ],
     }),
   ]);
-  assert.equal(a.countByType.canvass, 7); // restano tutti canvass
-  assert.equal(a.countByPista.cb, 3); // RIVINCOLO + MIA TIED + MIA UNTIED
-  assert.equal(a.amountByPista.cb, 45);
+  assert.equal(a.countByType.canvass, 9); // anche le migrazioni restano canvass
+  assert.equal(a.countByPista.cb, 4); // migrazione ammessa + RIVINCOLO + MIA TIED + MIA UNTIED
+  assert.equal(a.amountByPista.cb, 50);
   const catCb = (a.categorieByPista.cb ?? []).map((c) => c.categoria);
-  assert.deepEqual(catCb.sort(), ["MIA TIED", "MIA UNTIED", "RIVINCOLO"]);
+  assert.deepEqual(catCb.sort(), [
+    "MIA TIED", "MIA UNTIED", "MIGRAZIONE EXTRA TRAMITE ASK", "RIVINCOLO",
+  ]);
 });
 
 await test("Coupon Caring: esclusi dai pezzi CB, conteggiati nel report dedicato", () => {

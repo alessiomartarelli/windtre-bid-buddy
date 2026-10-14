@@ -1,6 +1,8 @@
 import {
   classifyCategory,
+  isCbMigration,
   isCouponCaring,
+  isExcludedCbMigration,
   isPezzoIva,
   type PistaCanvass,
 } from './bisuiteClassification';
@@ -8,7 +10,8 @@ import {
 // Task #398 — colonne extra della Tabella PDV × Pista (Pezzi) di Vendite
 // BiSuite, stesse regole della vista Pezzi della Dashboard Gara (Task #392):
 //  - IVA: pezzi P.IVA (business) sulle piste canvass, via `isPezzoIva`;
-//  - CB: SOLO cambi piano (MIA TIED/UNTIED non Coupon Caring + RIVINCOLO).
+//  - CB: cambi piano, rivincoli e migrazioni ammesse (esclusi i Coupon Caring
+//    e le due descrizioni di migrazione non conteggiabili).
 //    Come nella dashboard il conteggio è per CATEGORIA BiSuite di origine
 //    (`classifyCategory`), NON per pista post-regole: regole KPI custom o
 //    listino canvass VF possono rimappare la pista, e i "twin" partnership
@@ -28,7 +31,7 @@ const SERVIZI_EURO_CATS = new Set(['SPEDIZIONE', 'ASSISTENZA', 'GARANTEASY']);
 export interface PezziExtraCounters {
   /** Pezzi P.IVA (business) sulle piste canvass. */
   iva: number;
-  /** Cambi piano CB (solo MIA TIED/UNTIED no Coupon Caring + RIVINCOLO). */
+  /** Pezzi CB da cambi piano, rivincoli e migrazioni ammesse. */
   cb: number;
   /** Telefoni venduti (categoria TELEFONIA). */
   telefoni: number;
@@ -72,16 +75,24 @@ export interface PezziExtraArticle {
  */
 export function accumulaPezziExtra(counters: PezziExtraCounters, art: PezziExtraArticle): void {
   const cat = (art.categoriaNome || '').toUpperCase().trim();
+  const tipologia = art.tipologiaNome || '';
+  const descrizione = art.descrizione || '';
   // IVA e CB per CATEGORIA BiSuite di origine (come server/bisuiteMappedSales):
   // le regole KPI custom / listino VF possono rimappare la pista finale, ma
   // "cambio piano" e "pezzo IVA" restano proprietà della categoria sorgente.
-  const coupon = art.couponCaring ?? isCouponCaring(cat, art.tipologiaNome || '');
+  const coupon = art.couponCaring ?? isCouponCaring(cat, tipologia);
   const srcPista = coupon ? undefined : classifyCategory(cat)?.pista;
   if (srcPista) {
-    if (isPezzoIva({ pista: srcPista, categoriaNome: cat, descrizione: art.descrizione })) {
+    if (isPezzoIva({ pista: srcPista, categoriaNome: cat, descrizione })) {
       counters.iva += 1;
     }
-    if (srcPista === 'cb') counters.cb += 1;
+  }
+  if (
+    !coupon &&
+    !isExcludedCbMigration(cat, tipologia, descrizione) &&
+    (srcPista === 'cb' || isCbMigration(cat, tipologia))
+  ) {
+    counters.cb += 1;
   }
   if (cat === 'TELEFONIA') counters.telefoni += 1;
   const importo = (art.importoImponibile ?? 0) || (art.prezzo ?? 0);

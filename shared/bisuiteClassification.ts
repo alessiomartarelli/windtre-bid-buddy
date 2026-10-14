@@ -156,9 +156,10 @@ const CATEGORY_MAP: Record<string, CategoryClassification> = {
   'FISSO VOCE': { type: 'canvass', pista: 'fisso' },
   'ADD-ON FISSI': { type: 'canvass', pista: 'fisso' },
 
-  // Pezzi CB = SOLO MIA TIED + MIA UNTIED + RIVINCOLO (richiesta utente).
-  // Le altre categorie CB restano canvass ma SENZA pista: non contano nei
-  // pezzi CB (dashboard Vendite BiSuite e report Telegram).
+  // MIA/RIVINCOLO restano le categorie CB esplicite. Le categorie di
+  // migrazione sono promosse a CB in classifyArticle, con le eccezioni
+  // descrittive applicate prima del conteggio; gli altri eventi CB restano
+  // canvass senza contribuire ai pezzi CB.
   'RIVINCOLO': { type: 'canvass', pista: 'cb' },
   'MIA UNTIED': { type: 'canvass', pista: 'cb' },
   'MIA TIED': { type: 'canvass', pista: 'cb' },
@@ -202,6 +203,38 @@ const CATEGORY_MAP: Record<string, CategoryClassification> = {
 export function classifyCategory(categoryName: string): CategoryClassification | null {
   const key = categoryName.toUpperCase().trim();
   return CATEGORY_MAP[key] || null;
+}
+
+const CB_MIGRATION_EXCLUSIONS = [
+  "MIGRAZIONE BUSINESS 1928",
+  "RICHIESTA INSERIMENTO MIGRAZIONE SU TOOL ASK",
+] as const;
+
+function normalizeCbMigrationText(value: string): string {
+  return value.normalize("NFKC").toUpperCase().replace(/\s+/g, " ").trim();
+}
+
+function containsMigration(value: string): boolean {
+  return /\bMIGRAZION[EI]\b/.test(normalizeCbMigrationText(value));
+}
+
+/** True for BiSuite categories or types that identify a migration. */
+export function isCbMigration(categoriaNome: string, tipologiaNome = ""): boolean {
+  return containsMigration(categoriaNome) || containsMigration(tipologiaNome);
+}
+
+/** Exact excluded migration labels are ignored wherever BiSuite stores them. */
+export function isExcludedCbMigration(
+  categoriaNome: string,
+  tipologiaNome = "",
+  descrizione = "",
+): boolean {
+  const fields = [categoriaNome, tipologiaNome, descrizione].map(normalizeCbMigrationText);
+  if (!fields.some(containsMigration)) return false;
+  return CB_MIGRATION_EXCLUSIONS.some((excluded) => {
+    const normalizedExcluded = normalizeCbMigrationText(excluded);
+    return fields.some((field) => field === normalizedExcluded);
+  });
 }
 
 /**
@@ -439,9 +472,12 @@ export function classifyArticle(
   canvassIndex?: CanvassIndex | null,
   kpiRules?: CanvassKpiRule[] | null,
 ): CategoryClassification | null {
+  const categoriaNome = String(article.categoria?.nome ?? "").trim();
+  const tipologiaNome = String(article.tipologia?.nome ?? "").trim();
+  const descrizione = String(article.descrizione ?? "").trim();
   // Garanteasy è un servizio anche per le organizzazioni con listino VF:
   // il match canvass non deve trasformarlo in un pezzo di pista.
-  if (String(article.categoria?.nome ?? '').trim().toUpperCase() === 'GARANTEASY') {
+  if (categoriaNome.toUpperCase() === 'GARANTEASY') {
     return { type: 'servizi' };
   }
   if (canvassIndex) {
@@ -453,7 +489,7 @@ export function classifyArticle(
     const target = resolveCanvassKpiTarget(article, kpiRules);
     if (target === 'escludi') {
       if (match) return { type: 'canvass', excludedFromPiste: true };
-      const fallback = classifyCategory(String(article.categoria?.nome ?? '').trim());
+        const fallback = classifyCategory(categoriaNome);
       return fallback ? { type: fallback.type, excludedFromPiste: true } : null;
     }
     if (target) {
@@ -467,7 +503,16 @@ export function classifyArticle(
       return { type: 'canvass', pista: pista === 'cb' && upsellingVolumes === 0 ? undefined : pista };
     }
   }
-  return classifyCategory(String(article.categoria?.nome ?? '').trim());
+  if (isCbMigration(categoriaNome, tipologiaNome)) {
+    return isExcludedCbMigration(categoriaNome, tipologiaNome, descrizione)
+      ? { type: 'canvass' }
+      : { type: 'canvass', pista: 'cb' };
+  }
+  const fallback = classifyCategory(categoriaNome);
+  if (fallback?.pista === 'cb' && isExcludedCbMigration(categoriaNome, tipologiaNome, descrizione)) {
+    return { ...fallback, pista: undefined };
+  }
+  return fallback;
 }
 
 /** Sottotipo informativo del Canvass Mobile VF, non una nuova SIM Gara.

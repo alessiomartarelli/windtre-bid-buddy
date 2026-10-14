@@ -5,7 +5,9 @@ import {
   classifyCategory,
   classificationPistaCounts,
   isAssicurazioneImpiantoOk,
+  isCbMigration,
   isCouponCaring,
+  isExcludedCbMigration,
   isPezzoIva,
   type PistaCanvass,
 } from "../shared/bisuiteClassification";
@@ -67,9 +69,8 @@ export type PdvAggregate = {
    * sulla classificazione per categoria (TIED IVA, ADSL/FIBRA/FWA IVA,
    * energia/protetti BUSINESS, ASSICURAZIONI BUSINESS PRO). */
   pezziIva: number;
-  /** Task #392 — cambi piano CB: SOLO MIA TIED (no Coupon Caring),
-   * MIA UNTIED (no Coupon Caring) e RIVINCOLO. Conteggio per categoria
-   * BiSuite dell'articolo, quindi indipendente dai "twin" partnership
+  /** Pezzi CB da categoria BiSuite: MIA TIED/UNTIED (no Coupon Caring),
+   * RIVINCOLO e migrazioni ammesse. Indipendente dai "twin" partnership
    * delle regole di mapping (nessun doppio conteggio). */
   cbCambiPiano: number;
   /** Task #392 — telefoni venduti (articoli categoria TELEFONIA). */
@@ -320,15 +321,18 @@ export function aggregateMappedSales(
         continue;
       }
       canvassCount++;
-      // Task #392 — conteggi extra per la Tabella PDV × Pista (vista Pezzi):
-      // pezzi P.IVA e cambi piano CB, per categoria BiSuite (non per regola
-      // di mapping: così i twin partnership delle regole CB non raddoppiano).
+      // Conteggi extra per la Tabella PDV × Pista (vista Pezzi): pezzi P.IVA
+      // e CB per categoria BiSuite (non per regola di mapping: così i twin
+      // partnership delle regole CB non raddoppiano).
       {
         const clsPista = coupon || impiantoOk ? undefined : classifyCategory(catNome)?.pista;
         if (clsPista && isPezzoIva({ pista: clsPista, categoriaNome: catNome, descrizione: String(art.descrizione || '') })) {
           byPdv[codicePos].pezziIva += 1;
         }
-        if (clsPista === 'cb') {
+        if (
+          !isExcludedCbMigration(catNome, tipNome, desc) &&
+          (clsPista === 'cb' || isCbMigration(catNome, tipNome))
+        ) {
           byPdv[codicePos].cbCambiPiano += 1;
         }
       }
