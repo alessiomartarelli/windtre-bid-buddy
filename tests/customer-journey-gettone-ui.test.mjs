@@ -100,9 +100,9 @@ async function openAnalisiByAddetto(context) {
   return page;
 }
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 1: admin — espansione/chiusura riga + sotto-tabella dettaglio.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 1: admin can expand a gettone row and see the saturation detail', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -293,9 +293,9 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
   }
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 2: operatore — vede SOLO i propri clienti nell'Analisi gettoni.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 2: operator sees only their own clients in the gettone analysis', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -360,14 +360,14 @@ test('scenario 2: operator sees only their own clients in the gettone analysis',
   }
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 3 (Task #195): tab "Dettaglio" (ReportView) — le righe aggregate
 // rendono i valori attesi e il selettore di dimensione funziona.
 // A differenza dell'Analisi gettoni le righe della tab Dettaglio non sono
 // espandibili, ma il selettore "Raggruppa per" (`button-report-dim-*`) cambia
 // il grouping a runtime: senza questo test una regressione del rendering o del
 // re-grouping di ReportView passerebbe inosservata.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 3: admin sees the Dettaglio report rows and the dimension switcher works', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -447,7 +447,7 @@ test('scenario 3: admin sees the Dettaglio report rows and the dimension switche
   }
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 4 (Task #199): i filtri condivisi (negozio/PDV) narrowano davvero
 // le tabelle report. La logica del predicato `matchesCjFilters` è coperta dai
 // test puri di `customer-journey-report.test.mjs`, ma nessun test verificava
@@ -455,7 +455,7 @@ test('scenario 3: admin sees the Dettaglio report rows and the dimension switche
 // le tabelle Dettaglio e Analisi gettoni con il sottoinsieme corretto. Una
 // regressione di wiring tra il <Select> negozio e la tabella renderizzata
 // passerebbe inosservata.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and gettone tables', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -561,7 +561,7 @@ test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and g
   }
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 5 (Task #199, aggiornato Task #232): il filtro a intervallo
 // dell'Analisi gettoni (`input-gettone-date-from`/`input-gettone-date-to`) ora
 // ragiona per data di INSERIMENTO della SIM, non per data attivazione.
@@ -569,7 +569,7 @@ test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and g
 // <Input type="date"> e la tabella gettone re-renderizzata no. Seminiamo due
 // journey con date di inserimento SIM diverse e verifichiamo che impostare il
 // range escluda la coorte fuori intervallo.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 5: the SIM-insertion date range filter narrows the gettone cohort', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -646,7 +646,7 @@ test('scenario 5: the SIM-insertion date range filter narrows the gettone cohort
   }
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 6 (Task #198): contratti ANNULLATI/KO esclusi da attivi/saturazione/
 // fatturato. I report e l'Analisi gettoni escludono per design gli item in stato
 // ko/stornato/annullato (isCjItemActive in shared/customerJourney.ts). Una
@@ -656,7 +656,7 @@ test('scenario 5: the SIM-insertion date range filter narrows the gettone cohort
 // e una ANNULLATA (fisso) accanto alla SIM mobile: la vista deve contare 1
 // pista (20% / 20€), non 2 (40% / 30€), e la riga Dettaglio 2 contratti attivi
 // su 3, non 3.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 6: i contratti annullati/rifiutati sono esclusi da attivi, saturazione e fatturato', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -734,7 +734,7 @@ test('scenario 6: i contratti annullati/rifiutati sono esclusi da attivi, satura
   }
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 7 (Task #200): un cliente la cui SIM MOBILE è annullata/rifiutata è
 // escluso dall'intera coorte gettone. Lo scenario 6 copre un cross-sell
 // annullato accanto a una SIM ATTIVA; qui invece è la SIM mobile stessa ad
@@ -746,7 +746,7 @@ test('scenario 6: i contratti annullati/rifiutati sono esclusi da attivi, satura
 // rendering React di questa esclusione. Seminiamo Gina (SIM mobile annullata +
 // cross-sell energia ATTIVO) accanto a Mario (SIM attiva): solo Mario deve
 // comparire.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 7: a customer whose mobile SIM is cancelled is excluded from the gettone cohort', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -809,7 +809,7 @@ test('scenario 7: a customer whose mobile SIM is cancelled is excluded from the 
   }
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 8 (Task #229): il simulatore di scenari gettone. Accanto a
 // "Saturazione attesa" (% clienti) c'è un selettore "Prodotti in più / cliente"
 // (+1..+5). Combinati simulano "il X% dei clienti attiva +N prodotti" e il
@@ -821,7 +821,7 @@ test('scenario 7: a customer whose mobile SIM is cancelled is excluded from the 
 // 2 piste cross-sell attive (energia + fisso) => 30€ maturato. Default (+5,
 // 100%) => potenziale pieno residuo 120-30 = 90€. Con +1 (=> 3 piste, 40€) il
 // potenziale scende a 10€; al 50% si dimezza.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 8: the gettone scenario simulator recomputes the projected potential', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -920,7 +920,7 @@ test('scenario 8: the gettone scenario simulator recomputes the projected potent
   }
 });
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // SCENARIO 9 (regressione del bug "floor solo per admin"): il floor alla data
 // trigger dell'Analisi gettoni deve valere ANCHE per gli operatori. Storicamente
 // `configQuery` era `enabled: isAdmin`, quindi gli operatori non caricavano la
@@ -928,7 +928,7 @@ test('scenario 8: the gettone scenario simulator recomputes the projected potent
 // operatore, una journey PRE-trigger (deve sparire) e una POST-trigger (deve
 // restare): se il floor non fosse applicato all'operatore comparirebbero
 // entrambe le righe addetto.
-// ===========================================================================
+// ---------------------------------------------------------------------------
 test('scenario 9: the gettone trigger floor is enforced for operators too', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
@@ -989,11 +989,13 @@ test('scenario 9: the gettone trigger floor is enforced for operators too', asyn
   }
 });
 
-// ===========================================================================
-// SCENARIO 10 (Task #648): filtri indipendenti per PDV origine/destinazione e
-// ragione sociale, applicati sia alle Schede sia al Dettaglio report.
-// ===========================================================================
-test('scenario 10: origin, destination and company filters stay independent across Schede and Reportistica', async () => {
+// ---------------------------------------------------------------------------
+// SCENARIO 10 (Task #648/#651): filtri indipendenti per PDV origine/destinazione
+// e ragione sociale, applicati sia alle Schede sia al Dettaglio report; su
+// viewport mobile devono restare raggiungibili senza overflow. Coorti conserva
+// i propri filtri locali e non eredita quelli condivisi.
+// ---------------------------------------------------------------------------
+test('scenario 10: shared filters stay independent and usable on mobile without changing Coorti', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Filter UI Test', organizationName: uniq('CJFilterUI') });
   const browser = await launchBrowser();
@@ -1005,6 +1007,7 @@ test('scenario 10: origin, destination and company filters stay independent acro
   const marioCompany = `ALFA TELECOM ${token} SRL`;
   const marioKey = uniq('CFORIGINE').toUpperCase();
   const luigiKey = uniq('CFDESTINAZIONE').toUpperCase();
+  const luigiCompany = `BETA SERVIZI ${token} SRL`;
   let marioId;
   let luigiId;
   try {
@@ -1025,7 +1028,7 @@ test('scenario 10: origin, destination and company filters stay independent acro
       customerKey: luigiKey,
       nome: 'Contatto Luigi',
       customerType: 'azienda',
-      ragioneSociale: `BETA SERVIZI ${token} SRL`,
+      ragioneSociale: luigiCompany,
       addetto: LUIGI_ADDETTO,
       items: [
         { driver: 'mobile', state: 'inserito', pdvOrigine: luigiOrigin, pdvDestinazione: luigiDestination },
@@ -1033,18 +1036,53 @@ test('scenario 10: origin, destination and company filters stay independent acro
       ],
     });
 
-    const context = await newAuthedContext(browser, session);
+    const context = await newAuthedContext(browser, session, { mobile: true });
     const page = await context.newPage();
     await page.goto(`${BASE}/customer-journey`, { waitUntil: 'networkidle' });
+
+    const assertNoMobileOverflow = async (view) => {
+      const dimensions = await page.evaluate(() => ({
+        width: window.innerWidth,
+        documentWidth: document.documentElement.scrollWidth,
+      }));
+      assert.ok(
+        dimensions.documentWidth <= dimensions.width,
+        `${view}: document must not scroll horizontally at ${dimensions.width}px (content ${dimensions.documentWidth}px)`,
+      );
+    };
+    const assertFilterFits = async (testid) => {
+      const control = page.getByTestId(testid);
+      await control.scrollIntoViewIfNeeded();
+      assert.ok(await control.isVisible(), `${testid} must remain visible on mobile`);
+      const box = await control.boundingBox();
+      assert.ok(box, `${testid} must have a mobile hit target`);
+      assert.ok(box.x >= 0 && box.x + box.width <= 375, `${testid} must fit within the 375px viewport`);
+    };
+    const sharedFilterIds = [
+      'select-filter-pdv-origine',
+      'select-filter-pdv-destinazione',
+      'input-filter-ragione-sociale',
+    ];
+    await assertNoMobileOverflow('Schede');
+    for (const testid of sharedFilterIds) await assertFilterFits(testid);
+    const originTop = await page.getByTestId(sharedFilterIds[0]).evaluate(el => el.getBoundingClientRect().top);
+    const destinationTop = await page.getByTestId(sharedFilterIds[1]).evaluate(el => el.getBoundingClientRect().top);
+    const companyTop = await page.getByTestId(sharedFilterIds[2]).evaluate(el => el.getBoundingClientRect().top);
+    assert.ok(originTop < destinationTop && destinationTop < companyTop, 'shared filters must stack without overlapping on mobile');
 
     // Le Schede usano il PDV origine e la ragione sociale dedicata.
     await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId(`card-journey-${luigiId}`).waitFor({ state: 'visible', timeout: 10000 });
     await page.getByTestId('select-filter-pdv-origine').click();
+    const originSearch = page.getByPlaceholder('Cerca PDV origine...');
+    await originSearch.waitFor({ state: 'visible' });
+    assert.ok((await originSearch.boundingBox()).x >= 0, 'origin search must be reachable on mobile');
+    await assertNoMobileOverflow('Schede origin menu');
     await page.getByTestId(`option-select-filter-pdv-origine-${marioOrigin}`).click();
     await page.keyboard.press('Escape');
     await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId(`card-journey-${luigiId}`).count(), 0, 'origin filter must hide the other journey');
+    await assertNoMobileOverflow('Schede with origin selected');
 
     // I download di Schede devono contenere lo stesso insieme di clienti
     // mostrato dalla UI quando origine, destinazione e ragione sociale sono
@@ -1088,17 +1126,24 @@ test('scenario 10: origin, destination and company filters stay independent acro
     await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
     await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId(`card-journey-${luigiId}`).count(), 0, 'partial case-insensitive ragione sociale filter must hide the other journey');
+    await assertNoMobileOverflow('Schede with company selected');
 
     // Reportistica uses the actual destination, with missing destination as
     // an explicit option; origin is never substituted for it.
     await page.getByTestId('button-reset-filters').click();
     await page.getByTestId('tab-report').click();
     await page.getByTestId('button-report-tab-dettaglio').click();
+    await assertNoMobileOverflow('Reportistica');
+    for (const testid of sharedFilterIds) await assertFilterFits(testid);
     await page.getByTestId(`row-report-${marioDestination}`).waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible', timeout: 10000 });
     await page.getByTestId(`row-report-${luigiDestination}`).waitFor({ state: 'visible', timeout: 10000 });
 
     await page.getByTestId('select-filter-pdv-destinazione').click();
+    const destinationSearch = page.getByPlaceholder('Cerca PDV destinazione...');
+    await destinationSearch.waitFor({ state: 'visible' });
+    assert.ok((await destinationSearch.boundingBox()).x >= 0, 'destination search must be reachable on mobile');
+    await assertNoMobileOverflow('Reportistica destination menu');
     await page.getByTestId(`option-select-filter-pdv-destinazione-${marioDestination}`).click();
     await page.keyboard.press('Escape');
     await page.getByTestId('select-filter-pdv-origine').click();
@@ -1108,6 +1153,7 @@ test('scenario 10: origin, destination and company filters stay independent acro
     await page.getByTestId(`row-report-${marioDestination}`).waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId(`row-report-${marioOrigin}`).count(), 0, 'destination filter must not match an origin-only row');
     assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0, 'destination filter must hide unrelated destinations');
+    await assertNoMobileOverflow('Reportistica with destination selected');
     await page.getByTestId('button-report-tab-analisi').click();
     await page.getByTestId('button-gettone-dim-addetto').click();
     await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
@@ -1141,18 +1187,46 @@ test('scenario 10: origin, destination and company filters stay independent acro
     await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId(`row-report-${marioDestination}`).count(), 0, 'missing destination must not use the origin as a fallback');
     assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0, 'missing destination filter must hide rows with real destinations');
+    await assertNoMobileOverflow('Reportistica with missing destination selected');
 
+    await page.getByTestId('button-reset-filters').click();
     await page.getByTestId('select-filter-pdv-origine').click();
     await page.getByTestId(`option-select-filter-pdv-origine-${marioOrigin}`).click();
     await page.keyboard.press('Escape');
+    await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible' });
+    assert.equal(await page.getByTestId(`row-report-${luigiOrigin}`).count(), 0, 'origin filter must independently hide rows from another origin');
+    await assertNoMobileOverflow('Reportistica with origin selected');
+
+    await page.getByTestId('button-reset-filters').click();
     await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
     await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible' });
-    assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0);
-    assert.equal(
-      await page.getByTestId('text-report-contratti-' + marioOrigin).innerText(),
-      '1',
-      'the no-destination filter keeps only Mario’s origin-attributed contract',
-    );
+    assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0, 'company filter must independently hide the other company');
+    await assertNoMobileOverflow('Reportistica with company selected');
+
+    // Le tre selezioni condivise non devono restringere lo storico Coorti; i
+    // filtri locali della vista restano disponibili anche su schermo stretto.
+    await page.getByTestId('select-filter-pdv-origine').click();
+    await page.getByTestId(`option-select-filter-pdv-origine-${marioOrigin}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('select-filter-pdv-destinazione').click();
+    await page.getByTestId(`option-select-filter-pdv-destinazione-${marioDestination}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('report-tab-coorti').click();
+    const cohortReport = page.getByTestId('cohort-report');
+    await cohortReport.waitFor({ state: 'visible', timeout: 15000 });
+    assert.equal(await page.getByTestId('select-filter-pdv-origine').count(), 0, 'shared origin filter stays local to Schede and standard reports');
+    assert.equal(await page.getByTestId('select-filter-pdv-destinazione').count(), 0, 'shared destination filter stays local to Schede and standard reports');
+    assert.equal(await page.getByTestId('input-filter-ragione-sociale').count(), 0, 'shared company filter stays local to Schede and standard reports');
+    await cohortReport.getByTestId('cohort-advanced-details').locator('summary').click();
+    const cohortShop = page.getByText('Negozio apertura', { exact: true }).locator('..').getByRole('combobox');
+    await cohortShop.scrollIntoViewIfNeeded();
+    assert.ok(await cohortShop.isVisible(), 'Coorti keeps its own local shop filter');
+    await cohortShop.click();
+    await page.getByRole('option', { name: 'Tutti i negozi' }).click();
+    const cohortClients = cohortReport.getByTestId('cohort-clients-panel');
+    await cohortClients.getByText(marioCompany, { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await cohortClients.getByText(luigiCompany, { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await assertNoMobileOverflow('Coorti with local filters');
 
     await page.close();
     await context.close();
