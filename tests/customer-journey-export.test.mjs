@@ -1,5 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { createServer } from 'node:http';
+import { mkdir, readFile, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as XLSX from 'xlsx';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { launchBrowser } from './helpers/uiTest.mjs';
 
 // Test suite Customer Journey — export PDF/Excel (Task #190).
 //
@@ -43,6 +51,8 @@ const {
 } = await import('../shared/customerJourneyExport.ts');
 
 const { CJ_DRIVER_ORDER, CJ_NO_DESTINATION_FILTER_VALUE } = await import('../shared/customerJourney.ts');
+const root = fileURLToPath(new URL('../', import.meta.url));
+const fileTestOutput = path.join(root, 'generated-artifacts/cj-list-filter-files');
 
 // Helper: scheda (journey) con default sensati.
 function journey(over = {}) {
@@ -348,6 +358,135 @@ test('cjAppliedFilterMetadata: lists active filters, labels missing destination,
   assert.match(listSubtitle([listJourney()], filterLabel, exportedAt), /PDV destinazione: Senza destinazione · Torino/);
   assert.ok(listExcelHeaderRows([listJourney()], filterLabel, exportedAt).some(([text]) =>
     String(text).includes('Ragione sociale: Acme')));
+});
+
+test('actual Schede PDF/XLSX downloads preserve selected filters and long PDF summaries', { timeout: 120_000 }, async () => {
+  await rm(fileTestOutput, { recursive: true, force: true });
+  await mkdir(fileTestOutput, { recursive: true });
+
+  const longCompany = `Ragione sociale filtro lungo ${'Sede commerciale Torino Nord '.repeat(10)}FINE_FILTRO_RAGIONE_SOCIALE`;
+  const activeFilterLabel = [
+    'PDV origine: ORIGINE_ROMA_FILTRATA',
+    'PDV destinazione: DESTINAZIONE_TORINO_FILTRATA',
+    `Ragione sociale: ${longCompany}`,
+  ].join(' · ');
+  const exportedJourney = listJourney({
+    customerType: 'privato',
+    nome: 'Cliente',
+    cognome: 'Sintetico export filtri',
+    nominativo: 'Cliente Sintetico export filtri',
+    customerKey: 'CF_SINTETICO',
+  });
+  const cases = {
+    active: { journeys: [exportedJourney], filterLabel: activeFilterLabel },
+    unset: { journeys: [exportedJourney] },
+  };
+
+  const bundle = await build({
+    stdin: {
+      contents: `import { exportJourneyListPdf, exportJourneyListExcel } from './client/src/lib/customerJourneyExport.ts';
+        const cases = ${JSON.stringify(cases)};
+        for (const [name, data] of Object.entries(cases)) {
+          document.querySelector('#' + name + '-pdf').onclick = () => exportJourneyListPdf(data);
+          document.querySelector('#' + name + '-excel').onclick = () => exportJourneyListExcel(data);
+        }`,
+      resolveDir: root,
+      sourcefile: 'cj-list-filter-file-harness.ts',
+    },
+    bundle: true,
+    write: false,
+    format: 'iife',
+    platform: 'browser',
+    tsconfig: path.join(root, 'tsconfig.json'),
+  });
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', req.url === '/bundle.js' ? 'text/javascript' : 'text/html');
+    res.end(req.url === '/bundle.js' ? bundle.outputFiles[0].contents
+      : '<!doctype html><button id="active-pdf">PDF con filtri</button><button id="active-excel">Excel con filtri</button><button id="unset-pdf">PDF senza filtri</button><button id="unset-excel">Excel senza filtri</button><script src="/bundle.js"></script>');
+  });
+  let browser;
+  const errors = [];
+  try {
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    browser = await launchBrowser();
+    const context = await browser.newContext({ acceptDownloads: true });
+    const page = await context.newPage();
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+
+    for (const scenario of ['active', 'unset']) {
+      for (const [format, extension] of [['pdf', 'pdf'], ['excel', 'xlsx']]) {
+        const pending = page.waitForEvent('download');
+        await page.locator(`#${scenario}-${format}`).click();
+        const download = await pending;
+        assert.equal(download.suggestedFilename(), `customer_journey_elenco.${extension}`);
+        await download.saveAs(path.join(fileTestOutput, `${scenario}.${extension}`));
+        assert.equal(await download.failure(), null);
+      }
+    }
+    assert.deepEqual(errors, [], 'Schede export must not throw in the browser');
+  } finally {
+    await browser?.close();
+    await new Promise(resolve => server.close(resolve));
+  }
+
+  const activeWorkbook = XLSX.read(await readFile(path.join(fileTestOutput, 'active.xlsx')), { type: 'buffer' });
+  assert.deepEqual(activeWorkbook.SheetNames, ['Elenco']);
+  const activeRows = XLSX.utils.sheet_to_json(activeWorkbook.Sheets.Elenco, { header: 1, defval: '' });
+  const activeExcelText = activeRows.flat().join(' ');
+  for (const expected of [
+    'PDV origine: ORIGINE_ROMA_FILTRATA',
+    'PDV destinazione: DESTINAZIONE_TORINO_FILTRATA',
+    `Ragione sociale: ${longCompany}`,
+  ]) assert.ok(activeExcelText.includes(expected), `downloaded XLSX includes "${expected}"`);
+
+  const unsetWorkbook = XLSX.read(await readFile(path.join(fileTestOutput, 'unset.xlsx')), { type: 'buffer' });
+  const unsetExcelText = XLSX.utils.sheet_to_json(unsetWorkbook.Sheets.Elenco, { header: 1, defval: '' }).flat().join(' ');
+  for (const absent of ['PDV origine:', 'PDV destinazione:', 'Ragione sociale:', 'ORIGINE_ROMA_FILTRATA',
+    'DESTINAZIONE_TORINO_FILTRATA', 'FINE_FILTRO_RAGIONE_SOCIALE']) {
+    assert.ok(!unsetExcelText.includes(absent), `unset XLSX omits "${absent}"`);
+  }
+
+  const compact = text => text.replace(/\s+/g, '');
+  for (const scenario of ['active', 'unset']) {
+    const bytes = await readFile(path.join(fileTestOutput, `${scenario}.pdf`));
+    assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
+    const loading = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
+    const pdf = await loading.promise;
+    try {
+      const pages = [];
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber);
+        const content = await page.getTextContent();
+        const textItems = content.items.filter(item => 'str' in item && item.str.trim());
+        pages.push(textItems.map(item => item.str).join(' '));
+        for (const item of textItems) {
+          const [x, y] = item.transform.slice(4);
+          assert.ok(x >= 28 && x + item.width <= page.view[2] - 28,
+            `${scenario} PDF text stays within horizontal page bounds: ${item.str}`);
+          assert.ok(y >= 20 && y <= page.view[3] - 20,
+            `${scenario} PDF text stays within vertical page bounds: ${item.str}`);
+        }
+      }
+      const pdfText = compact(pages.join(' '));
+      if (scenario === 'active') {
+        for (const expected of [
+          'PDV origine: ORIGINE_ROMA_FILTRATA',
+          'PDV destinazione: DESTINAZIONE_TORINO_FILTRATA',
+          `Ragione sociale: ${longCompany}`,
+        ]) assert.ok(pdfText.includes(compact(expected)), `downloaded PDF includes "${expected}"`);
+        assert.ok(pdfText.includes('FINE_FILTRO_RAGIONE_SOCIALE'),
+          'the end of the wrapped long filter summary is present in the PDF');
+      } else {
+        for (const absent of ['PDV origine:', 'PDV destinazione:', 'Ragione sociale:', 'ORIGINE_ROMA_FILTRATA',
+          'DESTINAZIONE_TORINO_FILTRATA', 'FINE_FILTRO_RAGIONE_SOCIALE']) {
+          assert.ok(!pdfText.includes(compact(absent)), `unset PDF omits "${absent}"`);
+        }
+      }
+    } finally {
+      await loading.destroy();
+    }
+  }
 });
 
 // ===========================================================================

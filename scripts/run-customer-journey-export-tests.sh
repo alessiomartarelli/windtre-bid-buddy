@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Run the Customer Journey export (PDF/Excel) test suite
-# (pure rows + actual smartphone PDF/Excel downloads).
+# (pure rows + actual smartphone and Schede-list PDF/Excel downloads).
 #
 # Logica pura di costruzione righe/colonne degli export
 # (`shared/customerJourneyExport.ts`, estratta da
 # `client/src/lib/customerJourneyExport.ts`): intestazioni, mapping campi,
 # valori driver/stato, filterLabel, nomi file. Il test dei file usa Chromium
 # con un harness effimero: NON serve il dev server né il DB.
-# I file sintetici scaricati restano in generated-artifacts/cj-smartphone-files.
+# I file sintetici scaricati restano in generated-artifacts/.
 
 set -euo pipefail
 
