@@ -49,7 +49,7 @@ const ART_AUTO = 1002; // resta automatico
 // Costruisce il rawData di una vendita BiSuite con un'attivazione mobile +
 // due telefoni finanziati. `phones` permette di variare IMEI/importoFinanziato
 // fra il primo e il secondo reconcile.
-function buildRawData(cf, addetto, phones) {
+function buildRawData(cf, addetto, phones, pdv = 'PDV ORIGINE') {
   return {
     cliente: {
       codiceFiscale: cf,
@@ -60,7 +60,7 @@ function buildRawData(cf, addetto, phones) {
       codiceEsterno: 'CLI123',
     },
     addetto: { nominativo: addetto },
-    attivita: { nominativo: 'PDV ORIGINE' },
+    attivita: { nominativo: pdv },
     importoScontrino: 1400,
     articoli: [
       {
@@ -98,9 +98,9 @@ function buildRawData(cf, addetto, phones) {
   };
 }
 
-async function insertSale(pool, orgId, cf, addetto, phones) {
+async function insertSale(pool, orgId, cf, addetto, phones, pdv) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
-  const raw = buildRawData(cf, addetto, phones);
+  const raw = buildRawData(cf, addetto, phones, pdv);
   const res = await pool.query(
     `INSERT INTO bisuite_sales
        (organization_id, bisuite_id, data_vendita, nome_addetto, stato, raw_data)
@@ -111,8 +111,8 @@ async function insertSale(pool, orgId, cf, addetto, phones) {
   return res.rows[0].id;
 }
 
-async function updateSaleRaw(pool, saleId, cf, addetto, phones) {
-  const raw = buildRawData(cf, addetto, phones);
+async function updateSaleRaw(pool, saleId, cf, addetto, phones, pdv) {
+  const raw = buildRawData(cf, addetto, phones, pdv);
   await pool.query(`UPDATE bisuite_sales SET raw_data = $2::jsonb WHERE id = $1`, [
     saleId,
     JSON.stringify(raw),
@@ -179,7 +179,7 @@ async function itemsOf(pool, orgId) {
 // Mappa gli item della journey per bisuite_article_id, leggendo dal DB.
 async function itemsByArticle(pool, orgId) {
   const r = await pool.query(
-    `SELECT bisuite_article_id, id, imei, rata, data_attivazione, pdv_destinazione, details_manual
+    `SELECT bisuite_article_id, id, imei, rata, data_attivazione, pdv_origine, pdv_destinazione, details_manual
        FROM customer_journey_items
       WHERE organization_id = $1`,
     [orgId],
@@ -252,6 +252,7 @@ test('scenario 1: manual contract fields survive a re-reconcile', async () => {
     let items = await itemsByArticle(pool, session.orgId);
     const before = items.get(ART_MANUAL);
     assert.ok(before, 'manual phone item must exist after first reconcile');
+    assert.equal(before.pdv_origine, 'PDV ORIGINE', 'the opening sale supplies the item origin');
     assert.equal(before.imei, 'AAA111', 'IMEI must come from BiSuite at first reconcile');
     assert.equal(before.rata, null, 'RATA is manual-only: not auto-derived from BiSuite');
     assert.equal(before.details_manual, false, 'item starts as non-manual');
@@ -286,13 +287,14 @@ test('scenario 1: manual contract fields survive a re-reconcile', async () => {
     await updateSaleRaw(pool, saleId, cf, addetto, {
       manual: { imei: 'AAA999', importoFinanziato: 55 },
       auto: { imei: 'BBB999', importoFinanziato: 65 },
-    });
+    }, 'PDV ORIGINE AGGIORNATO');
 
     // (4) reconcile di nuovo: l'item manuale resta invariato su tutti e 4 i campi.
     await reconcile(session);
     items = await itemsByArticle(pool, session.orgId);
     const after = items.get(ART_MANUAL);
     assert.ok(after, 'manual item must still exist after re-reconcile');
+    assert.equal(after.pdv_origine, 'PDV ORIGINE AGGIORNATO', 'BiSuite refreshes the sale origin');
     assert.equal(after.imei, 'IMEI_MANUALE', 'manual IMEI must NOT be overwritten by BiSuite');
     assert.equal(after.rata, '999', 'manual RATA must NOT be overwritten by BiSuite');
     assert.equal(

@@ -41,8 +41,8 @@ import {
   CJ_NON_MOBILE_DRIVERS, matchesCjDriverFilter, nextCjDriverFilterMode, isCjDriverFilterActive,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
   buildGettoneJourneys, buildGettoneAuditDetails, filterGettoneByDate, filterGettoneByInsertDate,
-  aggregateGettone, gettoneTotals,
-  crossSellPercentuali, gettoneDetailByKey,
+  aggregateGettone, aggregateGettoneByPdv, gettoneTotals,
+  crossSellPercentuali, gettoneDetailByKey, gettoneDetailByPdv,
   cjJourneyReportRows,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES, CJ_ECONOMIC_STATES } from "@shared/schema";
@@ -1075,21 +1075,20 @@ export default function CustomerJourneyPage() {
       gettoneDim === "negozio" ? (j.pdv || "—") : (j.addetto || "—"),
     [gettoneDim],
   );
-  const gettoneGroups = useMemo(() => aggregateGettone(
-    gettoneJourneys,
-    (j) => ({
-      key: gettoneKeyFn(j),
-      label: gettoneDim === "negozio"
-        ? (j.pdv || "Senza negozio")
-        : (j.addetto || "Senza addetto"),
-    }),
-    saturation,
-    extraProdotti,
-  ), [gettoneJourneys, gettoneKeyFn, gettoneDim, saturation, extraProdotti]);
-  // Dettaglio per gruppo (clienti/SIM con % saturazione) per la riga espandibile.
+  const gettoneGroups = useMemo(() => gettoneDim === "negozio"
+    ? aggregateGettoneByPdv(gettoneJourneys, saturation, extraProdotti)
+    : aggregateGettone(
+        gettoneJourneys,
+        (j) => ({ key: gettoneKeyFn(j), label: j.addetto || "Senza addetto" }),
+        saturation,
+        extraProdotti,
+      ), [gettoneJourneys, gettoneKeyFn, gettoneDim, saturation, extraProdotti]);
+  // Dettaglio negozio item-level; addetto resta raggruppato per journey.
   const gettoneDetail = useMemo(
-    () => gettoneDetailByKey(gettoneJourneys, gettoneKeyFn),
-    [gettoneJourneys, gettoneKeyFn],
+    () => gettoneDim === "negozio"
+      ? gettoneDetailByPdv(gettoneJourneys)
+      : gettoneDetailByKey(gettoneJourneys, gettoneKeyFn),
+    [gettoneJourneys, gettoneKeyFn, gettoneDim],
   );
 
   const hasActiveFilters =
@@ -2382,6 +2381,13 @@ function AnalisiViewImpl({
               <p className="text-sm mt-1">Modifica i filtri o l'intervallo di date.</p>
             </div>
           ) : (
+            <>
+            {dim === "negozio" && (
+              <p className="px-4 pt-3 text-xs text-muted-foreground">
+                SIM e clienti seguono il negozio di vendita; la stessa journey può comparire in più negozi.
+                Il gettone base resta sul negozio della SIM iniziale, mentre gli extra seguono il negozio della coppia venduta.
+              </p>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -2442,8 +2448,9 @@ function AnalisiViewImpl({
                         <TableCell colSpan={8} className="bg-muted/40 p-0">
                           <div className="px-4 py-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">
-                              {g.clienti} {g.clienti === 1 ? "cliente attivo" : "clienti attivi"} nella CJ ·
-                              {" "}saturazione cross-sell per SIM
+                              {dim === "negozio"
+                                ? `${g.clienti} ${g.clienti === 1 ? "cliente" : "clienti"} con SIM attiva venduta qui · ${g.extraCoppie} ${g.extraCoppie === 1 ? "coppia extra" : "coppie extra"} vendute qui`
+                                : `${g.clienti} ${g.clienti === 1 ? "cliente attivo" : "clienti attivi"} nella CJ · saturazione cross-sell per SIM`}
                             </p>
                             <Table>
                               <TableHeader>
@@ -2502,6 +2509,7 @@ function AnalisiViewImpl({
                 })}
               </TableBody>
             </Table>
+            </>
           )}
         </CardContent>
       </Card>

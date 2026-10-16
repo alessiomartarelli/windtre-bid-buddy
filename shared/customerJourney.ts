@@ -412,10 +412,14 @@ export interface CjGettoneJourney extends CjGettoneBreakdown {
   journeyId: string;
   cliente: string;
   customerType: string;
-  // Attribuzione negozio/addetto: quelli della SIM mobile (trigger) se
-  // disponibili, altrimenti il primo item incontrato.
+  // Negozio/addetto della SIM che apre la journey (fallback: primo item con
+  // attribuzione disponibile). Il negozio usa sempre l'origine della vendita.
   pdv: string;
   addetto: string;
+  // Ripartizione per negozio: SIM attive vendute qui, apertura della journey
+  // e premi extra delle coppie smartphone vendute qui. I valori base restano
+  // assegnati al negozio di apertura.
+  pdvAllocations?: CjGettonePdvAllocation[];
   // Data attivazione SIM (T0), ISO string o null.
   openedAt: string | null;
   // Data di inserimento SIM (coorte del filtro a intervallo), ISO o null.
@@ -441,6 +445,22 @@ export interface CjGettoneJourney extends CjGettoneBreakdown {
   potenzialePieno: number;
 }
 
+export interface CjGettonePdvAllocation {
+  pdv: string;
+  simAttive: number;
+  openedHere: boolean;
+  extraCoppie: number;
+  extraStimato: number;
+  extraMaturato: number;
+  extraEsplicito: number;
+  extraPresunto: number;
+  extraConfermato: number;
+}
+
+function cjSalePdv(row: Pick<CjReportRow, "pdvOrigine"> | undefined): string {
+  return (row?.pdvOrigine ?? "").trim();
+}
+
 /**
  * Costruisce una `CjGettoneJourney` per ogni journey distinta a partire dalle
  * righe item-level della reportistica. La COHORT include solo i clienti con
@@ -461,6 +481,10 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     [id, cjT0Month(list.find(r => r.openedAt)?.openedAt ?? null, list)]));
   const phonesByJourney = new Map(Array.from(grouped, ([id, list]) =>
     [id, cjPhoneEligibility(list, t0ByJourney.get(id) ?? null, list.find(r => r.openedAt)?.openedAt, list[0]?.triggerBisuiteId)]));
+  const triggerMobileByJourney = new Map<string, CjReportRow | undefined>();
+  for (const [id, list] of grouped) {
+    triggerMobileByJourney.set(id, selectCjTriggerMobile(list));
+  }
   const map = new Map<string, {
     cliente: string; customerType: string;
     mobilePdv: string; mobileAddetto: string;
@@ -480,21 +504,19 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     if (!e) {
       e = {
         cliente: r.cliente, customerType: r.customerType,
-        mobilePdv: "", mobileAddetto: "", anyPdv: "", anyAddetto: "",
+        mobilePdv: cjSalePdv(triggerMobileByJourney.get(r.journeyId)),
+        mobileAddetto: triggerMobileByJourney.get(r.journeyId)?.addetto?.trim() ?? "",
+        anyPdv: "", anyAddetto: "",
         openedAt: r.openedAt ?? null, insertedAt: null, simAttive: 0,
         candidates: [],
       };
       map.set(r.journeyId, e);
     }
-    // Attribuzione deterministica (indipendente dall'ordine delle righe, che
-    // la query report non garantisce): fra i valori non vuoti teniamo il
-    // minimo lessicografico. Nel caso normale la journey ha un'unica
-    // attivazione mobile, quindi il valore è univoco.
-    e.anyPdv = minNonEmpty(e.anyPdv, r.pdv);
+    // Fallback deterministico se la SIM trigger o il suo negozio non sono
+    // visibili: fra i valori di origine non vuoti teniamo il minimo lessicografico.
+    e.anyPdv = minNonEmpty(e.anyPdv, cjSalePdv(r));
     e.anyAddetto = minNonEmpty(e.anyAddetto, r.addetto);
     if (r.driver === "mobile" && isCjMobileEligible(r) && pisteInWindow(r.eventDate, t0ByJourney.get(r.journeyId) ?? null)) {
-      e.mobilePdv = minNonEmpty(e.mobilePdv, r.pdv);
-      e.mobileAddetto = minNonEmpty(e.mobileAddetto, r.addetto);
       if (isCjItemActive(r)) {
         e.simAttive += 1;
         // Coorte per data inserimento: teniamo la SIM mobile attiva più
@@ -550,6 +572,46 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       const extraStimato = extra.length * 20;
       const extraMaturato = extra.filter(p => p.paid).length * 20;
       const extraEsplicito = extra.filter(p => p.explicit).length * 20;
+      const pdvAllocations = new Map<string, CjGettonePdvAllocation>();
+      const ensurePdvAllocation = (pdv: string): CjGettonePdvAllocation => {
+        const key = pdv.trim();
+        let allocation = pdvAllocations.get(key);
+        if (!allocation) {
+          allocation = {
+            pdv: key, simAttive: 0, openedHere: false,
+            extraCoppie: 0, extraStimato: 0, extraMaturato: 0,
+            extraEsplicito: 0, extraPresunto: 0, extraConfermato: 0,
+          };
+          pdvAllocations.set(key, allocation);
+        }
+        return allocation;
+      };
+      const openingPdv = e.mobilePdv || e.anyPdv;
+      ensurePdvAllocation(openingPdv).openedHere = true;
+      const journeyRows = grouped.get(journeyId) ?? [];
+      for (const row of journeyRows) {
+        const rowPdv = cjSalePdv(row);
+        if (row.driver === "mobile"
+            && isCjMobileEligible(row)
+            && isCjItemActive(row)
+            && pisteInWindow(row.eventDate, t0ByJourney.get(journeyId) ?? null)) {
+          ensurePdvAllocation(rowPdv).simAttive += 1;
+        }
+        if (row.driver !== "telefono") continue;
+        const pair = phonesByJourney.get(journeyId)?.get(cjPhoneKey(row));
+        if (pair?.kind !== "extra") continue;
+        const pairedMobile = pair.mobile
+          ? journeyRows.find(candidate => candidate === pair.mobile)
+          : undefined;
+        const pairPdv = rowPdv || cjSalePdv(pairedMobile);
+        const allocation = ensurePdvAllocation(pairPdv);
+        allocation.extraCoppie += 1;
+        allocation.extraStimato += 20;
+        if (pair.paid) allocation.extraMaturato += 20;
+        if (pair.explicit) allocation.extraEsplicito += 20;
+        if (pair.paid && !pair.explicit) allocation.extraPresunto += 20;
+        if (pair.confirmed) allocation.extraConfermato += 20;
+      }
       const fatturato = gettoneBase + extraStimato;
       const fatturatoMaturato = gettoneBaseMaturato + extraMaturato;
       return {
@@ -558,6 +620,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
         customerType: e.customerType,
         pdv: e.mobilePdv || e.anyPdv,
         addetto: e.mobileAddetto || e.anyAddetto,
+        pdvAllocations: Array.from(pdvAllocations.values()).sort((a, b) => a.pdv.localeCompare(b.pdv, "it")),
         openedAt: e.openedAt,
         insertedAt: e.insertedAt,
         simAttive: e.simAttive,
@@ -839,6 +902,105 @@ export function aggregateGettone(
 }
 
 /**
+ * Aggregazione per negozio basata sugli item venduti: il conteggio SIM e i
+ * clienti attivi seguono l'origine di ciascuna SIM; il gettone base resta nel
+ * negozio della SIM trigger; ogni premio extra segue il negozio della coppia.
+ * Una journey con vendite in più negozi compare in ciascun gruppo interessato,
+ * mentre i totali globali restano quelli deduplicati per journey.
+ */
+export function aggregateGettoneByPdv(
+  journeys: CjGettoneJourney[],
+  saturationPct: number,
+  addProducts: number = CJ_MAX_PISTE,
+): CjGettoneGroup[] {
+  const s = clampSaturation(saturationPct) / 100;
+  const extraBreakdownKeys = [
+    "extraCoppie", "extraStimato", "extraMaturato",
+    "extraEsplicito", "extraPresunto", "extraConfermato",
+  ] as const;
+  const map = new Map<string, {
+    label: string;
+    simAttivate: number;
+    activeJourneys: Set<string>;
+    openingJourneys: Set<string>;
+    productJourneys: Set<string>;
+    incremento: number;
+    breakdown: CjGettoneBreakdown;
+  }>();
+  const add = (target: CjGettoneBreakdown, key: keyof CjGettoneBreakdown, value: number) => {
+    target[key] += value;
+  };
+  for (const journey of journeys) {
+    const allocations = journey.pdvAllocations?.length
+      ? journey.pdvAllocations
+      : [{
+          pdv: journey.pdv, simAttive: journey.simAttive, openedHere: true,
+          extraCoppie: journey.extraCoppie, extraStimato: journey.extraStimato,
+          extraMaturato: journey.extraMaturato, extraEsplicito: journey.extraEsplicito,
+          extraPresunto: journey.extraPresunto, extraConfermato: journey.extraConfermato,
+        }];
+    for (const allocation of allocations) {
+      if (!allocation.openedHere && allocation.simAttive <= 0 && allocation.extraCoppie <= 0) continue;
+      const key = allocation.pdv.trim() || "—";
+      let group = map.get(key);
+      if (!group) {
+        group = {
+          label: allocation.pdv.trim() || "Senza negozio",
+          simAttivate: 0,
+          activeJourneys: new Set(),
+          openingJourneys: new Set(),
+          productJourneys: new Set(),
+          incremento: 0,
+          breakdown: {
+            gettoneBase: 0, gettoneBaseMaturato: 0, gettoneBaseEsplicito: 0,
+            gettoneBasePresunto: 0, gettoneBaseConfermato: 0, extraCoppie: 0,
+            extraStimato: 0, extraMaturato: 0, extraEsplicito: 0,
+            extraPresunto: 0, extraConfermato: 0,
+          },
+        };
+        map.set(key, group);
+      }
+      if (allocation.simAttive > 0) {
+        group.simAttivate += allocation.simAttive;
+        group.activeJourneys.add(journey.journeyId);
+      }
+      if (allocation.openedHere && !group.openingJourneys.has(journey.journeyId)) {
+        group.openingJourneys.add(journey.journeyId);
+        if (journey.pisteAttive >= 1) group.productJourneys.add(journey.journeyId);
+        group.incremento += gettoneIncremento(
+          journey.pisteAttive, journey.gettoneBase ?? journey.fatturato, addProducts,
+        );
+        add(group.breakdown, "gettoneBase", journey.gettoneBase);
+        add(group.breakdown, "gettoneBaseMaturato", journey.gettoneBaseMaturato);
+        add(group.breakdown, "gettoneBaseEsplicito", journey.gettoneBaseEsplicito);
+        add(group.breakdown, "gettoneBasePresunto", journey.gettoneBasePresunto);
+        add(group.breakdown, "gettoneBaseConfermato", journey.gettoneBaseConfermato);
+      }
+      for (const field of extraBreakdownKeys) {
+        add(group.breakdown, field, allocation[field]);
+      }
+    }
+  }
+  return Array.from(map.entries())
+    .map(([key, group]) => {
+      const breakdown = group.breakdown;
+      return {
+        key,
+        label: group.label,
+        simAttivate: group.simAttivate,
+        clienti: group.activeJourneys.size,
+        ramiSimAperti: group.openingJourneys.size + breakdown.extraCoppie,
+        conProdotti: group.productJourneys.size,
+        fatturato: breakdown.gettoneBase + breakdown.extraStimato,
+        fatturatoMaturato: breakdown.gettoneBaseMaturato + breakdown.extraMaturato,
+        ...breakdown,
+        potenziale: group.incremento * s,
+      };
+    })
+    .sort((a, b) => b.fatturato - a.fatturato || b.clienti - a.clienti || a.label.localeCompare(b.label, "it"));
+}
+
+/**
  * Totali aggregati dell'analisi gettoni per lo scenario simulato: il
  * `potenziale` è l'incremento di gettone se ogni cliente guadagnasse
  * `addProducts` piste in più (cap a CJ_MAX_PISTE), scalato per la percentuale
@@ -963,6 +1125,58 @@ export function gettoneDetailByKey(
   }
   for (const list of Array.from(map.values())) {
     list.sort((a: CjGettoneDetailRow, b: CjGettoneDetailRow) => b.saturazionePct - a.saturazionePct || a.cliente.localeCompare(b.cliente, "it"));
+  }
+  return map;
+}
+
+/**
+ * Dettaglio per negozio coerente con aggregateGettoneByPdv: una stessa journey
+ * può comparire in negozi diversi, ma base/piste restano solo sull'apertura e
+ * ogni extra appare dove è stata venduta la relativa coppia.
+ */
+export function gettoneDetailByPdv(journeys: CjGettoneJourney[]): Map<string, CjGettoneDetailRow[]> {
+  const map = new Map<string, CjGettoneDetailRow[]>();
+  for (const journey of journeys) {
+    const allocations = journey.pdvAllocations?.length
+      ? journey.pdvAllocations
+      : [{
+          pdv: journey.pdv, simAttive: journey.simAttive, openedHere: true,
+          extraCoppie: journey.extraCoppie, extraStimato: journey.extraStimato,
+          extraMaturato: journey.extraMaturato, extraEsplicito: journey.extraEsplicito,
+          extraPresunto: journey.extraPresunto, extraConfermato: journey.extraConfermato,
+        }];
+    for (const allocation of allocations) {
+      if (!allocation.openedHere && allocation.simAttive <= 0 && allocation.extraCoppie <= 0) continue;
+      const key = allocation.pdv.trim() || "—";
+      const list = map.get(key) ?? [];
+      const breakdown: CjGettoneBreakdown = {
+        gettoneBase: allocation.openedHere ? journey.gettoneBase : 0,
+        gettoneBaseMaturato: allocation.openedHere ? journey.gettoneBaseMaturato : 0,
+        gettoneBaseEsplicito: allocation.openedHere ? journey.gettoneBaseEsplicito : 0,
+        gettoneBasePresunto: allocation.openedHere ? journey.gettoneBasePresunto : 0,
+        gettoneBaseConfermato: allocation.openedHere ? journey.gettoneBaseConfermato : 0,
+        extraCoppie: allocation.extraCoppie,
+        extraStimato: allocation.extraStimato,
+        extraMaturato: allocation.extraMaturato,
+        extraEsplicito: allocation.extraEsplicito,
+        extraPresunto: allocation.extraPresunto,
+        extraConfermato: allocation.extraConfermato,
+      };
+      list.push({
+        journeyId: journey.journeyId,
+        cliente: journey.cliente,
+        simAttive: allocation.simAttive,
+        pisteAttive: allocation.openedHere ? journey.pisteAttive : 0,
+        saturazionePct: allocation.openedHere ? simSaturationPct(journey.pisteAttive) : 0,
+        fatturato: breakdown.gettoneBase + breakdown.extraStimato,
+        fatturatoMaturato: breakdown.gettoneBaseMaturato + breakdown.extraMaturato,
+        ...breakdown,
+      });
+      map.set(key, list);
+    }
+  }
+  for (const list of Array.from(map.values())) {
+    list.sort((a, b) => b.saturazionePct - a.saturazionePct || a.cliente.localeCompare(b.cliente, "it"));
   }
   return map;
 }
@@ -1199,7 +1413,7 @@ export interface CjPhoneEligibility {
 export function cjPhoneKey(it: CjPhoneItem): string {
   return it.id ?? it.itemId ?? `${it.bisuiteSaleId ?? ""}:${it.bisuiteArticleId ?? ""}`;
 }
-export function selectCjTriggerMobile(items: CjPhoneItem[]): CjPhoneItem | undefined {
+export function selectCjTriggerMobile<T extends CjPhoneItem>(items: T[]): T | undefined {
   const eligible = items.filter(it => it.driver === "mobile" && isCjMobileEligible(it));
   return eligible.filter(it => it.cjTriggerMobile).sort(cjPhoneSort)[0]
     ?? (items.some(it => it.cjTriggerMobile !== undefined) ? undefined : eligible.filter(isCjItemActive).sort(cjPhoneSort)[0]);

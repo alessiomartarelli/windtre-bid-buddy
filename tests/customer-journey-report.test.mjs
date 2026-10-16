@@ -32,10 +32,12 @@ const {
   filterGettoneByDate,
   filterGettoneByInsertDate,
   aggregateGettone,
+  aggregateGettoneByPdv,
   gettoneTotals,
   crossSellPercentuali,
   simSaturationPct,
   gettoneDetailByKey,
+  gettoneDetailByPdv,
   classifyDriverPhase,
   summarizeDriversWithPhase,
   monthOfIso,
@@ -93,6 +95,8 @@ function row(over = {}) {
     customerType: 'privato',
     cliente: 'Mario Rossi',
     pdv: 'PDV Roma',
+    pdvOrigine: over.pdv ?? 'PDV Roma',
+    pdvDestinazione: null,
     addetto: 'Anna',
     state: 'attivato',
     driver: 'mobile',
@@ -516,16 +520,88 @@ test('buildGettoneJourneys: pdv/addetto dalla mobile, fallback su qualunque item
   assert.equal(noMobilePdv[0].addetto, 'Carla');
 });
 
-// --- buildGettoneJourneys: attribuzione deterministica con più mobile ---
-test('buildGettoneJourneys: pdv/addetto deterministici a prescindere dall ordine', () => {
-  const a = row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', pdv: 'Roma', addetto: 'Bob' });
-  const b = row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', pdv: 'Milano', addetto: 'Anna' });
+// --- buildGettoneJourneys: attribuzione dalla SIM trigger, non da una SIM successiva ---
+test('buildGettoneJourneys: usa negozio e addetto della SIM trigger, indipendentemente dall ordine', () => {
+  const a = row({
+    journeyId: 'j1', driver: 'mobile', state: 'attivato',
+    pdv: 'Roma', addetto: 'Bob', cjTriggerMobile: true,
+    bisuiteSaleId: 'sale-opening', bisuiteId: 100,
+  });
+  const b = row({
+    journeyId: 'j1', driver: 'mobile', state: 'attivato',
+    pdv: 'Milano', addetto: 'Anna', cjTriggerMobile: false,
+    bisuiteSaleId: 'sale-later', bisuiteId: 200,
+    eventDate: '2026-08-05T00:00:00.000Z',
+  });
   const r1 = buildGettoneJourneys([a, b])[0];
   const r2 = buildGettoneJourneys([b, a])[0];
-  // minimo lessicografico, indipendente dall'ordine di input
-  assert.equal(r1.pdv, 'Milano');
-  assert.equal(r1.addetto, 'Anna');
+  assert.equal(r1.pdv, 'Roma');
+  assert.equal(r1.addetto, 'Bob');
   assert.deepEqual({ pdv: r1.pdv, addetto: r1.addetto }, { pdv: r2.pdv, addetto: r2.addetto });
+});
+
+test('riepilogo per negozio: trigger, SIM extra e premio seguono la vendita d origine, non la destinazione manuale', () => {
+  const t0 = '2026-07-15T00:00:00.000Z';
+  const initialMobile = row({
+    journeyId: 'j-store-split', openedAt: t0, triggerBisuiteId: 100,
+    driver: 'mobile', state: 'attivato', cjTriggerMobile: true,
+    bisuiteId: 100, bisuiteSaleId: 'sale-opening', eventDate: t0,
+    iccid: '89000000000000000001', pdv: 'Destinazione iniziale',
+    pdvOrigine: 'Negozio apertura', pdvDestinazione: 'Destinazione iniziale',
+  });
+  const initialPhone = row({
+    journeyId: 'j-store-split', openedAt: t0, triggerBisuiteId: 100,
+    driver: 'telefono', state: 'attivato', economicState: 'pagato',
+    bisuiteId: 100, bisuiteSaleId: 'sale-opening', eventDate: t0,
+    iccid: '89000000000000000001', pdv: 'Destinazione iniziale',
+    pdvOrigine: 'Negozio apertura', pdvDestinazione: 'Destinazione iniziale',
+  });
+  const extraMobile = row({
+    journeyId: 'j-store-split', openedAt: t0, triggerBisuiteId: 100,
+    driver: 'mobile', state: 'attivato', cjTriggerMobile: false,
+    bisuiteId: 200, bisuiteSaleId: 'sale-extra', eventDate: '2026-08-12T00:00:00.000Z',
+    iccid: '89000000000000000002', pdv: 'Destinazione extra',
+    pdvOrigine: 'Negozio extra', pdvDestinazione: 'Destinazione extra',
+  });
+  const extraPhone = row({
+    journeyId: 'j-store-split', openedAt: t0, triggerBisuiteId: 100,
+    driver: 'telefono', state: 'attivato', economicState: 'pagato',
+    bisuiteId: 200, bisuiteSaleId: 'sale-extra', eventDate: '2026-08-12T00:00:00.000Z',
+    iccid: '89000000000000000002', pdv: 'Destinazione extra',
+    pdvOrigine: 'Negozio extra', pdvDestinazione: 'Destinazione extra',
+  });
+  const journey = buildGettoneJourneys([initialMobile, initialPhone, extraMobile, extraPhone]);
+  assert.equal(journey.length, 1, 'resta una journey per cliente');
+  assert.equal(journey[0].pdv, 'Negozio apertura', 'il negozio della SIM trigger resta quello di apertura');
+  assert.equal(journey[0].simAttive, 2);
+  assert.equal(journey[0].extraCoppie, 1, 'l eleggibilità/deduplicazione della coppia resta invariata');
+
+  const groups = aggregateGettoneByPdv(journey, 100);
+  const opening = groups.find(g => g.key === 'Negozio apertura');
+  const extra = groups.find(g => g.key === 'Negozio extra');
+  assert.ok(opening);
+  assert.ok(extra);
+  assert.equal(opening.simAttivate, 1);
+  assert.equal(opening.gettoneBase, 20);
+  assert.equal(opening.extraStimato, 0);
+  assert.equal(opening.ramiSimAperti, 1);
+  assert.equal(extra.simAttivate, 1);
+  assert.equal(extra.gettoneBase, 0);
+  assert.equal(extra.extraCoppie, 1);
+  assert.equal(extra.extraStimato, 20);
+  assert.equal(extra.fatturato, 20);
+  assert.equal(extra.ramiSimAperti, 1);
+
+  const totals = gettoneTotals(journey, 100);
+  assert.equal(totals.clienti, 1, 'il totale globale resta deduplicato per journey');
+  assert.equal(totals.simAttivate, 2);
+  assert.equal(totals.extraStimato, 20);
+  assert.equal(totals.fatturato, 40);
+  const detail = gettoneDetailByPdv(journey).get('Negozio extra');
+  assert.equal(detail.length, 1);
+  assert.equal(detail[0].journeyId, 'j-store-split');
+  assert.equal(detail[0].gettoneBase, 0);
+  assert.equal(detail[0].extraStimato, 20);
 });
 
 // --- buildGettoneJourneys: finestra T0 — i contratti dei mesi precedenti

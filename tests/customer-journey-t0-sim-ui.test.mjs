@@ -215,10 +215,10 @@ test('scheda e analisi: stesso mese prima della SIM, T5 incluso, T6 e successive
     const saleId = uniq('TRIGGER');
     const journeyId = await seedJourney(pool, session.orgId, {
       customerKey: uniq('CJWIN').toUpperCase(), nome: 'Cliente Finestra CJ',
-      pdv, openedAt: '2026-07-20T10:00:00Z', triggerSaleId: saleId,
+      pdv, pdvOrigine: pdv, openedAt: '2026-07-20T10:00:00Z', triggerSaleId: saleId,
     });
     const insert = (driver, date, descrizione, extra = {}) => addJourneyItem(pool, session.orgId, journeyId, {
-      driver, pdv, dataInserimento: date, descrizione, state: 'attivato', ...extra,
+      driver, pdv, pdvOrigine: pdv, dataInserimento: date, descrizione, state: 'attivato', ...extra,
     });
     const excluded = await insert('mobile', '2026-07-01', 'Professional Data 100', { categoria: 'TIED IVA', bisuiteSaleId: saleId });
     const sim = await insert('mobile', '2026-07-20T10:00:00Z', 'Voce 100 GB', { categoria: 'TIED CF', bisuiteSaleId: saleId });

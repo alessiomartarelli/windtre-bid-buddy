@@ -28,8 +28,17 @@ Rules (decided):
   non-mobile pista).
 - Date filter compares **date-only in UTC**; `openedAt` is stored at midnight
   UTC so the UTC calendar date equals the sale date.
-- pdv/addetto attribution is **order-independent**, taken from the mobile item
-  with fallback to any item.
+- Per l'analisi per negozio, gettone base e potenziale restano nel negozio
+  d'origine della SIM trigger; volume SIM e clienti seguono l'origine di ogni
+  SIM attiva; il premio extra di 20 € segue il PDV d'origine della coppia
+  venduta. Una journey può quindi apparire in più negozi, ma il totale globale
+  resta deduplicato. L'origine non va sostituita con la destinazione manuale.
+  **Why:** una journey può attraversare più negozi; scegliere il PDV minimo o
+  attribuire tutti gli extra al T0 nasconde vendite e assegna male i premi.
+  **How to apply:** usare `pdvOrigine` per il riepilogo per negozio; lasciare
+  gettone base/potenziale sul negozio trigger e allocare SIM/extra per vendita.
+- Addetto attribution stays order-independent: use the trigger mobile's addetto,
+  falling back to another item only when the trigger attribution is unavailable.
 - The gettone analysis groups **only by negozio or addetto** (the "ragione
   sociale/cliente" grouping was explicitly removed). The separate report
   "Dettaglio" view keeps its own cliente dimension — they are different views.
@@ -43,7 +52,9 @@ were made explicit.
 
 **How to apply:** any future change to gettone aggregation must preserve the
 cohort filter (`simAttive ≥ 1`) and keep `simAttivate`/`clienti` as distinct
-metrics. Gettone is pure client logic over the already-isolated
+metrics. For store groups, count SIMs at their sale origin and keep global
+customer totals deduplicated even though a customer can appear at multiple
+stores. Gettone is pure client logic over the already-isolated
 `/api/customer-journeys/report` rows — do not add a separate endpoint.
 
 ## Reconciliation with monthly sales
