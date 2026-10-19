@@ -87,6 +87,9 @@ const ANNA_PDV = `PDV TORINO ${crypto.randomBytes(3).toString('hex')}`.toUpperCa
 // gettoni. Se la cohort la ammettesse per errore, Gina comparirebbe come riga.
 const GINA_ADDETTO = `GINA BLU ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
 const GINA_PDV = `PDV GENOVA ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+const MULTISTORE_PDV_A = `PDV APERTURA ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+const MULTISTORE_PDV_B = `PDV EXTRA ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+const MULTISTORE_MANUAL_DESTINATION = `DESTINAZIONE MANUALE ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
 
 // Apre la pagina Customer Journey autenticata con il cookie di sessione e
 // naviga fino alla vista Analisi gettoni raggruppata per addetto.
@@ -1229,6 +1232,151 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
     await cohortClients.getByText(marioCompany, { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
     await cohortClients.getByText(luigiCompany, { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
     await assertNoMobileOverflow('Coorti with local filters');
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SCENARIO 11 (Task #660): una sola journey con vendite in due negozi. La SIM
+// trigger e la pista che genera il gettone base sono in A; la SIM successiva e
+// la relativa coppia smartphone eleggibile sono in B. La destinazione manuale
+// resta un dato distinto e non deve influenzare l'attribuzione per negozio.
+// ---------------------------------------------------------------------------
+test('scenario 11: a multi-store journey allocates its base and extra smartphone pair to their sale origins', async () => {
+  const pool = await newPool();
+  const session = await signup({
+    prefix: 'cj_gettone_ui',
+    fullName: 'CJ Gettone UI Test',
+    organizationName: uniq('CJGettoneUI'),
+  });
+  const browser = await launchBrowser();
+  try {
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
+    const triggerSaleId = `multi-store-trigger-${crypto.randomBytes(4).toString('hex')}`;
+    const extraSaleId = `multi-store-extra-${crypto.randomBytes(4).toString('hex')}`;
+    const triggerDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const extraDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const extraIccid = `890000000000${crypto.randomInt(10_000_000, 99_999_999)}`;
+    const journeyId = await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFMULTISTORE').toUpperCase(),
+      nome: 'Cliente Multi Negozio',
+      openedAt: triggerDate,
+      triggerSaleId,
+      items: [
+        {
+          driver: 'mobile',
+          state: 'inserito',
+          pdvOrigine: MULTISTORE_PDV_A,
+          pdvDestinazione: MULTISTORE_MANUAL_DESTINATION,
+          dataInserimento: triggerDate,
+          bisuiteSaleId: triggerSaleId,
+          iccid: '89000000000000000011',
+          cjTriggerMobile: true,
+        },
+        {
+          driver: 'energia',
+          state: 'inserito',
+          pdvOrigine: MULTISTORE_PDV_A,
+          pdvDestinazione: MULTISTORE_MANUAL_DESTINATION,
+          dataInserimento: triggerDate,
+        },
+        {
+          driver: 'mobile',
+          state: 'inserito',
+          pdvOrigine: MULTISTORE_PDV_B,
+          pdvDestinazione: MULTISTORE_MANUAL_DESTINATION,
+          dataInserimento: extraDate,
+          bisuiteSaleId: extraSaleId,
+          iccid: extraIccid,
+        },
+        {
+          driver: 'telefono',
+          state: 'inserito',
+          pdvOrigine: MULTISTORE_PDV_B,
+          pdvDestinazione: MULTISTORE_MANUAL_DESTINATION,
+          dataInserimento: extraDate,
+          bisuiteSaleId: extraSaleId,
+          iccid: extraIccid,
+          categoria: 'TELEFONIA',
+          tipologia: 'SMARTPHONE',
+        },
+      ],
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await openAnalisiByAddetto(context);
+    await page.getByTestId('button-gettone-dim-negozio').click();
+
+    const rowA = page.getByTestId(`row-gettone-${MULTISTORE_PDV_A}`);
+    const rowB = page.getByTestId(`row-gettone-${MULTISTORE_PDV_B}`);
+    await rowA.waitFor({ state: 'visible', timeout: 15000 });
+    await rowB.waitFor({ state: 'visible', timeout: 15000 });
+
+    // Il KPI globale conta una sola journey/cliente, pur mostrando due SIM e
+    // due righe nei gruppi negozio. La coppia apre un solo ramo premio extra.
+    assert.equal((await page.getByTestId('text-gettone-clienti').innerText()).trim(), '1');
+    assert.equal((await page.getByTestId('text-gettone-sim').innerText()).trim(), '2');
+    assert.equal((await page.getByTestId('text-gettone-rami-sim').innerText()).trim(), '2');
+    assert.match(await page.getByTestId('text-gettone-fatturato').innerText(), /40\s*€/);
+
+    // Riepilogo: A riceve solo il gettone base; B la SIM successiva e l'extra.
+    assert.equal((await page.getByTestId(`text-gettone-sim-${MULTISTORE_PDV_A}`).innerText()).trim(), '1');
+    assert.equal((await page.getByTestId(`text-gettone-sim-${MULTISTORE_PDV_B}`).innerText()).trim(), '1');
+    assert.equal((await page.getByTestId(`text-gettone-clienti-${MULTISTORE_PDV_A}`).innerText()).trim(), '1');
+    assert.equal((await page.getByTestId(`text-gettone-clienti-${MULTISTORE_PDV_B}`).innerText()).trim(), '1');
+    const summaryA = await page.getByTestId(`text-gettone-fatturato-${MULTISTORE_PDV_A}`).innerText();
+    const summaryB = await page.getByTestId(`text-gettone-fatturato-${MULTISTORE_PDV_B}`).innerText();
+    assert.match(summaryA, /Base\s+20\s*€/);
+    assert.match(summaryA, /extra\s+—\s*\(0\)/i);
+    assert.match(summaryB, /Base\s+—\s*·\s*extra\s+20\s*€/i);
+    assert.match(summaryB, /\(1\)/);
+    assert.equal(
+      await page.getByTestId(`row-gettone-${MULTISTORE_MANUAL_DESTINATION}`).count(),
+      0,
+      'the manual destination is not used as the store grouping key',
+    );
+
+    // Dettaglio: ciascun negozio mostra la stessa journey, con breakdown
+    // attribuito solo alla propria origine.
+    await rowA.click();
+    const detailA = page.getByTestId(`row-gettone-detail-${MULTISTORE_PDV_A}`);
+    await detailA.waitFor({ state: 'visible', timeout: 10000 });
+    const journeyRowA = detailA.getByTestId(`row-gettone-sim-${journeyId}`);
+    await journeyRowA.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal((await journeyRowA.locator('td').nth(1).innerText()).trim(), '1');
+    assert.match(await journeyRowA.innerText(), /Base\s+20\s*€\s*·\s*extra\s+—/i);
+    await rowA.click();
+    await detailA.waitFor({ state: 'detached', timeout: 10000 });
+
+    await rowB.click();
+    const detailB = page.getByTestId(`row-gettone-detail-${MULTISTORE_PDV_B}`);
+    await detailB.waitFor({ state: 'visible', timeout: 10000 });
+    const journeyRowB = detailB.getByTestId(`row-gettone-sim-${journeyId}`);
+    await journeyRowB.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal((await journeyRowB.locator('td').nth(1).innerText()).trim(), '1');
+    assert.match(await journeyRowB.innerText(), /Base\s+—\s*·\s*extra\s+20\s*€/i);
+
+    // La destinazione manuale è stata persistita a parte per entrambi i PDV
+    // origine e non viene sostituita né aggregata al posto dell'origine.
+    const storedOriginsAndDestinations = await pool.query(
+      `SELECT DISTINCT pdv_origine, pdv_destinazione
+         FROM customer_journey_items WHERE journey_id = $1`,
+      [journeyId],
+    );
+    assert.equal(storedOriginsAndDestinations.rows.length, 2);
+    assert.ok(storedOriginsAndDestinations.rows.every(
+      item => item.pdv_destinazione === MULTISTORE_MANUAL_DESTINATION,
+    ));
+    assert.deepEqual(
+      new Set(storedOriginsAndDestinations.rows.map(item => item.pdv_origine)),
+      new Set([MULTISTORE_PDV_A, MULTISTORE_PDV_B]),
+    );
 
     await page.close();
     await context.close();
