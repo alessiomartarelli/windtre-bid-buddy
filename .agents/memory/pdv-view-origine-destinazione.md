@@ -1,6 +1,6 @@
 ---
 name: Vista PDV Origine/Destinazione
-description: Come funziona la doppia attribuzione PDV (origine vs destinazione) per Vendite BiSuite e Dashboard Gara
+description: Attribuzione PDV origine/destinazione per vendite, Dashboard Gara e gettoni Customer Journey
 ---
 
 Il PDV di destinazione di una vendita BiSuite esiste SOLO nei dati grezzi
@@ -22,6 +22,10 @@ della vendita (`codicePos`/`nomeNegozio`) restano SEMPRE l'origine.
 - I client possono riscrivere in memoria codicePos/nomeNegozio/RS per la vista;
   i dati memorizzati non cambiano mai. Gli altri moduli restano ancorati
   all'origine finché non viene richiesto esplicitamente.
+- In Customer Journey, origine e destinazione di una vendita possono essere
+  PDV diversi e vanno mostrate in viste distinte. Nella vista Origine i gettoni
+  si attribuiscono al PDV d'origine; nella vista Destinazione al PDV di
+  destinazione. Non collassare le due attribuzioni.
 
 **Why:** una vendita trasferita deve poter essere analizzata sul negozio di
 destinazione senza alterare l'attribuzione storica usata dagli altri moduli.
@@ -30,3 +34,5 @@ Rimappare solo codice e nome lascia RS, filtri e aggregati incoerenti.
 **How to apply:** qualsiasi nuova feature "per destinazione" passa da
 `resolveSalePdvForView`/`extractPdvDestinazione`; vista origine deve restare
 byte-identica (in aggregatore l'origine bypassa il resolver apposta).
+Per l'attribuzione dei gettoni CJ, usare il PDV effettivo della vista selezionata
+(origine o destinazione), senza alterare i dati storici delle vendite BiSuite.
