@@ -29,7 +29,14 @@ import { cdgStorage } from "./cdgStorage";
 import { computePlafondSaldi } from "./plafondRicariche";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import { BisuiteFetchCoordinator } from "./bisuiteFetchCoordinator";
-import { extractRechargeSales, parseVodafoneRechargeWorkbook, reconcileRechargeRows } from "../shared/ricaricheAnalysis";
+import {
+  extractRechargeSales,
+  getRicaricheAnalysisProvidersForBrands,
+  parseVodafoneRechargeWorkbook,
+  parseWindTreRechargeWorkbook,
+  reconcileRechargeRows,
+  RICARICHE_ANALYSIS_PROVIDERS,
+} from "../shared/ricaricheAnalysis";
 import {
   loadEmailConfig,
   invalidateEmailConfigCache,
@@ -1720,33 +1727,43 @@ export async function registerRoutes(
   });
 
   // === Analisi Ricariche ===
-  // I report sono archiviati per org e provider; il tracciato Vodafone/Fastweb
-  // viene riconosciuto esplicitamente. WindTre resta predisposto ma non viene
-  // mai passato al parser VF.
+  // I report sono archiviati per org e provider; ogni tenant può consultare
+  // e caricare solo i tracciati associati al proprio brand.
   const rechargeProvider = z.enum(["vodafone_fastweb", "windtre"]);
   app.get("/api/ricariche-analysis", isAuthenticated, requireModule("analisi_ricariche"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(403).json({ message: "Profilo senza organizzazione." });
-      const parsedProvider = rechargeProvider.safeParse(String(req.query.provider ?? "vodafone_fastweb"));
+      const brandNames = (await storage.getOrganizationBrands(profile.organizationId)).map((brand) => brand.name);
+      const allowedProviders = getRicaricheAnalysisProvidersForBrands(brandNames);
+      if (!allowedProviders.length) {
+        return res.status(403).json({ message: "L’analisi ricariche non è configurata per il brand dell’organizzazione." });
+      }
+      const parsedProvider = req.query.provider === undefined
+        ? { success: true as const, data: allowedProviders[0] }
+        : rechargeProvider.safeParse(String(req.query.provider));
       if (!parsedProvider.success) return res.status(400).json({ message: "Fornitore non valido." });
       const provider = parsedProvider.data;
+      if (!allowedProviders.includes(provider)) {
+        return res.status(403).json({ message: "Questo fornitore non è disponibile per il brand dell’organizzazione." });
+      }
       const reports = await storage.listRicaricheAnalysisReports(profile.organizationId, provider);
       const requestedId = typeof req.query.reportId === "string" ? req.query.reportId : undefined;
       const selected = requestedId
         ? await storage.getRicaricheAnalysisReport(requestedId, profile.organizationId, provider)
         : reports[0];
       if (requestedId && !selected) return res.status(404).json({ message: "Report non trovato." });
-      if (!selected || provider === "windtre") {
+      if (!selected) {
         return res.json({
+          provider,
+          allowedProviders,
           reports: reports.map((r) => ({
             id: r.id, fileName: r.fileName, uploadedAt: r.uploadedAt,
             rowCount: r.rowCount, periodFrom: r.periodFrom, periodTo: r.periodTo,
           })),
-          activeReportId: selected?.id ?? null,
+          activeReportId: null,
           rows: [],
           pdvs: [],
-          unsupported: provider === "windtre",
         });
       }
       const providerRows = Array.isArray(selected.rows) ? selected.rows as any[] : [];
@@ -1759,6 +1776,8 @@ export async function registerRoutes(
         .sort((a, b) => a.localeCompare(b, "it"))
         .map((key) => ({ key, label: key }));
       res.json({
+        provider,
+        allowedProviders,
         reports: reports.map((r) => ({
           id: r.id, fileName: r.fileName, uploadedAt: r.uploadedAt,
           rowCount: r.rowCount, periodFrom: r.periodFrom, periodTo: r.periodTo,
@@ -1777,13 +1796,18 @@ export async function registerRoutes(
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(403).json({ message: "Profilo senza organizzazione." });
+      const brandNames = (await storage.getOrganizationBrands(profile.organizationId)).map((brand) => brand.name);
+      const allowedProviders = getRicaricheAnalysisProvidersForBrands(brandNames);
       const parsed = z.object({
-        provider: z.literal("vodafone_fastweb"),
+        provider: z.enum(RICARICHE_ANALYSIS_PROVIDERS),
         fileName: z.string().trim().min(1).max(255),
         workbookBase64: z.string().min(1).max(35_000_000),
       }).safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Dati upload non validi: seleziona un file Excel Vodafone/Fastweb." });
-      const { fileName, workbookBase64 } = parsed.data;
+      if (!parsed.success) return res.status(400).json({ message: "Dati upload non validi: seleziona un report Excel valido." });
+      const { provider, fileName, workbookBase64 } = parsed.data;
+      if (!allowedProviders.includes(provider)) {
+        return res.status(403).json({ message: "Questo fornitore non è disponibile per il brand dell’organizzazione." });
+      }
       if (!/\.(xlsx|xls)$/i.test(fileName)) {
         return res.status(400).json({ message: "Formato non supportato: carica un file Excel .xlsx o .xls." });
       }
@@ -1793,14 +1817,16 @@ export async function registerRoutes(
       }
       let rows;
       try {
-        rows = parseVodafoneRechargeWorkbook(workbookBytes);
+        rows = provider === "windtre"
+          ? parseWindTreRechargeWorkbook(workbookBytes)
+          : parseVodafoneRechargeWorkbook(workbookBytes);
       } catch (error) {
-        return res.status(400).json({ message: error instanceof Error ? error.message : "Formato report Vodafone/Fastweb non riconosciuto." });
+        return res.status(400).json({ message: error instanceof Error ? error.message : "Formato report non riconosciuto." });
       }
       const dates = rows.map((r) => r.date.slice(0, 10)).sort();
       const report = await storage.createRicaricheAnalysisReport({
         organizationId: profile.organizationId,
-        provider: "vodafone_fastweb",
+        provider,
         fileName,
         rows,
         rowCount: rows.length,

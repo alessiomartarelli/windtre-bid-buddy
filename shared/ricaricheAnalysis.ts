@@ -1,6 +1,9 @@
 import * as XLSX from "xlsx";
+import { isVfBrandName, isWindtreBrandName } from "./modules";
 
 export const RICARICHE_ANALYSIS_PROVIDER = "vodafone_fastweb" as const;
+export const RICARICHE_ANALYSIS_PROVIDERS = ["vodafone_fastweb", "windtre"] as const;
+export type RechargeAnalysisProvider = (typeof RICARICHE_ANALYSIS_PROVIDERS)[number];
 export const RICARICHE_ANALYSIS_STATUSES = [
   "VERIFICATO",
   "INCONGRUENZA IMPORTO",
@@ -9,6 +12,21 @@ export const RICARICHE_ANALYSIS_STATUSES = [
 ] as const;
 
 export type RechargeAnalysisStatus = (typeof RICARICHE_ANALYSIS_STATUSES)[number];
+
+/**
+ * Provider visibili all'organizzazione. I tenant senza brand mantengono il
+ * comportamento VF storico; con brand associati, ogni provider richiede il
+ * relativo brand e quelli sconosciuti non ricevono dati di ricariche.
+ */
+export function getRicaricheAnalysisProvidersForBrands(
+  brandNames: string[] | null | undefined,
+): RechargeAnalysisProvider[] {
+  if (!brandNames?.length) return ["vodafone_fastweb"];
+  const providers: RechargeAnalysisProvider[] = [];
+  if (brandNames.some(isVfBrandName)) providers.push("vodafone_fastweb");
+  if (brandNames.some(isWindtreBrandName)) providers.push("windtre");
+  return providers;
+}
 
 export interface RechargeProviderRow {
   id: string;
@@ -45,6 +63,7 @@ export interface RechargeReconciliationRow {
   customer: string | null;
   supplier: string | null;
   transactionId: string | null;
+  rechargeType: string | null;
   pdv: string | null;
   saleId: string | null;
   bisuiteAmount: number | null;
@@ -191,6 +210,97 @@ export function parseVodafoneRechargeWorkbook(bytes: Uint8Array): RechargeProvid
   return Array.from(grouped.values()).sort((a, b) => a.date.localeCompare(b.date) || a.transactionId.localeCompare(b.transactionId));
 }
 
+/**
+ * Report WindTre ricariche (foglio Report): ogni Keycode è una transazione.
+ * Codice Ordine identifica un batch che può attraversare date e PDV diversi,
+ * perciò non va usato come chiave di aggregazione.
+ */
+export function parseWindTreRechargeWorkbook(bytes: Uint8Array): RechargeProviderRow[] {
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(bytes, { type: "array", cellDates: true });
+  } catch {
+    throw new Error("Il file non è un Excel leggibile. Seleziona un report ricariche WindTre valido.");
+  }
+  const sheetName = workbook.SheetNames[0];
+  const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
+  if (!sheet) throw new Error("Il file Excel non contiene fogli leggibili.");
+  const source = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: true });
+  if (source.length < 2) throw new Error("Il foglio Excel non contiene righe di ricariche WindTre.");
+
+  const headers = source[0].map(normalizedHeader);
+  const columns = {
+    orderCode: getColumn(headers, "Codice Ordine"),
+    transactionId: getColumn(headers, "Keycode"),
+    phone: getColumn(headers, "MSISDN"),
+    amount: getColumn(headers, "Taglio ricarica"),
+    rechargeType: getColumn(headers, "Tipo ricarica"),
+    status: getColumn(headers, "Stato"),
+    date: getColumn(headers, "Data utilizzo"),
+    pointId: getColumn(headers, "PDV"),
+  };
+  const required = [
+    ["Codice Ordine", columns.orderCode],
+    ["Keycode", columns.transactionId],
+    ["MSISDN", columns.phone],
+    ["Taglio ricarica", columns.amount],
+    ["Tipo ricarica", columns.rechargeType],
+    ["Stato", columns.status],
+    ["Data utilizzo", columns.date],
+    ["PDV", columns.pointId],
+  ] as const;
+  const missing = required.filter(([, index]) => index < 0).map(([name]) => name);
+  if (missing.length) {
+    throw new Error(`Formato report WindTre non riconosciuto: colonne obbligatorie mancanti (${missing.join(", ")}).`);
+  }
+
+  const grouped = new Map<string, RechargeProviderRow>();
+  for (const row of source.slice(1)) {
+    if (!row.some((cell) => text(cell))) continue;
+    const status = normalizedHeader(row[columns.status]);
+    // Nel tracciato reale tutte le righe sono BURNED. Non importare stati
+    // diversi senza prima averne verificato il significato nel report.
+    if (status !== "BURNED") {
+      throw new Error(`Stato WindTre non supportato per il Keycode ${text(row[columns.transactionId])}: ${status || "vuoto"}.`);
+    }
+
+    const transactionId = text(row[columns.transactionId]);
+    if (!transactionId) throw new Error("Il report WindTre contiene una riga BURNED senza Keycode.");
+    const date = excelDate(row[columns.date]);
+    const amount = parseRechargeAmount(row[columns.amount]);
+    const phone = normalizeRechargePhone(row[columns.phone]);
+    const orderCode = text(row[columns.orderCode]);
+    const pointId = text(row[columns.pointId]);
+    const rechargeType = text(row[columns.rechargeType]);
+    if (!date || amount === null || amount < 0 || !phone || !orderCode || !pointId || !rechargeType) {
+      throw new Error(`Riga WindTre con data, importo, numero o riferimenti non validi per il Keycode ${transactionId}.`);
+    }
+
+    const prev = grouped.get(transactionId);
+    if (prev && (prev.date.slice(0, 10) !== date.slice(0, 10) || !prev.phoneCandidates.includes(phone))) {
+      throw new Error(`Il Keycode WindTre ${transactionId} è associato a date o numeri diversi.`);
+    }
+    const totalCents = Math.round(amount * 100) + Math.round((prev?.amount ?? 0) * 100);
+    grouped.set(transactionId, {
+      id: transactionId,
+      date: prev && prev.date < date ? prev.date : date,
+      phone: prev?.phone || phone,
+      temporaryPhone: "",
+      phoneCandidates: Array.from(new Set([...(prev?.phoneCandidates ?? []), phone])),
+      amount: totalCents / 100,
+      customer: "",
+      supplier: "WindTre",
+      transactionId,
+      dealerCode: prev?.dealerCode || orderCode,
+      pointId: prev?.pointId || pointId,
+      rechargeType: prev?.rechargeType || rechargeType,
+      rowCount: (prev?.rowCount ?? 0) + 1,
+    });
+  }
+  if (grouped.size === 0) throw new Error("Nessuna ricarica WindTre utilizzata trovata nel report.");
+  return Array.from(grouped.values()).sort((a, b) => a.date.localeCompare(b.date) || a.transactionId.localeCompare(b.transactionId));
+}
+
 function collectPhones(value: unknown, output: Set<string>, parentKey = ""): void {
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -309,7 +419,8 @@ export function reconcileRechargeRows(
       customer: sale?.customer || row.customer || null,
       supplier: row.supplier || "Vodafone/Fastweb",
       transactionId: row.transactionId,
-      pdv: sale?.pdv || null,
+      rechargeType: row.rechargeType || null,
+      pdv: sale?.pdv || (row.supplier === "WindTre" ? row.pointId : "") || null,
       saleId: sale?.saleId || null,
       bisuiteAmount: sale?.amount ?? null,
       difference,
@@ -327,6 +438,7 @@ export function reconcileRechargeRows(
       customer: sale.customer || null,
       supplier: null,
       transactionId: null,
+      rechargeType: null,
       pdv: sale.pdv || null,
       saleId: sale.saleId,
       bisuiteAmount: sale.amount,

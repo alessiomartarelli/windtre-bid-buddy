@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import * as XLSX from "xlsx";
 import {
   extractRechargeSales,
+  getRicaricheAnalysisProvidersForBrands,
   normalizeRechargePhone,
   parseVodafoneRechargeWorkbook,
+  parseWindTreRechargeWorkbook,
   reconcileRechargeRows,
 } from "../shared/ricaricheAnalysis.ts";
 import { isModuleAccessible, MODULES, sanitizeGrantableModules } from "../shared/modules.ts";
@@ -20,6 +22,10 @@ const headers = [
   "Ora di  Ricarica", "Codice Dealer", "Ragione Sociale", "Canale di Vendite SAP",
   "ID Point", "Numero Telefono", "Numero Telefono Temporaneo", "Importo Ricarica",
   "ID Ricarica", "Tipologia Ricarica", "ID Transazione", "Login",
+];
+const windTreHeaders = [
+  "Codice Ordine", "Keycode", "MSISDN", "ICCID", "Taglio ricarica",
+  "Tipo ricarica", "Stato", "Data utilizzo", "PDV", "alias",
 ];
 
 const recharge = (id, date, phone, temporary, amount) => ({
@@ -51,6 +57,46 @@ test("parser rejects fogli non-VF e righe valorizzate prive di ID transazione", 
   assert.throws(() => parseVodafoneRechargeWorkbook(windtre), /colonne obbligatorie mancanti.*ID Transazione/i);
   const missingId = workbookBytes(headers, [["30/09/26 10:00:00", "D1", "RS", "VF", "-1", "3471112233", "", "€10", "", "", "", ""]]);
   assert.throws(() => parseVodafoneRechargeWorkbook(missingId), /senza ID Transazione/i);
+});
+
+test("parser WindTre usa Keycode come transazione e non accorpa righe per Codice Ordine", () => {
+  const data = workbookBytes(windTreHeaders, [
+    ["ORD-1", "KEY-1", "0039 347 111 2233", "ICCID-1", 15, "VSC", "BURNED", "2026-10-09", "POS-1", "alias"],
+    ["ORD-1", "KEY-1", "3471112233", "ICCID-1", 5, "VSC", "BURNED", "2026-10-09", "POS-1", "alias"],
+    ["ORD-1", "KEY-2", "3929170987", "ICCID-2", "€20,00", "SIM ATTIVA", "BURNED", "2026-10-10", "POS-2", "alias"],
+  ]);
+  const rows = parseWindTreRechargeWorkbook(data);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].transactionId, "KEY-1");
+  assert.equal(rows[0].amount, 20);
+  assert.equal(rows[0].rowCount, 2);
+  assert.equal(rows[0].phone, "3471112233");
+  assert.equal(rows[0].dealerCode, "ORD-1");
+  assert.equal(rows[0].pointId, "POS-1");
+  assert.equal(rows[0].supplier, "WindTre");
+  assert.equal(rows[0].rechargeType, "VSC");
+  assert.equal(rows[1].transactionId, "KEY-2");
+  assert.equal(rows[1].amount, 20);
+  assert.equal(rows[1].date, "2026-10-10T00:00:00.000Z");
+  assert.equal(rows[1].rechargeType, "SIM ATTIVA");
+});
+
+test("parser WindTre rifiuta stati non verificati e formati non riconosciuti", () => {
+  const pending = workbookBytes(windTreHeaders, [
+    ["ORD-1", "KEY-1", "3471112233", "ICCID-1", 15, "VSC", "RESERVED", "2026-10-09", "POS-1", "alias"],
+  ]);
+  assert.throws(() => parseWindTreRechargeWorkbook(pending), /Stato WindTre non supportato.*RESERVED/i);
+  const notWindTre = workbookBytes(["DATA", "NUMERO", "IMPORTO"], [["2026-10-09", "3471112233", 15]]);
+  assert.throws(() => parseWindTreRechargeWorkbook(notWindTre), /colonne obbligatorie mancanti.*Keycode/i);
+});
+
+test("provider analisi ricariche segue il brand e conserva il fallback VF per tenant legacy", () => {
+  assert.deepEqual(getRicaricheAnalysisProvidersForBrands(["Vodafone"]), ["vodafone_fastweb"]);
+  assert.deepEqual(getRicaricheAnalysisProvidersForBrands(["Fastweb"]), ["vodafone_fastweb"]);
+  assert.deepEqual(getRicaricheAnalysisProvidersForBrands(["WindTre"]), ["windtre"]);
+  assert.deepEqual(getRicaricheAnalysisProvidersForBrands(["Vodafone", "Wind Tre"]), ["vodafone_fastweb", "windtre"]);
+  assert.deepEqual(getRicaricheAnalysisProvidersForBrands([]), ["vodafone_fastweb"]);
+  assert.deepEqual(getRicaricheAnalysisProvidersForBrands(["Brand sconosciuto"]), []);
 });
 
 test("normalizzazione telefonica rimuove prefisso internazionale senza alterare il numero", () => {
@@ -92,6 +138,25 @@ test("una stessa vendita BiSuite non può verificare due transazioni del report"
   assert.equal(rows.filter((r) => r.saleId === "only-sale").length, 1);
   assert.equal(rows.filter((r) => r.status === "VERIFICATO").length, 1);
   assert.equal(rows.filter((r) => r.status === "NON PRESENTE SU BISUITE").length, 1);
+});
+
+test("riconciliazione WindTre conserva il provider e abbina la singola Keycode alla vendita", () => {
+  const providerRows = parseWindTreRechargeWorkbook(workbookBytes(windTreHeaders, [
+    ["ORD-1", "KEY-1", "3471112233", "ICCID-1", 15, "VSC", "BURNED", "2026-10-09", "POS-1", "alias"],
+    ["ORD-1", "KEY-2", "3472222222", "ICCID-2", 20, "SIM ATTIVA", "BURNED", "2026-10-10", "POS-2", "alias"],
+  ]));
+  const rows = reconcileRechargeRows(providerRows, [
+    { saleId: "w3-sale", bisuiteId: 9001, date: "2026-10-09", pdv: "POS-1", customer: "Cliente W3", amount: 15, phones: ["3471112233"] },
+  ]);
+  const matched = rows.find((row) => row.transactionId === "KEY-1");
+  const missing = rows.find((row) => row.transactionId === "KEY-2");
+  assert.equal(rows.length, 2);
+  assert.equal(matched.supplier, "WindTre");
+  assert.equal(matched.rechargeType, "VSC");
+  assert.equal(matched.status, "VERIFICATO");
+  assert.equal(matched.saleId, "w3-sale");
+  assert.equal(missing.status, "NON PRESENTE SU BISUITE");
+  assert.equal(missing.pdv, "POS-2", "unmatched rows retain the PDV from the provider report");
 });
 
 test("estrazione BiSuite usa solo articoli RICARICHE e legge telefono dai dettagli", () => {
