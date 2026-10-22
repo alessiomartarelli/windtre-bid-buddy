@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as XLSX from "xlsx";
+import { readFileSync } from "node:fs";
 import {
   extractRechargeSales,
   getRicaricheAnalysisProvidersForBrands,
@@ -179,6 +180,46 @@ test("estrazione BiSuite usa solo articoli RICARICHE e legge telefono dai dettag
   assert.equal(rows.length, 1);
   assert.equal(rows[0].amount, 10);
   assert.deepEqual(rows[0].phones, ["3471234567"]);
+});
+
+test("fixture BiSuite anonimizzata: venditaInfo1, prezzo testuale, annullata e multi-articolo", () => {
+  const fixture = JSON.parse(readFileSync(
+    new URL("./fixtures/ricariche-bisuite-anonimizzate.json", import.meta.url),
+    "utf8",
+  ));
+  const sales = extractRechargeSales(fixture.sales);
+  assert.equal(sales.length, 1, "the cancelled sale must not be extracted");
+  assert.equal(sales[0].amount, 11, "sum only the two RICARICHE prices");
+  assert.equal(sales[0].customer, "Cliente A");
+  assert.deepEqual(sales[0].phones, ["3471234567"]);
+
+  const [row] = reconcileRechargeRows([
+    recharge("real-shape-sample", "2026-09-12T15:00:00.000Z", "3471234567", "", 11),
+  ], sales);
+  assert.equal(row.status, "VERIFICATO");
+  assert.equal(row.amount, 11);
+  assert.equal(row.bisuiteAmount, 11);
+  assert.equal(row.difference, 0);
+  assert.equal(row.customer, "Cliente A");
+  assert.equal(row.saleId, "100001");
+});
+
+test("venditaInfo1 senza etichetta telefonica non crea un candidato telefono", () => {
+  const [sale] = extractRechargeSales([{
+    id: "unlabeled",
+    bisuiteId: 100003,
+    dataVendita: "2026-09-12T15:10:00.000Z",
+    codicePos: "POS-ANON",
+    nomeCliente: "Cliente anonimo",
+    stato: "FINALIZZATA IN CASSA",
+    rawData: {
+      articoli: [{
+        categoria: { nome: "RICARICHE" },
+        dettaglio: { prezzo: "10.00", venditaInfo1: "Riferimento: 3471234567" },
+      }],
+    },
+  }]);
+  assert.deepEqual(sale.phones, []);
 });
 
 test("Analisi - Ricariche è un modulo indipendente concedibile senza Amministrazione", () => {

@@ -322,6 +322,19 @@ function collectPhones(value: unknown, output: Set<string>, parentKey = ""): voi
       const phone = normalizeRechargePhone(child);
       if (phone.length >= 8) output.add(phone);
     }
+    if (key.toLowerCase() === "venditainfo1" && typeof child === "string") {
+      // In BiSuite RICARICHE, the destination number is sometimes stored as
+      // free text in dettaglio.venditaInfo1 (e.g. "Numero Telefono: ...").
+      // Require an explicit telephone label to avoid interpreting unrelated
+      // digits in this generic field as a phone number.
+      const labeled = child.match(
+        /(?:numero|utenza|msisdn)\s*(?:di\s*)?(?:telefono|cellulare|ricarica)\s*[:=]\s*(.+)$/i,
+      );
+      if (labeled) {
+        const phone = normalizeRechargePhone(labeled[1]);
+        if (phone.length >= 8 && phone.length <= 12) output.add(phone);
+      }
+    }
     if (child && typeof child === "object") collectPhones(child, output, key);
   }
 }

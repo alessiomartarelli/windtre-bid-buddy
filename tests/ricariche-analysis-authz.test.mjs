@@ -44,7 +44,6 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
       brandIds.push(brandId);
       await pool.query(`INSERT INTO organization_brands (organization_id, brand_id) VALUES ($1, $2)`, [orgId, brandId]);
     }
-    await setRole(pool, orgA.profileId, "operatore");
     const bisuiteId = Math.floor(Math.random() * 1_000_000_000);
     await pool.query(
       `INSERT INTO bisuite_sales
@@ -55,11 +54,27 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
       [orgA.orgId, bisuiteId, JSON.stringify({
         articoli: [{
           categoria: { nome: "RICARICHE" },
-          dettaglio: { prezzo: "10.00" },
-          telefono: "3471234567",
+          dettaglio: {
+            prezzo: "10.00",
+            venditaInfo1: "Numero Telefono: 3471234567",
+          },
         }],
       })],
     );
+    const syncedSales = await jsonReq(
+      `${BASE}/api/bisuite-sales?from=2026-09-12&to=2026-09-12&includeAnnullate=true`,
+      { headers: { Cookie: orgA.cookieHeader } },
+    );
+    assert.equal(syncedSales.status, 200, JSON.stringify(syncedSales.body));
+    assert.ok(
+      syncedSales.body.sales.some((sale) =>
+        sale.bisuiteId === bisuiteId &&
+        sale.rawData?.articoli?.[0]?.dettaglio?.venditaInfo1 === "Numero Telefono: 3471234567",
+      ),
+      "the synchronized-sale API must expose the RICARICHE rawData consumed by analysis",
+    );
+    await setRole(pool, orgA.profileId, "operatore");
+
     const path = "/api/ricariche-analysis";
     const headersA = { Cookie: orgA.cookieHeader };
     const deniedByWhitelist = await jsonReq(`${BASE}${path}`, { headers: headersA });
@@ -98,6 +113,10 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     assert.equal(result.body.rows.length, 1);
     assert.equal(result.body.rows[0].status, "VERIFICATO");
     assert.equal(result.body.rows[0].saleId, String(bisuiteId));
+    assert.equal(result.body.rows[0].customer, "Cliente Test");
+    assert.equal(result.body.rows[0].amount, 10);
+    assert.equal(result.body.rows[0].bisuiteAmount, 10);
+    assert.equal(result.body.rows[0].difference, 0);
     assert.equal(result.body.reports[0].fileName, "report-vf.xlsx");
 
     const secondUpload = await jsonReq(`${BASE}${path}/upload`, {

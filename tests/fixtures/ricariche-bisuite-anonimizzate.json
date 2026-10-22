@@ -1,0 +1,56 @@
+{
+  "provenance": "Forma dei campi osservata nel DB di sviluppo; organizzazione e dati personali non inclusi.",
+  "sales": [
+    {
+      "id": "sample-sale-1",
+      "bisuiteId": 100001,
+      "dataVendita": "2026-09-12T15:10:00.000Z",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "Punto vendita anonimo",
+      "nomeCliente": "Cliente A",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": { "nome": "RICARICHE" },
+            "dettaglio": {
+              "prezzo": "5.00",
+              "venditaInfo1": "Numero Telefono: 3471234567"
+            }
+          },
+          {
+            "categoria": { "nome": "RICARICHE" },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "venditaInfo1": "Numero Telefono: 3471234567"
+            }
+          },
+          {
+            "categoria": { "nome": "ACCESSORI" },
+            "dettaglio": { "prezzo": "999.00" }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sample-sale-cancelled",
+      "bisuiteId": 100002,
+      "dataVendita": "2026-09-12T16:10:00.000Z",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "Punto vendita anonimo",
+      "nomeCliente": "Cliente B",
+      "stato": "ANNULLATA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": { "nome": "RICARICHE" },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "venditaInfo1": "Numero Telefono: 3479990000"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
