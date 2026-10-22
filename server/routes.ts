@@ -29,6 +29,7 @@ import { cdgStorage } from "./cdgStorage";
 import { computePlafondSaldi } from "./plafondRicariche";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import { BisuiteFetchCoordinator } from "./bisuiteFetchCoordinator";
+import { extractRechargeSales, parseVodafoneRechargeWorkbook, reconcileRechargeRows } from "../shared/ricaricheAnalysis";
 import {
   loadEmailConfig,
   invalidateEmailConfigCache,
@@ -1715,6 +1716,102 @@ export async function registerRoutes(
     } catch (e) {
       console.error("Error deleting DTS leads:", e);
       res.status(500).json({ message: "Errore nell'eliminazione dei lead DTS" });
+    }
+  });
+
+  // === Analisi Ricariche ===
+  // I report sono archiviati per org e provider; il tracciato Vodafone/Fastweb
+  // viene riconosciuto esplicitamente. WindTre resta predisposto ma non viene
+  // mai passato al parser VF.
+  const rechargeProvider = z.enum(["vodafone_fastweb", "windtre"]);
+  app.get("/api/ricariche-analysis", isAuthenticated, requireModule("analisi_ricariche"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ message: "Profilo senza organizzazione." });
+      const parsedProvider = rechargeProvider.safeParse(String(req.query.provider ?? "vodafone_fastweb"));
+      if (!parsedProvider.success) return res.status(400).json({ message: "Fornitore non valido." });
+      const provider = parsedProvider.data;
+      const reports = await storage.listRicaricheAnalysisReports(profile.organizationId, provider);
+      const requestedId = typeof req.query.reportId === "string" ? req.query.reportId : undefined;
+      const selected = requestedId
+        ? await storage.getRicaricheAnalysisReport(requestedId, profile.organizationId, provider)
+        : reports[0];
+      if (requestedId && !selected) return res.status(404).json({ message: "Report non trovato." });
+      if (!selected || provider === "windtre") {
+        return res.json({
+          reports: reports.map((r) => ({
+            id: r.id, fileName: r.fileName, uploadedAt: r.uploadedAt,
+            rowCount: r.rowCount, periodFrom: r.periodFrom, periodTo: r.periodTo,
+          })),
+          activeReportId: selected?.id ?? null,
+          rows: [],
+          pdvs: [],
+          unsupported: provider === "windtre",
+        });
+      }
+      const providerRows = Array.isArray(selected.rows) ? selected.rows as any[] : [];
+      const dates = providerRows.map((r) => String(r?.date ?? "").slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+      const sales = dates.length
+        ? await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, dates[0], dates[dates.length - 1], true)
+        : [];
+      const reconciled = reconcileRechargeRows(providerRows, extractRechargeSales(sales));
+      const pdvs = Array.from(new Set(reconciled.map((r) => r.pdv).filter((v): v is string => !!v)))
+        .sort((a, b) => a.localeCompare(b, "it"))
+        .map((key) => ({ key, label: key }));
+      res.json({
+        reports: reports.map((r) => ({
+          id: r.id, fileName: r.fileName, uploadedAt: r.uploadedAt,
+          rowCount: r.rowCount, periodFrom: r.periodFrom, periodTo: r.periodTo,
+        })),
+        activeReportId: selected.id,
+        rows: reconciled,
+        pdvs,
+      });
+    } catch (e) {
+      console.error("Recharge analysis read failed:", e);
+      res.status(500).json({ message: "Errore nel recupero dell'analisi ricariche." });
+    }
+  });
+
+  app.post("/api/ricariche-analysis/upload", isAuthenticated, requireModule("analisi_ricariche"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ message: "Profilo senza organizzazione." });
+      const parsed = z.object({
+        provider: z.literal("vodafone_fastweb"),
+        fileName: z.string().trim().min(1).max(255),
+        workbookBase64: z.string().min(1).max(35_000_000),
+      }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Dati upload non validi: seleziona un file Excel Vodafone/Fastweb." });
+      const { fileName, workbookBase64 } = parsed.data;
+      if (!/\.(xlsx|xls)$/i.test(fileName)) {
+        return res.status(400).json({ message: "Formato non supportato: carica un file Excel .xlsx o .xls." });
+      }
+      const workbookBytes = Buffer.from(workbookBase64, "base64");
+      if (!workbookBytes.length || workbookBytes.length > 25 * 1024 * 1024) {
+        return res.status(400).json({ message: "Il file Excel è vuoto o supera il limite di 25 MB." });
+      }
+      let rows;
+      try {
+        rows = parseVodafoneRechargeWorkbook(workbookBytes);
+      } catch (error) {
+        return res.status(400).json({ message: error instanceof Error ? error.message : "Formato report Vodafone/Fastweb non riconosciuto." });
+      }
+      const dates = rows.map((r) => r.date.slice(0, 10)).sort();
+      const report = await storage.createRicaricheAnalysisReport({
+        organizationId: profile.organizationId,
+        provider: "vodafone_fastweb",
+        fileName,
+        rows,
+        rowCount: rows.length,
+        periodFrom: dates[0] ?? null,
+        periodTo: dates[dates.length - 1] ?? null,
+        uploadedBy: profile.id,
+      });
+      res.status(201).json({ ok: true, reportId: report.id, rowCount: report.rowCount });
+    } catch (e) {
+      console.error("Recharge analysis upload failed:", e);
+      res.status(500).json({ message: "Errore nel salvataggio del report ricariche." });
     }
   });
 

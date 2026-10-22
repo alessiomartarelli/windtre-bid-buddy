@@ -22,6 +22,7 @@ export const MODULES: ModuleDef[] = [
   { key: "gara_configurazione", label: "Configurazione Gara", group: "pagine" },
   { key: "incentivazione_interna", label: "Incentivazione Interna", group: "pagine", description: "Gare addetto: valenze + Accessori/Servizi live, sblocco gara" },
   { key: "vendite_bisuite", label: "Vendite BiSuite", group: "pagine" },
+  { key: "analisi_ricariche", label: "Analisi - Ricariche", group: "pagine", description: "Riconciliazione ricariche BiSuite con report dei fornitori" },
   { key: "customer_journey", label: "Customer Journey", group: "pagine", description: "Cross-sell strutturato sui clienti da nuova attivazione mobile" },
   { key: "gestione_dts", label: "Gestione DTS", group: "pagine", description: "Lead drive-to-store: upload Excel, conversioni e incidenza sulle vendite" },
   { key: "mappatura_bisuite", label: "Mappatura BiSuite", group: "pagine", superOnly: true },

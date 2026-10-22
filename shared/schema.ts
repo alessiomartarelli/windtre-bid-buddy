@@ -381,6 +381,23 @@ export const drmsUploads = pgTable("drms_uploads", {
   index("IDX_drms_uploads_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
+// Report originali Vodafone/Fastweb per la riconciliazione delle ricariche.
+// Righe normalizzate conservate in JSONB, isolate per organizzazione/fornitore.
+export const ricaricheAnalysisReports = pgTable("ricariche_analysis_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  provider: varchar("provider").notNull(),
+  fileName: varchar("file_name").notNull(),
+  rows: jsonb("rows").notNull().default([]),
+  rowCount: integer("row_count").notNull().default(0),
+  periodFrom: varchar("period_from"),
+  periodTo: varchar("period_to"),
+  uploadedBy: varchar("uploaded_by").references(() => profiles.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+}, (table) => [
+  index("IDX_ricariche_analysis_org_provider_date").on(table.organizationId, table.provider, table.uploadedAt),
+]);
+
 // Gestione DTS (Task #321): lead drive-to-store caricati da Excel, una riga
 // per lead, deduplicati per (organization_id, lead_key) con upsert (re-upload
 // = merge idempotente). `idVendita` aggancia la vendita BiSuite
@@ -775,6 +792,8 @@ export type InsertGaraConfig = typeof garaConfig.$inferInsert;
 
 export type DrmsUpload = typeof drmsUploads.$inferSelect;
 export type InsertDrmsUpload = typeof drmsUploads.$inferInsert;
+export type RicaricheAnalysisReport = typeof ricaricheAnalysisReports.$inferSelect;
+export type InsertRicaricheAnalysisReport = typeof ricaricheAnalysisReports.$inferInsert;
 
 export type TelegramReportSend = typeof telegramReportSends.$inferSelect;
 export type DtsLeadRow = typeof dtsLeads.$inferSelect;

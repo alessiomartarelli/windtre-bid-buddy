@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, cjDrmsOutcomeRuns, type CjDrmsOutcomeRun, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
+import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, ricaricheAnalysisReports, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, cjDrmsOutcomeRuns, type CjDrmsOutcomeRun, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type RicaricheAnalysisReport, type InsertRicaricheAnalysisReport, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { MOBILE_CATEGORIES, CJ_NO_DESTINATION_FILTER_VALUE, driverFromCategory, isCjMobileEligible, cjT0Month, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
 import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
@@ -160,6 +160,11 @@ export interface IStorage {
   createDrmsUpload(upload: InsertDrmsUpload): Promise<DrmsUpload>;
   deleteDrmsUploadsByPeriod(orgId: string, month: number, year: number): Promise<void>;
   deleteDrmsUpload(id: string): Promise<void>;
+
+  // Analisi Ricariche: i report sono persistiti e isolati per org/provider.
+  listRicaricheAnalysisReports(orgId: string, provider: string): Promise<RicaricheAnalysisReport[]>;
+  getRicaricheAnalysisReport(id: string, orgId: string, provider: string): Promise<RicaricheAnalysisReport | undefined>;
+  createRicaricheAnalysisReport(report: InsertRicaricheAnalysisReport): Promise<RicaricheAnalysisReport>;
 
   // Gestione DTS (Task #321)
   getDtsLeads(orgId: string): Promise<DtsLeadRow[]>;
@@ -1005,6 +1010,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDrmsUpload(id: string): Promise<void> {
     await db.delete(drmsUploads).where(eq(drmsUploads.id, id));
+  }
+
+  async listRicaricheAnalysisReports(orgId: string, provider: string): Promise<RicaricheAnalysisReport[]> {
+    return db.select().from(ricaricheAnalysisReports)
+      .where(and(
+        eq(ricaricheAnalysisReports.organizationId, orgId),
+        eq(ricaricheAnalysisReports.provider, provider),
+      ))
+      .orderBy(desc(ricaricheAnalysisReports.uploadedAt));
+  }
+
+  async getRicaricheAnalysisReport(id: string, orgId: string, provider: string): Promise<RicaricheAnalysisReport | undefined> {
+    const [report] = await db.select().from(ricaricheAnalysisReports)
+      .where(and(
+        eq(ricaricheAnalysisReports.id, id),
+        eq(ricaricheAnalysisReports.organizationId, orgId),
+        eq(ricaricheAnalysisReports.provider, provider),
+      ));
+    return report;
+  }
+
+  async createRicaricheAnalysisReport(report: InsertRicaricheAnalysisReport): Promise<RicaricheAnalysisReport> {
+    const [created] = await db.insert(ricaricheAnalysisReports).values(report).returning();
+    return created;
   }
 
   // === Gestione DTS (Task #321) ===

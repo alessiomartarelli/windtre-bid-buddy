@@ -10,7 +10,11 @@ export function createApiRequestLogger(writeLog: (message: string) => void): Req
   return (req, res, next) => {
     const start = Date.now();
     const path = req.path;
-    const omitBody = isCustomerJourneyLogPath(path);
+    const isCustomerJourney = isCustomerJourneyLogPath(path);
+    // Report di ricariche e riconciliazioni contengono numeri telefonici e
+    // nominativi: non conservarne né serializzarne il body nei log.
+    const isRechargeAnalysis = /(?:^|\/)api\/ricariche-analysis(?:\/|$)/.test(path);
+    const omitBody = isCustomerJourney || isRechargeAnalysis;
     let capturedJsonResponse: unknown;
 
     // Do not even retain the CJ body for logging, including error responses.
@@ -25,10 +29,16 @@ export function createApiRequestLogger(writeLog: (message: string) => void): Req
     res.on("finish", () => {
       if (!path.includes("/api")) return;
       const routePath = typeof req.route?.path === "string" ? req.route.path : undefined;
-      const loggedPath = omitBody ? customerJourneyLogPath(path, routePath) : path;
+      const loggedPath = isCustomerJourney
+        ? customerJourneyLogPath(path, routePath)
+        : isRechargeAnalysis
+          ? (routePath || path)
+          : path;
       let logLine = `${req.method} ${loggedPath} ${res.statusCode} in ${Date.now() - start}ms`;
       if (omitBody) {
-        logLine += " :: [Customer Journey response body omitted]";
+        logLine += isCustomerJourney
+          ? " :: [Customer Journey response body omitted]"
+          : " :: [Analisi Ricariche response body omitted]";
       } else if (capturedJsonResponse) {
         const redacted = JSON.stringify(capturedJsonResponse, logJsonReplacer);
         logLine += ` :: ${redacted.length > 2000 ? redacted.slice(0, 2000) + "…[truncated]" : redacted}`;

@@ -17,7 +17,7 @@ import {
   LogOut, User, Building2, Settings, Shield,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
   BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor, CalendarClock, Sparkles, Waves,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, Wallet,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
@@ -162,6 +162,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
     ...(isEnabled('gara_dashboard') ? [{ path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard }] : []),
     ...(isAdminOrSuper && isEnabled('gara_configurazione') ? [{ path: '/configurazione-gara', label: 'Configurazione', icon: Trophy }] : []),
     ...(isEnabled('vendite_bisuite') ? [{ path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart }] : []),
+    ...(isEnabled('analisi_ricariche') ? [{ path: '/analisi-ricariche', label: 'Analisi - Ricariche', icon: Wallet }] : []),
     ...(isEnabled('customer_journey') ? [{ path: '/customer-journey', label: 'Customer Journey', icon: Route }] : []),
     ...(isEnabled('incentivazione_interna') ? [{ path: '/incentivazione-interna', label: 'Incentivazione interna', icon: Medal }] : []),
     ...(isEnabled('gestione_dts') ? [{ path: '/gestione-dts', label: 'Gestione DTS', icon: CalendarClock }] : []),

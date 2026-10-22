@@ -75,6 +75,22 @@ test("unmatched CJ routes hide path identifiers and non-JSON responses log metad
   });
 });
 
+test("Analisi Ricariche responses omit phone/customer data from application logs", async () => {
+  await withServer(async (app, base, lines) => {
+    app.get("/api/ricariche-analysis", (_req, res) => res.json({ rows: [personal] }));
+    app.post("/api/ricariche-analysis/upload", (_req, res) => res.status(201).json({ imported: 1 }));
+    const response = await fetch(`${base}/api/ricariche-analysis`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { rows: [personal] });
+    assert.match(lines.at(-1), /GET \/api\/ricariche-analysis 200 in \d+ms :: \[Analisi Ricariche response body omitted\]/);
+    const upload = await fetch(`${base}/api/ricariche-analysis/upload`, { method: "POST" });
+    assert.equal(upload.status, 201);
+    assert.match(lines.at(-1), /POST \/api\/ricariche-analysis\/upload 201 in \d+ms :: \[Analisi Ricariche response body omitted\]/);
+    for (const value of Object.values(personal)) assert.ok(!lines.join("\n").includes(value));
+    for (const key of Object.keys(personal)) assert.ok(!lines.join("\n").includes(`"${key}"`));
+  });
+});
+
 test("other APIs retain credential redaction and the 2 KB limit; non-API requests are not logged", async () => {
   await withServer(async (app, base, lines) => {
     app.get("/api/example", (_req, res) => res.json({
