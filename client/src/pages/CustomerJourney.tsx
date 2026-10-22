@@ -37,7 +37,7 @@ import {
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ECONOMIC_STATE_LABELS,
   isCjItemActive, economicStateLabel, economicStateDisplayLabel, isCjEconomicPresumedPaid, CJ_PRESUMED_PAID_LABEL, CJ_PRESUMED_PAID_NOTE,
-  aggregateReport, matchesCjFilters, cjJourneySearchHay, CJ_NO_DESTINATION_FILTER_VALUE,
+  aggregateReport, matchesCjFilters, cjJourneySearchHay, cjReportPdv, CJ_NO_DESTINATION_FILTER_VALUE,
   CJ_NON_MOBILE_DRIVERS, matchesCjDriverFilter, nextCjDriverFilterMode, isCjDriverFilterActive,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
   buildGettoneJourneys, buildGettoneAuditDetails, filterGettoneByDate, filterGettoneByInsertDate,
@@ -115,11 +115,13 @@ interface ItemDetailsPayload {
 
 interface JourneyDetail {
   journey: CustomerJourney;
-  items: CustomerJourneyItem[];
+  items: JourneyItemView[];
   drivers: DriverSummary[];
   cbSimReferences?: CjCbSimReference[];
   phoneCommercialSales?: CjPhoneCommercialSale[];
 }
+
+type JourneyItemView = CustomerJourneyItem & { pdvDestinazioneEffettiva?: string | null };
 
 interface CjConfig {
   triggerDate: string;
@@ -442,6 +444,12 @@ const JourneyCard = memo(function JourneyCard({
         <CardDescription className="text-xs">
           {j.customerKey} · aperta il {fmtDate(j.openedAt)}
         </CardDescription>
+        <div className="space-y-0.5 text-[11px] text-muted-foreground" data-testid={`card-pdv-${j.id}`}>
+          <p className="truncate"><span className="font-medium">Origine:</span> {(j.pdvOrigini ?? []).join(", ") || "—"}</p>
+          <p className="truncate"><span className="font-medium">Destinazione:</span> {(j.pdvDestinazioni ?? []).map((pdv) =>
+            pdv === CJ_NO_DESTINATION_FILTER_VALUE ? "Senza destinazione" : pdv,
+          ).join(", ") || "—"}</p>
+        </div>
       </CardHeader>
       <CardContent className="mt-auto space-y-3">
         <div className="flex items-center justify-between text-xs">
@@ -572,6 +580,7 @@ export default function CustomerJourneyPage() {
   // Filtro per driver acquistati (solo schede): per pista "any" | "con" | "senza".
   const [driverFilter, setDriverFilter] = useState<CjDriverFilter>(EMPTY_DRIVER_FILTER);
   const [reportDim, setReportDim] = useState<ReportDim>("negozio");
+  const [pdvAttribution, setPdvAttribution] = useState<"origine" | "destinazione">("origine");
   const [reportTab, setReportTab] = useState<ReportTab>("analisi");
   const [gettoneDim, setGettoneDim] = useState<GettoneDim>("negozio");
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -902,7 +911,7 @@ export default function CustomerJourneyPage() {
     const s = new Set<string>();
     for (const j of journeys) for (const p of j.pdvDestinazioni ?? []) if (p) s.add(p);
     for (const r of reportRows) {
-      const destination = (r.pdvDestinazione ?? "").trim();
+      const destination = (r.pdvDestinazioneEffettiva ?? "").trim();
       s.add(destination || CJ_NO_DESTINATION_FILTER_VALUE);
     }
     return Array.from(s)
@@ -1015,24 +1024,26 @@ export default function CustomerJourneyPage() {
     customerType: r.customerType,
     pdvs: r.pdv ? [r.pdv] : [],
     pdvOrigini: r.pdvOrigine ? [r.pdvOrigine] : [],
-    pdvDestinazioni: r.pdvDestinazione?.trim()
-      ? [r.pdvDestinazione.trim()]
+    pdvDestinazioni: r.pdvDestinazioneEffettiva?.trim()
+      ? [r.pdvDestinazioneEffettiva.trim()]
       : [CJ_NO_DESTINATION_FILTER_VALUE],
     ragioneSociale: r.ragioneSociale ?? null,
     addetti: r.addetto ? [r.addetto] : [],
     states: [r.state, r.economicState].filter((x): x is CjItemState | CjEconomicState => !!x),
-    searchHay: [r.cliente, r.ragioneSociale, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "),
+    searchHay: [r.cliente, r.ragioneSociale, r.customerKey, r.addetto, r.pdvOrigine, r.pdvDestinazioneEffettiva].filter(Boolean).join(" "),
   }, activeFilters)), [reportRows, activeFilters]);
 
   const reportGroups = useMemo(() => aggregateReport(reportFiltered, (r) => {
     if (reportDim === "negozio") {
-      return { key: r.pdv || "—", label: r.pdv || "Senza negozio" };
+      const pdv = cjReportPdv(r, pdvAttribution);
+      const noDestination = pdv === CJ_NO_DESTINATION_FILTER_VALUE;
+      return { key: pdv || "—", label: noDestination ? "Senza destinazione" : pdv || "Senza negozio" };
     }
     if (reportDim === "addetto") {
       return { key: r.addetto || "—", label: r.addetto || "Senza addetto" };
     }
     return { key: r.journeyId, label: r.cliente || r.customerKey };
-  }), [reportFiltered, reportDim]);
+  }), [reportFiltered, reportDim, pdvAttribution]);
 
   const reportTotals = useMemo(() => reportFiltered.reduce(
     (acc, r) => {
@@ -1060,12 +1071,12 @@ export default function CustomerJourneyPage() {
   // Customer Journey impostata in config (mostriamo solo le SIM fatte da quella
   // data in poi); (2) filtro a intervallo dell'utente per data di INSERIMENTO.
   const gettoneJourneys = useMemo(() => {
-    const all = buildGettoneJourneys(reportFiltered);
+    const all = buildGettoneJourneys(reportFiltered, pdvAttribution);
     const floored = configQuery.data?.triggerDate
       ? filterGettoneByDate(all, configQuery.data.triggerDate, null)
       : all;
     return filterGettoneByInsertDate(floored, dateFrom || null, dateTo || null);
-  }, [reportFiltered, configQuery.data?.triggerDate, dateFrom, dateTo]);
+  }, [reportFiltered, pdvAttribution, configQuery.data?.triggerDate, dateFrom, dateTo]);
   const gettoneTot = useMemo(
     () => gettoneTotals(gettoneJourneys, saturation, extraProdotti),
     [gettoneJourneys, saturation, extraProdotti],
@@ -1512,8 +1523,8 @@ export default function CustomerJourneyPage() {
                   options={pdvDestinazioneFilterOptions}
                   allLabel="Tutte le destinazioni"
                   countLabel={(n) => `${n} destinazioni`}
-                  searchPlaceholder="Cerca PDV destinazione..."
-                  emptyText="Nessun PDV destinazione."
+                  searchPlaceholder="Cerca PDV destinazione effettiva..."
+                  emptyText="Nessun PDV destinazione effettiva."
                   testid="select-filter-pdv-destinazione"
                 />
               </div>
@@ -1764,6 +1775,8 @@ export default function CustomerJourneyPage() {
                     detail={gettoneDetail}
                     dim={gettoneDim}
                     onDimChange={setGettoneDim}
+                    pdvAttribution={pdvAttribution}
+                    onPdvAttributionChange={setPdvAttribution}
                     dateFrom={dateFrom}
                     dateTo={dateTo}
                     onDateFromChange={setDateFrom}
@@ -1781,6 +1794,8 @@ export default function CustomerJourneyPage() {
                     totals={reportTotalsView}
                     dim={reportDim}
                     onDimChange={setReportDim}
+                    pdvAttribution={pdvAttribution}
+                    onPdvAttributionChange={setPdvAttribution}
                     dimLabel={REPORT_DIM_LABEL}
                   />
                 ) : (
@@ -1991,6 +2006,8 @@ function ReportViewImpl({
   totals,
   dim,
   onDimChange,
+  pdvAttribution,
+  onPdvAttributionChange,
   dimLabel,
 }: {
   isLoading: boolean;
@@ -1998,6 +2015,8 @@ function ReportViewImpl({
   totals: { clienti: number; contratti: number; attivati: number; valore: number };
   dim: ReportDim;
   onDimChange: (d: ReportDim) => void;
+  pdvAttribution: "origine" | "destinazione";
+  onPdvAttributionChange: (v: "origine" | "destinazione") => void;
   dimLabel: Record<ReportDim, string>;
 }) {
   if (isLoading) {
@@ -2049,7 +2068,7 @@ function ReportViewImpl({
       </div>
 
       {/* Selettore dimensione di aggregazione */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-sm text-muted-foreground mr-1">Raggruppa per:</span>
         {dims.map((d) => (
           <Button
@@ -2062,6 +2081,22 @@ function ReportViewImpl({
             {dimLabel[d]}
           </Button>
         ))}
+        {dim === "negozio" && (
+          <div className="ml-2 flex items-center gap-1.5" data-testid="report-pdv-attribution">
+            <span className="text-sm text-muted-foreground">Attribuisci a:</span>
+            {(["origine", "destinazione"] as const).map((value) => (
+              <Button
+                key={value}
+                variant={pdvAttribution === value ? "default" : "outline"}
+                size="sm"
+                onClick={() => onPdvAttributionChange(value)}
+                data-testid={`button-report-attribution-${value}`}
+              >
+                {value === "origine" ? "Origine" : "Destinazione"}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tabella aggregata */}
@@ -2077,7 +2112,9 @@ function ReportViewImpl({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{dimLabel[dim]}</TableHead>
+                  <TableHead>{dim === "negozio"
+                    ? `PDV ${pdvAttribution === "origine" ? "origine" : "destinazione"}`
+                    : dimLabel[dim]}</TableHead>
                   <TableHead className="text-right">Clienti</TableHead>
                   <TableHead className="text-right">Contratti</TableHead>
                   <TableHead className="text-right">Attivi</TableHead>
@@ -2110,6 +2147,8 @@ function AnalisiViewImpl({
   detail,
   dim,
   onDimChange,
+  pdvAttribution,
+  onPdvAttributionChange,
   dateFrom,
   dateTo,
   onDateFromChange,
@@ -2129,6 +2168,8 @@ function AnalisiViewImpl({
   detail: Map<string, CjGettoneDetailRow[]>;
   dim: GettoneDim;
   onDimChange: (d: GettoneDim) => void;
+  pdvAttribution: "origine" | "destinazione";
+  onPdvAttributionChange: (v: "origine" | "destinazione") => void;
   dateFrom: string;
   dateTo: string;
   onDateFromChange: (v: string) => void;
@@ -2356,7 +2397,7 @@ function AnalisiViewImpl({
       </div>
 
       {/* Selettore dimensione di aggregazione */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-sm text-muted-foreground mr-1">Raggruppa per:</span>
         {dims.map((d) => (
           <Button
@@ -2369,6 +2410,22 @@ function AnalisiViewImpl({
             {dimLabel[d]}
           </Button>
         ))}
+        {dim === "negozio" && (
+          <div className="ml-2 flex items-center gap-1.5" data-testid="gettone-pdv-attribution">
+            <span className="text-sm text-muted-foreground">Attribuisci a:</span>
+            {(["origine", "destinazione"] as const).map((value) => (
+              <Button
+                key={value}
+                variant={pdvAttribution === value ? "default" : "outline"}
+                size="sm"
+                onClick={() => onPdvAttributionChange(value)}
+                data-testid={`button-gettone-attribution-${value}`}
+              >
+                {value === "origine" ? "Origine" : "Destinazione"}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tabella aggregata gettoni */}
@@ -2384,7 +2441,7 @@ function AnalisiViewImpl({
             <>
             {dim === "negozio" && (
               <p className="px-4 pt-3 text-xs text-muted-foreground">
-                SIM e clienti seguono il negozio di vendita; la stessa journey può comparire in più negozi.
+                SIM e clienti seguono il PDV di {pdvAttribution}; la stessa journey può comparire in più negozi.
                 Il gettone base resta sul negozio della SIM iniziale, mentre gli extra seguono il negozio della coppia venduta.
               </p>
             )}
@@ -2392,7 +2449,9 @@ function AnalisiViewImpl({
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8"></TableHead>
-                  <TableHead>{dimLabel[dim]}</TableHead>
+                  <TableHead>{dim === "negozio"
+                    ? `PDV ${pdvAttribution === "origine" ? "origine" : "destinazione"}`
+                    : dimLabel[dim]}</TableHead>
                   <TableHead className="text-right">SIM</TableHead>
                   <TableHead className="text-right">Clienti</TableHead>
                   <TableHead className="text-right">+prodotti</TableHead>
@@ -3364,7 +3423,9 @@ function JourneyDetailViewImpl({
                     <TableHead>Descrizione</TableHead>
                     <TableHead>Contratto</TableHead>
                     <TableHead>Addetto</TableHead>
-                    <TableHead>PDV</TableHead>
+                    <TableHead>PDV origine</TableHead>
+                    <TableHead>PDV destinazione effettiva</TableHead>
+                    <TableHead>PDV destinazione manuale</TableHead>
                     <TableHead>IMEI</TableHead>
                     <TableHead>RATA/CANONE</TableHead>
                     <TableHead>Inserito</TableHead>
@@ -3403,9 +3464,19 @@ function JourneyDetailViewImpl({
                       <TableCell className="whitespace-nowrap text-xs">
                         {it.addetto || "—"}
                       </TableCell>
-                      <TableCell className="max-w-[160px] text-xs">
-                        <span className="block truncate" title={it.pdvDestinazione || it.pdvOrigine || ""}>
-                          {it.pdvDestinazione || it.pdvOrigine || "—"}
+                      <TableCell className="max-w-[160px] text-xs" data-testid={`text-pdv-origine-${it.id}`}>
+                        <span className="block truncate" title={it.pdvOrigine || ""}>
+                          {it.pdvOrigine || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="max-w-[180px] text-xs" data-testid={`text-pdv-destinazione-effettiva-${it.id}`}>
+                        <span className="block truncate" title={it.pdvDestinazioneEffettiva || "Senza destinazione"}>
+                          {it.pdvDestinazioneEffettiva || "Senza destinazione"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="max-w-[160px] text-xs" data-testid={`text-pdv-destinazione-manuale-${it.id}`}>
+                        <span className="block truncate" title={it.pdvDestinazione || ""}>
+                          {it.pdvDestinazione || "—"}
                         </span>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs" data-testid={`text-imei-${it.id}`}>
@@ -3543,7 +3614,7 @@ function ItemDetailsDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="edit-pdv-destinazione">PDV destinazione</Label>
+            <Label htmlFor="edit-pdv-destinazione">PDV destinazione manuale (CJ)</Label>
             <Input
               id="edit-pdv-destinazione"
               value={pdvDestinazione}

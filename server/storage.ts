@@ -9,6 +9,7 @@ import { paginateCjMobileSources, matchesDiagnosticFilters, reconcileCjMobile, t
 import { buildGettoneJourneys, filterGettoneByInsertDate, filterGettoneByDate, type CjListFilters } from "@shared/customerJourney";
 import { createHash } from "node:crypto";
 import { CjSimDiagnosticCache } from "./cjSimDiagnosticCache";
+import { extractPdvDestinazione } from "../shared/pdvView";
 
 // Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
 type DbExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -205,7 +206,8 @@ export interface IStorage {
   getCustomerJourney(id: string, orgId: string): Promise<CustomerJourney | undefined>;
   getCustomerJourneyItems(journeyId: string): Promise<CustomerJourneyItem[]>;
   getCustomerJourneyValues(journeyIds: string[]): Promise<Map<string, number>>;
-  getCustomerJourneyItemFacets(journeyIds: string[], addettiFilter?: string[] | null): Promise<Map<string, CjJourneyFacets>>;
+  getCustomerJourneyItemFacets(orgId: string, journeyIds: string[], addettiFilter?: string[] | null): Promise<Map<string, CjJourneyFacets>>;
+  getCustomerJourneyItemDestinations(orgId: string, journeyId: string, addettiFilter?: string[] | null): Promise<Map<string, string | null>>;
   getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null, readOnly?: boolean): Promise<CjReportRow[]>;
   getCustomerJourneyMobileSourceBatches(orgId: string, addettiFilter: string[] | null, from: string, to: string): AsyncIterable<CjMobileSource[]>;
   getCustomerJourneySimDiagnosticPage(orgId: string, addettiFilter: string[] | null, filters: CjListFilters, from: string, to: string, page: number, detail: boolean): Promise<CjSimDiagnosticPage>;
@@ -1509,6 +1511,7 @@ export class DatabaseStorage implements IStorage {
   // filtri della lista schede cliente (Task #187). Una sola query per tutte le
   // journey indicate; i valori vuoti sono scartati.
   async getCustomerJourneyItemFacets(
+    orgId: string,
     journeyIds: string[],
     addettiFilter?: string[] | null,
   ): Promise<Map<string, CjJourneyFacets>> {
@@ -1517,23 +1520,33 @@ export class DatabaseStorage implements IStorage {
     // Isolamento operatore identico a listCustomerJourneys/getCustomerJourneyReportRows:
     // `addettiFilter != null` => solo gli item dei propri nominativi addetto
     // (array vuoto => nessun item, niente facet del tenant); `null` => tutti.
-    let whereClause = inArray(customerJourneyItems.journeyId, journeyIds);
+    let whereClause = and(
+      eq(customerJourneyItems.organizationId, orgId),
+      inArray(customerJourneyItems.journeyId, journeyIds),
+    )!;
     if (addettiFilter != null) {
       const lower = addettiFilter.map((a) => a.toLowerCase().trim()).filter(Boolean);
       if (lower.length === 0) return out;
       whereClause = and(
+        eq(customerJourneyItems.organizationId, orgId),
         inArray(customerJourneyItems.journeyId, journeyIds),
         inArray(sql`lower(trim(${customerJourneyItems.addetto}))`, lower),
       )!;
     }
     const rows = await db.select({
       journeyId: customerJourneyItems.journeyId,
+      bisuiteSaleId: customerJourneyItems.bisuiteSaleId,
+      effectiveDestinationRaw: bisuiteSales.rawData,
       pdvDestinazione: customerJourneyItems.pdvDestinazione,
       pdvOrigine: customerJourneyItems.pdvOrigine,
       addetto: customerJourneyItems.addetto,
       state: customerJourneyItems.state,
       economicState: customerJourneyItems.economicState,
     }).from(customerJourneyItems)
+      .leftJoin(bisuiteSales, and(
+        eq(customerJourneyItems.bisuiteSaleId, bisuiteSales.id),
+        eq(customerJourneyItems.organizationId, bisuiteSales.organizationId),
+      ))
       .where(whereClause);
     const tmp = new Map<string, {
       pdvs: Set<string>;
@@ -1551,11 +1564,12 @@ export class DatabaseStorage implements IStorage {
         };
         tmp.set(r.journeyId, e);
       }
-      const pdv = (r.pdvDestinazione || r.pdvOrigine || "").trim();
+      const pdv = (r.pdvOrigine || "").trim();
       if (pdv) e.pdvs.add(pdv);
       const pdvOrigine = (r.pdvOrigine || "").trim();
       if (pdvOrigine) e.pdvOrigini.add(pdvOrigine);
-      const pdvDestinazione = (r.pdvDestinazione || "").trim();
+      const destRef = extractPdvDestinazione(r.effectiveDestinationRaw);
+      const pdvDestinazione = (destRef?.nomeNegozio || destRef?.codicePos || "").trim();
       e.pdvDestinazioni.add(pdvDestinazione || CJ_NO_DESTINATION_FILTER_VALUE);
       const addetto = (r.addetto || "").trim();
       if (addetto) e.addetti.add(addetto);
@@ -1573,6 +1587,37 @@ export class DatabaseStorage implements IStorage {
         addetti: e ? Array.from(e.addetti) : [],
         states: e ? Array.from(e.states) : [],
       });
+    }
+    return out;
+  }
+
+  async getCustomerJourneyItemDestinations(
+    orgId: string,
+    journeyId: string,
+    addettiFilter?: string[] | null,
+  ): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    const conditions = [
+      eq(customerJourneyItems.organizationId, orgId),
+      eq(customerJourneyItems.journeyId, journeyId),
+    ];
+    if (addettiFilter != null) {
+      const lower = addettiFilter.map((a) => a.toLowerCase().trim()).filter(Boolean);
+      if (lower.length === 0) return out;
+      conditions.push(inArray(sql`lower(trim(${customerJourneyItems.addetto}))`, lower));
+    }
+    const rows = await db.select({
+      itemId: customerJourneyItems.id,
+      rawData: bisuiteSales.rawData,
+    }).from(customerJourneyItems)
+      .leftJoin(bisuiteSales, and(
+        eq(customerJourneyItems.bisuiteSaleId, bisuiteSales.id),
+        eq(customerJourneyItems.organizationId, bisuiteSales.organizationId),
+      ))
+      .where(and(...conditions));
+    for (const row of rows) {
+      const destination = extractPdvDestinazione(row.rawData);
+      out.set(row.itemId, (destination?.nomeNegozio || destination?.codicePos || "").trim() || null);
     }
     return out;
   }
@@ -1595,10 +1640,14 @@ export class DatabaseStorage implements IStorage {
       if (lower.length === 0) return [];
       cond = and(
         eq(customerJourneys.organizationId, orgId),
+        eq(customerJourneyItems.organizationId, orgId),
         inArray(sql`lower(trim(${customerJourneyItems.addetto}))`, lower),
       );
     } else {
-      cond = eq(customerJourneys.organizationId, orgId);
+      cond = and(
+        eq(customerJourneys.organizationId, orgId),
+        eq(customerJourneyItems.organizationId, orgId),
+      );
     }
     const rows = await executor.select({
       itemId: customerJourneyItems.id,
@@ -1624,6 +1673,7 @@ export class DatabaseStorage implements IStorage {
       tipologia: customerJourneyItems.tipologia,
       descrizione: customerJourneyItems.descrizione,
       pdvDestinazione: customerJourneyItems.pdvDestinazione,
+      effectiveDestinationRaw: bisuiteSales.rawData,
       pdvOrigine: customerJourneyItems.pdvOrigine,
       addetto: customerJourneyItems.addetto,
       state: customerJourneyItems.state,
@@ -1634,6 +1684,11 @@ export class DatabaseStorage implements IStorage {
       dataInserimento: customerJourneyItems.dataInserimento,
     }).from(customerJourneyItems)
       .innerJoin(customerJourneys, eq(customerJourneyItems.journeyId, customerJourneys.id))
+      .leftJoin(bisuiteSales, and(
+        eq(customerJourneyItems.bisuiteSaleId, bisuiteSales.id),
+        eq(bisuiteSales.organizationId, customerJourneyItems.organizationId),
+        eq(bisuiteSales.organizationId, orgId),
+      ))
       .where(cond).orderBy(customerJourneyItems.id);
 
     return rows.map((r) => {
@@ -1642,6 +1697,8 @@ export class DatabaseStorage implements IStorage {
         ? (r.ragioneSociale || referente || r.nominativo || r.customerKey)
         : (referente || r.nominativo || r.customerKey);
       const v = r.importo != null ? parseFloat(String(r.importo)) : NaN;
+      const destinationRef = extractPdvDestinazione(r.effectiveDestinationRaw);
+      const pdvDestinazioneEffettiva = (destinationRef?.nomeNegozio || destinationRef?.codicePos || "").trim() || null;
       return {
         itemId: r.itemId,
         bisuiteId: r.bisuiteId,
@@ -1656,8 +1713,9 @@ export class DatabaseStorage implements IStorage {
         customerType: r.customerType,
         cliente,
         ragioneSociale: r.ragioneSociale ?? null,
-        pdv: (r.pdvDestinazione || r.pdvOrigine || "").trim(),
+        pdv: (r.pdvOrigine || "").trim(),
         pdvOrigine: (r.pdvOrigine || "").trim() || null,
+        pdvDestinazioneEffettiva,
         pdvDestinazione: (r.pdvDestinazione || "").trim() || null,
         addetto: (r.addetto || "").trim(),
         state: r.state as CjItemState,

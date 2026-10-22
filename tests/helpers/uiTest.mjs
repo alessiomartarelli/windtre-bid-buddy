@@ -268,7 +268,7 @@ export async function setCjTriggerDate(pool, orgId, date) {
 // gli item con lo stesso `bisuiteSaleId` formano lo scontrino trigger.
 // `triggerBisuiteId` (opzionale) = id numerico BiSuite della vendita trigger:
 // alternativa a `triggerSaleId`, abbinata al `bisuiteId` degli item.
-export async function seedJourney(pool, orgId, { customerKey, nome, customerType = 'privato', ragioneSociale = null, addetto = null, pdv = null, pdvOrigine = null, pdvDestinazione = undefined, openedAt = null, dataInserimento = null, triggerSaleId = null, triggerBisuiteId = null, items = [] }) {
+export async function seedJourney(pool, orgId, { customerKey, nome, customerType = 'privato', ragioneSociale = null, addetto = null, pdv = null, pdvOrigine = undefined, pdvDestinazione = undefined, openedAt = null, dataInserimento = null, triggerSaleId = null, triggerBisuiteId = null, items = [] }) {
   const cj = await pool.query(
     `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, ragione_sociale, status, opened_at, trigger_sale_id, trigger_bisuite_id)
        VALUES ($1, $2, $3, $4, $5, 'aperta', COALESCE($6::timestamptz, now()), $7, $8)
@@ -279,7 +279,10 @@ export async function seedJourney(pool, orgId, { customerKey, nome, customerType
   for (const it of items) {
     // `dataInserimento` di journey come default per gli item (override per-item
     // possibile); serve al filtro a intervallo per data inserimento.
-    await addJourneyItem(pool, orgId, journeyId, { addetto, pdv, pdvOrigine, pdvDestinazione, dataInserimento, ...it });
+    const itemOrigin = it.pdvOrigine !== undefined
+      ? it.pdvOrigine
+      : pdvOrigine !== undefined ? pdvOrigine : pdv;
+    await addJourneyItem(pool, orgId, journeyId, { addetto, pdv, pdvOrigine: itemOrigin, pdvDestinazione, dataInserimento, ...it });
   }
   return journeyId;
 }

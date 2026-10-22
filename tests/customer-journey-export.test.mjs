@@ -235,15 +235,16 @@ test('driverTableBody: Excel mette l\'emoji in col 0', () => {
 // ===========================================================================
 test('contractsHead: include ICCID e motivo smartphone, separando la conferma manuale', () => {
   assert.deepEqual(contractsHead(), [
-    '', 'Driver', 'Descrizione', 'Contratto', 'Addetto', 'PDV',
+    '', 'Driver', 'Descrizione', 'Contratto', 'Addetto', 'PDV origine',
+    'PDV destinazione effettiva', 'PDV destinazione manuale',
     'IMEI', 'RATA/CANONE', 'Inserito', 'Attivato', 'Stato', 'Esito', 'Gettone confermato', 'ICCID', 'Smartphone CJ',
     'Canale commerciale', 'Ruolo economico CJ', 'Articolo / SIM verificati',
   ]);
 });
 
-test('contractsBody: mappa i campi, PDV destinazione→origine, gettone Sì/No', () => {
+test('contractsBody: origine, destinazione effettiva e manuale restano distinte', () => {
   const rows = contractsBody([
-    item({ driver: 'mobile', rata: '10', gettoneConfirmed: true, economicState: 'pagato' }),
+    item({ driver: 'mobile', rata: '10', pdvDestinazioneEffettiva: 'PDV Effettivo', gettoneConfirmed: true, economicState: 'pagato' }),
     item({ driver: 'fisso', pdvDestinazione: null, pdvOrigine: 'PDV Roma', rata: null, canone: '25', imei: null, gettoneConfirmed: false }),
   ], false);
   assert.equal(rows.length, 2);
@@ -253,18 +254,22 @@ test('contractsBody: mappa i campi, PDV destinazione→origine, gettone Sì/No',
   assert.equal(rows[0][2], 'Offerta Mobile');
   assert.equal(rows[0][3], 'CT100');
   assert.equal(rows[0][4], 'Anna');
-  assert.equal(rows[0][5], 'PDV Milano'); // destinazione prevale
-  assert.equal(rows[0][6], '123456789012345');
-  assert.equal(rows[0][7], '€ 10');
-  assert.equal(rows[0][10], 'Attivato');
-  assert.equal(rows[0][11], 'Pagato');
-  assert.equal(rows[0][12], 'Sì');
-  // riga 2: fallback PDV su origine, IMEI mancante "—", canone mostrato, gettone No
+  assert.equal(rows[0][5], 'PDV Roma');
+  assert.equal(rows[0][6], 'PDV Effettivo');
+  assert.equal(rows[0][7], 'PDV Milano'); // campo manuale non viene sovrascritto
+  assert.equal(rows[0][8], '123456789012345');
+  assert.equal(rows[0][9], '€ 10');
+  assert.equal(rows[0][12], 'Attivato');
+  assert.equal(rows[0][13], 'Pagato');
+  assert.equal(rows[0][14], 'Sì');
+  // riga 2: destinazione effettiva assente non eredita origine/manuale.
   assert.equal(rows[1][5], 'PDV Roma');
-  assert.equal(rows[1][6], '—');
-  assert.equal(rows[1][7], '€ 25');
-  assert.equal(rows[1][11], '—'); // nessun esito economico
-  assert.equal(rows[1][12], 'No');
+  assert.equal(rows[1][6], 'Senza destinazione');
+  assert.equal(rows[1][7], '—');
+  assert.equal(rows[1][8], '—');
+  assert.equal(rows[1][9], '€ 25');
+  assert.equal(rows[1][13], '—'); // nessun esito economico
+  assert.equal(rows[1][14], 'No');
 });
 
 test('contractsBody: Excel mette l\'emoji del driver in col 0', () => {
@@ -343,7 +348,7 @@ test('cjAppliedFilterMetadata: lists active filters, labels missing destination,
     { label: 'Tipo cliente', value: 'Business' },
     { label: 'PDV', value: 'Milano' },
     { label: 'PDV origine', value: 'Roma' },
-    { label: 'PDV destinazione', value: 'Senza destinazione · Torino' },
+    { label: 'PDV destinazione effettiva', value: 'Senza destinazione · Torino' },
     { label: 'Ragione sociale', value: 'Acme' },
     { label: 'Addetto', value: 'Anna' },
     { label: 'Stato', value: 'pagato' },
@@ -355,7 +360,7 @@ test('cjAppliedFilterMetadata: lists active filters, labels missing destination,
   const filterLabel = metadata.map(({ label, value }) => `${label}: ${value}`).join(' · ');
   const exportedAt = new Date('2026-07-10T00:00:00.000Z');
   assert.match(listSubtitle([listJourney()], filterLabel, exportedAt), /PDV origine: Roma/);
-  assert.match(listSubtitle([listJourney()], filterLabel, exportedAt), /PDV destinazione: Senza destinazione · Torino/);
+  assert.match(listSubtitle([listJourney()], filterLabel, exportedAt), /PDV destinazione effettiva: Senza destinazione · Torino/);
   assert.ok(listExcelHeaderRows([listJourney()], filterLabel, exportedAt).some(([text]) =>
     String(text).includes('Ragione sociale: Acme')));
 });
@@ -367,7 +372,7 @@ test('actual Schede PDF/XLSX downloads preserve selected filters and long PDF su
   const longCompany = `Ragione sociale filtro lungo ${'Sede commerciale Torino Nord '.repeat(10)}FINE_FILTRO_RAGIONE_SOCIALE`;
   const activeFilterLabel = [
     'PDV origine: ORIGINE_ROMA_FILTRATA',
-    'PDV destinazione: DESTINAZIONE_TORINO_FILTRATA',
+    'PDV destinazione effettiva: DESTINAZIONE_TORINO_FILTRATA',
     `Ragione sociale: ${longCompany}`,
   ].join(' · ');
   const exportedJourney = listJourney({
@@ -436,13 +441,13 @@ test('actual Schede PDF/XLSX downloads preserve selected filters and long PDF su
   const activeExcelText = activeRows.flat().join(' ');
   for (const expected of [
     'PDV origine: ORIGINE_ROMA_FILTRATA',
-    'PDV destinazione: DESTINAZIONE_TORINO_FILTRATA',
+    'PDV destinazione effettiva: DESTINAZIONE_TORINO_FILTRATA',
     `Ragione sociale: ${longCompany}`,
   ]) assert.ok(activeExcelText.includes(expected), `downloaded XLSX includes "${expected}"`);
 
   const unsetWorkbook = XLSX.read(await readFile(path.join(fileTestOutput, 'unset.xlsx')), { type: 'buffer' });
   const unsetExcelText = XLSX.utils.sheet_to_json(unsetWorkbook.Sheets.Elenco, { header: 1, defval: '' }).flat().join(' ');
-  for (const absent of ['PDV origine:', 'PDV destinazione:', 'Ragione sociale:', 'ORIGINE_ROMA_FILTRATA',
+  for (const absent of ['PDV origine:', 'PDV destinazione effettiva:', 'Ragione sociale:', 'ORIGINE_ROMA_FILTRATA',
     'DESTINAZIONE_TORINO_FILTRATA', 'FINE_FILTRO_RAGIONE_SOCIALE']) {
     assert.ok(!unsetExcelText.includes(absent), `unset XLSX omits "${absent}"`);
   }
@@ -472,13 +477,13 @@ test('actual Schede PDF/XLSX downloads preserve selected filters and long PDF su
       if (scenario === 'active') {
         for (const expected of [
           'PDV origine: ORIGINE_ROMA_FILTRATA',
-          'PDV destinazione: DESTINAZIONE_TORINO_FILTRATA',
+          'PDV destinazione effettiva: DESTINAZIONE_TORINO_FILTRATA',
           `Ragione sociale: ${longCompany}`,
         ]) assert.ok(pdfText.includes(compact(expected)), `downloaded PDF includes "${expected}"`);
         assert.ok(pdfText.includes('FINE_FILTRO_RAGIONE_SOCIALE'),
           'the end of the wrapped long filter summary is present in the PDF');
       } else {
-        for (const absent of ['PDV origine:', 'PDV destinazione:', 'Ragione sociale:', 'ORIGINE_ROMA_FILTRATA',
+        for (const absent of ['PDV origine:', 'PDV destinazione effettiva:', 'Ragione sociale:', 'ORIGINE_ROMA_FILTRATA',
           'DESTINAZIONE_TORINO_FILTRATA', 'FINE_FILTRO_RAGIONE_SOCIALE']) {
           assert.ok(!pdfText.includes(compact(absent)), `unset PDF omits "${absent}"`);
         }

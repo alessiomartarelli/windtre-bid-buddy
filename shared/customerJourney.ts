@@ -77,6 +77,7 @@ export interface CjReportRow {
   cliente: string;
   pdv: string;
   pdvOrigine?: string | null;
+  pdvDestinazioneEffettiva?: string | null;
   pdvDestinazione?: string | null;
   ragioneSociale?: string | null;
   addetto: string;
@@ -457,7 +458,15 @@ export interface CjGettonePdvAllocation {
   extraConfermato: number;
 }
 
-function cjSalePdv(row: Pick<CjReportRow, "pdvOrigine"> | undefined): string {
+export type CjPdvAttribution = "origine" | "destinazione";
+
+export function cjReportPdv(
+  row: Pick<CjReportRow, "pdvOrigine" | "pdvDestinazioneEffettiva"> | undefined,
+  attribution: CjPdvAttribution = "origine",
+): string {
+  if (attribution === "destinazione") {
+    return (row?.pdvDestinazioneEffettiva ?? "").trim() || CJ_NO_DESTINATION_FILTER_VALUE;
+  }
   return (row?.pdvOrigine ?? "").trim();
 }
 
@@ -470,7 +479,10 @@ function cjSalePdv(row: Pick<CjReportRow, "pdvOrigine"> | undefined): string {
  * uno stato attivo. L'energia (gas/luce) conta come una sola pista perché la
  * riga report porta già il driver aggregato.
  */
-export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
+export function buildGettoneJourneys(
+  rows: CjReportRow[],
+  attribution: CjPdvAttribution = "origine",
+): CjGettoneJourney[] {
   const grouped = new Map<string, CjReportRow[]>();
   for (const r of rows) {
     const list = grouped.get(r.journeyId) ?? [];
@@ -504,7 +516,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     if (!e) {
       e = {
         cliente: r.cliente, customerType: r.customerType,
-        mobilePdv: cjSalePdv(triggerMobileByJourney.get(r.journeyId)),
+        mobilePdv: cjReportPdv(triggerMobileByJourney.get(r.journeyId), attribution),
         mobileAddetto: triggerMobileByJourney.get(r.journeyId)?.addetto?.trim() ?? "",
         anyPdv: "", anyAddetto: "",
         openedAt: r.openedAt ?? null, insertedAt: null, simAttive: 0,
@@ -514,7 +526,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     }
     // Fallback deterministico se la SIM trigger o il suo negozio non sono
     // visibili: fra i valori di origine non vuoti teniamo il minimo lessicografico.
-    e.anyPdv = minNonEmpty(e.anyPdv, cjSalePdv(r));
+    e.anyPdv = minNonEmpty(e.anyPdv, cjReportPdv(r, attribution));
     e.anyAddetto = minNonEmpty(e.anyAddetto, r.addetto);
     if (r.driver === "mobile" && isCjMobileEligible(r) && pisteInWindow(r.eventDate, t0ByJourney.get(r.journeyId) ?? null)) {
       if (isCjItemActive(r)) {
@@ -590,7 +602,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       ensurePdvAllocation(openingPdv).openedHere = true;
       const journeyRows = grouped.get(journeyId) ?? [];
       for (const row of journeyRows) {
-        const rowPdv = cjSalePdv(row);
+      const rowPdv = cjReportPdv(row, attribution);
         if (row.driver === "mobile"
             && isCjMobileEligible(row)
             && isCjItemActive(row)
@@ -603,7 +615,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
         const pairedMobile = pair.mobile
           ? journeyRows.find(candidate => candidate === pair.mobile)
           : undefined;
-        const pairPdv = rowPdv || cjSalePdv(pairedMobile);
+        const pairPdv = rowPdv || cjReportPdv(pairedMobile, attribution);
         const allocation = ensurePdvAllocation(pairPdv);
         allocation.extraCoppie += 1;
         allocation.extraStimato += 20;
@@ -902,11 +914,11 @@ export function aggregateGettone(
 }
 
 /**
- * Aggregazione per negozio basata sugli item venduti: il conteggio SIM e i
- * clienti attivi seguono l'origine di ciascuna SIM; il gettone base resta nel
- * negozio della SIM trigger; ogni premio extra segue il negozio della coppia.
- * Una journey con vendite in più negozi compare in ciascun gruppo interessato,
- * mentre i totali globali restano quelli deduplicati per journey.
+ * Aggregazione per negozio basata sull'attribuzione selezionata (origine o
+ * destinazione effettiva): SIM e clienti seguono gli item venduti, il gettone
+ * base resta sul negozio della SIM trigger e ogni extra segue la coppia.
+ * Una journey con vendite in più negozi compare nei gruppi interessati,
+ * mentre i totali globali restano deduplicati per journey.
  */
 export function aggregateGettoneByPdv(
   journeys: CjGettoneJourney[],
@@ -945,7 +957,9 @@ export function aggregateGettoneByPdv(
       let group = map.get(key);
       if (!group) {
         group = {
-          label: allocation.pdv.trim() || "Senza negozio",
+          label: allocation.pdv.trim() === CJ_NO_DESTINATION_FILTER_VALUE
+            ? "Senza destinazione"
+            : allocation.pdv.trim() || "Senza negozio",
           simAttivate: 0,
           activeJourneys: new Set(),
           openingJourneys: new Set(),
@@ -1045,8 +1059,9 @@ export function cjJourneyReportRows(journey: CustomerJourney, items: CustomerJou
     customerType: journey.customerType, cliente: journey.nominativo ?? journey.customerKey,
     ragioneSociale: journey.ragioneSociale ?? null,
     triggerBisuiteId: journey.triggerBisuiteId,
-    pdv: it.pdvDestinazione || it.pdvOrigine || "", addetto: it.addetto ?? "",
+    pdv: (it.pdvOrigine ?? "").trim(), addetto: it.addetto ?? "",
     pdvOrigine: (it.pdvOrigine ?? "").trim() || null,
+    pdvDestinazioneEffettiva: (it as CustomerJourneyItem & { pdvDestinazioneEffettiva?: string | null }).pdvDestinazioneEffettiva?.trim() || null,
     pdvDestinazione: (it.pdvDestinazione ?? "").trim() || null,
     state: it.state as CjItemState, economicState: it.economicState as CjEconomicState | null,
     drmsOutcomeState: it.drmsOutcomeState as CjEconomicState | null,
@@ -1131,8 +1146,8 @@ export function gettoneDetailByKey(
 
 /**
  * Dettaglio per negozio coerente con aggregateGettoneByPdv: una stessa journey
- * può comparire in negozi diversi, ma base/piste restano solo sull'apertura e
- * ogni extra appare dove è stata venduta la relativa coppia.
+ * può comparire in negozi diversi nell'attribuzione selezionata, ma base/piste
+ * restano solo sull'apertura e ogni extra appare dove è stata venduta la coppia.
  */
 export function gettoneDetailByPdv(journeys: CjGettoneJourney[]): Map<string, CjGettoneDetailRow[]> {
   const map = new Map<string, CjGettoneDetailRow[]>();

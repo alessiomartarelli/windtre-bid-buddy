@@ -18,6 +18,44 @@ const { CJ_NO_DESTINATION_FILTER_VALUE } = await import('../shared/customerJourn
 const XLSXmod = await import('xlsx');
 const XLSX = XLSXmod.default ?? XLSXmod;
 
+async function attachSaleDestination(pool, orgId, journeyId, driver, destination, occurrence = 0, sourceSaleId = null) {
+  const matchingItem = sourceSaleId
+    ? await pool.query(
+      `SELECT id FROM customer_journey_items
+        WHERE journey_id=$1 AND driver=$2 AND bisuite_sale_id=$3 LIMIT 1`,
+      [journeyId, driver, sourceSaleId],
+    )
+    : null;
+  const item = await pool.query(
+    `SELECT id FROM customer_journey_items
+      WHERE journey_id=$1 AND driver=$2 ORDER BY id OFFSET $3 LIMIT 1`,
+    [journeyId, driver, occurrence],
+  );
+  const selectedItem = sourceSaleId ? matchingItem?.rows[0] : item.rows[0];
+  assert.ok(selectedItem, `expected ${driver} item ${occurrence}`);
+  const bisuiteId = crypto.randomInt(1, 2_000_000_000);
+  const rawData = destination ? {
+    attivitaDestinazione: { codiceOperatoreWind: destination, nominativo: destination },
+  } : {};
+  const sale = await pool.query(
+    `INSERT INTO bisuite_sales (organization_id, bisuite_id, raw_data)
+     VALUES ($1,$2,$3::jsonb) RETURNING id`,
+    [orgId, bisuiteId, JSON.stringify(rawData)],
+  );
+  if (sourceSaleId) {
+    await pool.query(
+      `UPDATE customer_journey_items SET bisuite_sale_id=$2
+        WHERE journey_id=$1 AND bisuite_sale_id=$3`,
+      [journeyId, sale.rows[0].id, sourceSaleId],
+    );
+  } else {
+    await pool.query(
+      `UPDATE customer_journey_items SET bisuite_sale_id=$2 WHERE id=$1`,
+      [selectedItem.id, sale.rows[0].id],
+    );
+  }
+}
+
 function pdfTextTokens(buf) {
   const raw = buf.toString('latin1');
   const tokens = [];
@@ -1007,8 +1045,10 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
   const token = crypto.randomBytes(3).toString('hex').toUpperCase();
   const marioOrigin = `ORIGINE MILANO ${token}`;
   const marioDestination = `DESTINAZIONE MILANO ${token}`;
+  const marioManualDestination = `MANUALE CJ MARIO ${token}`;
   const luigiOrigin = `ORIGINE ROMA ${token}`;
   const luigiDestination = `DESTINAZIONE ROMA ${token}`;
+  const luigiManualDestination = `MANUALE CJ LUIGI ${token}`;
   const marioCompany = `ALFA TELECOM ${token} SRL`;
   const marioKey = uniq('CFORIGINE').toUpperCase();
   const luigiKey = uniq('CFDESTINAZIONE').toUpperCase();
@@ -1024,8 +1064,8 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
       ragioneSociale: marioCompany,
       addetto: MARIO_ADDETTO,
       items: [
-        { driver: 'mobile', state: 'inserito', pdvOrigine: marioOrigin, pdvDestinazione: marioDestination },
-        { driver: 'energia', state: 'inserito', importo: '50.00', pdvOrigine: marioOrigin, pdvDestinazione: marioDestination },
+        { driver: 'mobile', state: 'inserito', pdvOrigine: marioOrigin, pdvDestinazione: marioManualDestination },
+        { driver: 'energia', state: 'inserito', importo: '50.00', pdvOrigine: marioOrigin, pdvDestinazione: marioManualDestination },
         { driver: 'fisso', state: 'inserito', importo: '20.00', pdvOrigine: marioOrigin, pdvDestinazione: null },
       ],
     });
@@ -1036,10 +1076,16 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
       ragioneSociale: luigiCompany,
       addetto: LUIGI_ADDETTO,
       items: [
-        { driver: 'mobile', state: 'inserito', pdvOrigine: luigiOrigin, pdvDestinazione: luigiDestination },
-        { driver: 'energia', state: 'inserito', importo: '30.00', pdvOrigine: luigiOrigin, pdvDestinazione: luigiDestination },
+        { driver: 'mobile', state: 'inserito', pdvOrigine: luigiOrigin, pdvDestinazione: luigiManualDestination },
+        { driver: 'energia', state: 'inserito', importo: '30.00', pdvOrigine: luigiOrigin, pdvDestinazione: luigiManualDestination },
       ],
     });
+    await attachSaleDestination(pool, session.orgId, marioId, 'mobile', marioDestination);
+    await attachSaleDestination(pool, session.orgId, marioId, 'energia', marioDestination);
+    // The third Mario sale intentionally has no effective destination; its
+    // manually entered destination must not be used as a substitute.
+    await attachSaleDestination(pool, session.orgId, luigiId, 'mobile', luigiDestination);
+    await attachSaleDestination(pool, session.orgId, luigiId, 'energia', luigiDestination);
 
     const context = await newAuthedContext(browser, session, { mobile: true });
     const page = await context.newPage();
@@ -1078,6 +1124,21 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
     // Le Schede usano il PDV origine e la ragione sociale dedicata.
     await page.getByTestId(`card-journey-${marioId}`).waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId(`card-journey-${luigiId}`).waitFor({ state: 'visible', timeout: 10000 });
+    const marioMobileItem = await pool.query(
+      `SELECT id FROM customer_journey_items WHERE journey_id=$1 AND driver='mobile' LIMIT 1`,
+      [marioId],
+    );
+    await page.getByTestId(`card-journey-${marioId}`).click();
+    const effectiveDestinationCell = page.getByTestId(`text-pdv-destinazione-effettiva-${marioMobileItem.rows[0].id}`);
+    await effectiveDestinationCell.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal((await effectiveDestinationCell.innerText()).trim(), marioDestination);
+    assert.equal(
+      (await page.getByTestId(`text-pdv-destinazione-manuale-${marioMobileItem.rows[0].id}`).innerText()).trim(),
+      marioManualDestination,
+      'the separately edited CJ destination remains unchanged',
+    );
+    await page.getByTestId('button-back').click();
+    await page.getByTestId('select-filter-pdv-origine').waitFor({ state: 'visible' });
     await page.getByTestId('select-filter-pdv-origine').click();
     const originSearch = page.getByPlaceholder('Cerca PDV origine...');
     await originSearch.waitFor({ state: 'visible' });
@@ -1138,14 +1199,15 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
     await page.getByTestId('button-reset-filters').click();
     await page.getByTestId('tab-report').click();
     await page.getByTestId('button-report-tab-dettaglio').click();
+    await page.getByTestId('button-report-attribution-destinazione').click();
     await assertNoMobileOverflow('Reportistica');
     for (const testid of sharedFilterIds) await assertFilterFits(testid);
     await page.getByTestId(`row-report-${marioDestination}`).waitFor({ state: 'visible', timeout: 15000 });
-    await page.getByTestId(`row-report-${marioOrigin}`).waitFor({ state: 'visible', timeout: 10000 });
     await page.getByTestId(`row-report-${luigiDestination}`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId(`row-report-${CJ_NO_DESTINATION_FILTER_VALUE}`).waitFor({ state: 'visible', timeout: 10000 });
 
     await page.getByTestId('select-filter-pdv-destinazione').click();
-    const destinationSearch = page.getByPlaceholder('Cerca PDV destinazione...');
+    const destinationSearch = page.getByPlaceholder('Cerca PDV destinazione effettiva...');
     await destinationSearch.waitFor({ state: 'visible' });
     assert.ok((await destinationSearch.boundingBox()).x >= 0, 'destination search must be reachable on mobile');
     await assertNoMobileOverflow('Reportistica destination menu');
@@ -1156,7 +1218,7 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
     await page.keyboard.press('Escape');
     await page.getByTestId('input-filter-ragione-sociale').fill(`telecom ${token.toLowerCase()}`);
     await page.getByTestId(`row-report-${marioDestination}`).waitFor({ state: 'visible' });
-    assert.equal(await page.getByTestId(`row-report-${marioOrigin}`).count(), 0, 'destination filter must not match an origin-only row');
+    assert.equal(await page.getByTestId(`row-report-${CJ_NO_DESTINATION_FILTER_VALUE}`).count(), 0, 'destination filter must exclude rows without an effective destination');
     assert.equal(await page.getByTestId(`row-report-${luigiDestination}`).count(), 0, 'destination filter must hide unrelated destinations');
     await assertNoMobileOverflow('Reportistica with destination selected');
     await page.getByTestId('button-report-tab-analisi').click();
@@ -1186,6 +1248,7 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
     await page.getByTestId('button-report-tab-dettaglio').click();
 
     await page.getByTestId('button-reset-filters').click();
+    await page.getByTestId('button-report-attribution-origine').click();
     await page.getByTestId('select-filter-pdv-destinazione').click();
     await page.getByTestId(`option-select-filter-pdv-destinazione-${CJ_NO_DESTINATION_FILTER_VALUE}`).click();
     await page.keyboard.press('Escape');
@@ -1223,15 +1286,34 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
     assert.equal(await page.getByTestId('select-filter-pdv-destinazione').count(), 0, 'shared destination filter stays local to Schede and standard reports');
     assert.equal(await page.getByTestId('input-filter-ragione-sociale').count(), 0, 'shared company filter stays local to Schede and standard reports');
     await cohortReport.getByTestId('cohort-advanced-details').locator('summary').click();
-    const cohortShop = page.getByText('Negozio apertura', { exact: true }).locator('..').getByRole('combobox');
+    const cohortShop = page.getByText('PDV SIM iniziale', { exact: true }).locator('..').getByRole('combobox');
     await cohortShop.scrollIntoViewIfNeeded();
     assert.ok(await cohortShop.isVisible(), 'Coorti keeps its own local shop filter');
     await cohortShop.click();
     await page.getByRole('option', { name: 'Tutti i negozi' }).click();
+    await cohortReport.getByTestId('button-cohort-attribution-destinazione').click();
+    await cohortShop.click();
+    await page.getByRole('option', { name: 'Senza destinazione' }).waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    await cohortReport.getByTestId('button-cohort-attribution-origine').click();
     const cohortClients = cohortReport.getByTestId('cohort-clients-panel');
     await cohortClients.getByText(marioCompany, { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
     await cohortClients.getByText(luigiCompany, { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
     await assertNoMobileOverflow('Coorti with local filters');
+
+    // L'operatore vede solo destinazioni delle proprie vendite anche nelle facet.
+    await setRole(pool, session.profileId, 'operatore', [MARIO_ADDETTO]);
+    await page.goto(`${BASE}/customer-journey`, { waitUntil: 'networkidle' });
+    await page.getByTestId('tab-report').click();
+    await page.getByTestId('button-report-tab-dettaglio').click();
+    await page.getByTestId('button-report-attribution-destinazione').click();
+    await page.getByTestId('select-filter-pdv-destinazione').click();
+    await page.getByTestId(`option-select-filter-pdv-destinazione-${marioDestination}`).waitFor({ state: 'visible' });
+    assert.equal(
+      await page.getByTestId(`option-select-filter-pdv-destinazione-${luigiDestination}`).count(),
+      0,
+      'operator destination facets must not expose destinations from another addetto',
+    );
 
     await page.close();
     await context.close();
@@ -1243,12 +1325,12 @@ test('scenario 10: shared filters stay independent and usable on mobile without 
 });
 
 // ---------------------------------------------------------------------------
-// SCENARIO 11 (Task #660): una sola journey con vendite in due negozi. La SIM
+// SCENARIO 11: una sola journey con vendite in due negozi. La SIM
 // trigger e la pista che genera il gettone base sono in A; la SIM successiva e
 // la relativa coppia smartphone eleggibile sono in B. La destinazione manuale
 // resta un dato distinto e non deve influenzare l'attribuzione per negozio.
 // ---------------------------------------------------------------------------
-test('scenario 11: a multi-store journey allocates its base and extra smartphone pair to their sale origins', async () => {
+test('scenario 11: multi-store journey attribution can switch between sale origin and effective destination', async () => {
   const pool = await newPool();
   const session = await signup({
     prefix: 'cj_gettone_ui',
@@ -1308,6 +1390,8 @@ test('scenario 11: a multi-store journey allocates its base and extra smartphone
         },
       ],
     });
+    await attachSaleDestination(pool, session.orgId, journeyId, 'mobile', 'DESTINAZIONE EFFETTIVA A', 0, triggerSaleId);
+    await attachSaleDestination(pool, session.orgId, journeyId, 'mobile', 'DESTINAZIONE EFFETTIVA B', 1, extraSaleId);
 
     const context = await newAuthedContext(browser, session);
     const page = await openAnalisiByAddetto(context);
@@ -1342,20 +1426,30 @@ test('scenario 11: a multi-store journey allocates its base and extra smartphone
       'the manual destination is not used as the store grouping key',
     );
 
-    // Dettaglio: ciascun negozio mostra la stessa journey, con breakdown
-    // attribuito solo alla propria origine.
-    await rowA.click();
-    const detailA = page.getByTestId(`row-gettone-detail-${MULTISTORE_PDV_A}`);
+    await page.getByTestId('button-gettone-attribution-destinazione').click();
+    const destinationA = page.getByTestId('row-gettone-DESTINAZIONE EFFETTIVA A');
+    const destinationB = page.getByTestId('row-gettone-DESTINAZIONE EFFETTIVA B');
+    await destinationA.waitFor({ state: 'visible', timeout: 10000 });
+    await destinationB.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal((await page.getByTestId('text-gettone-clienti').innerText()).trim(), '1');
+    assert.equal((await page.getByTestId('text-gettone-clienti-DESTINAZIONE EFFETTIVA A').innerText()).trim(), '1');
+    assert.equal((await page.getByTestId('text-gettone-clienti-DESTINAZIONE EFFETTIVA B').innerText()).trim(), '1');
+
+    // In vista Destinazione, anche le righe e i dettagli seguono la vendita
+    // effettiva: base sulla destinazione della SIM iniziale, extra sulla
+    // destinazione della coppia successiva.
+    await destinationA.click();
+    const detailA = page.getByTestId('row-gettone-detail-DESTINAZIONE EFFETTIVA A');
     await detailA.waitFor({ state: 'visible', timeout: 10000 });
     const journeyRowA = detailA.getByTestId(`row-gettone-sim-${journeyId}`);
     await journeyRowA.waitFor({ state: 'visible', timeout: 10000 });
     assert.equal((await journeyRowA.locator('td').nth(1).innerText()).trim(), '1');
     assert.match(await journeyRowA.innerText(), /Base\s+20\s*€\s*·\s*extra\s+—/i);
-    await rowA.click();
+    await destinationA.click();
     await detailA.waitFor({ state: 'detached', timeout: 10000 });
 
-    await rowB.click();
-    const detailB = page.getByTestId(`row-gettone-detail-${MULTISTORE_PDV_B}`);
+    await destinationB.click();
+    const detailB = page.getByTestId('row-gettone-detail-DESTINAZIONE EFFETTIVA B');
     await detailB.waitFor({ state: 'visible', timeout: 10000 });
     const journeyRowB = detailB.getByTestId(`row-gettone-sim-${journeyId}`);
     await journeyRowB.waitFor({ state: 'visible', timeout: 10000 });

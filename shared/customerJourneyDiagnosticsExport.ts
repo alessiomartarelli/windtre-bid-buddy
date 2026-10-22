@@ -27,7 +27,7 @@ export function buildCjDiagnosticsSheets(
     "Discrepanza manuale / DRMS", "Spunta manuale gettone confermato",
   ];
   const additionalFilterRows = cjAppliedFilterMetadata(filters)
-    .filter(({ label }) => ["PDV origine", "PDV destinazione", "Ragione sociale"].includes(label))
+    .filter(({ label }) => ["PDV origine", "PDV destinazione effettiva", "Ragione sociale"].includes(label))
     .map(({ label, value }): DiagnosticCell[] => [label, value]);
   return [
     {
@@ -93,13 +93,16 @@ export function buildCjDiagnosticsSheets(
       name: "Contratti SIM CJ",
       rows: [
         ["ID CJ", "ID articolo CJ", "ID vendita", "ID articolo BiSuite", "Cliente", "Identità",
-          "Tipo cliente", "PDV", "Addetto", "Contratto", "Categoria", "Tipologia", "Descrizione",
+          "Tipo cliente", "PDV origine", "PDV destinazione effettiva", "PDV destinazione manuale",
+          "Addetto", "Contratto", "Categoria", "Tipologia", "Descrizione",
           "T0 apertura", "Data evento", "Inserito il", "Periodo inserimento", "Contribuisce alle SIM valide cumulative",
           ...outcomeHeaders],
         ...d.mobile.map((r): DiagnosticCell[] => [
           r.journeyId, r.itemId ?? "", r.bisuiteSaleId ?? "",
           r.bisuiteArticleId == null ? "" : String(r.bisuiteArticleId),
-          r.cliente, r.customerKey, r.customerType, r.pdv, r.addetto, r.codiceContratto ?? "",
+          r.cliente, r.customerKey, r.customerType, r.pdvOrigine || r.pdv,
+          r.pdvDestinazioneEffettiva || "Senza destinazione", r.pdvDestinazione || "",
+          r.addetto, r.codiceContratto ?? "",
           r.categoria ?? "", r.tipologia ?? "", r.descrizione ?? "",
           r.openedAt?.slice(0, 10) ?? "", r.eventDate?.slice(0, 10) ?? "", r.insertedAt?.slice(0, 10) ?? "",
           inCjInsertPeriod(r.insertedAt, from, to) ? "Nel periodo"

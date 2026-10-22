@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { buildCjCohortModel, summarizeCjCohort } from "@shared/customerJourneyCohorts";
 import type { CjCohortData, CjCohortEvent } from "@shared/customerJourneyCohorts";
 import { buildCjProgression } from "@shared/customerJourneyProgression";
+import { CJ_NO_DESTINATION_FILTER_VALUE } from "@shared/customerJourney";
 import CohortProgression from "./CohortProgression";
 
 interface CohortReportProps {
@@ -23,6 +24,8 @@ interface CohortReportProps {
 }
 
 const ALL = "tutti";
+const displayPdv = (pdv: string) =>
+  pdv === CJ_NO_DESTINATION_FILTER_VALUE ? "Senza destinazione" : pdv || "—";
 const euro = (v: number) => v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const monthName = (m: string) => {
   const [year, month] = m.split("-").map(Number);
@@ -43,6 +46,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
   const defaultCohortChosen = useRef(false);
   const [observationMonth, setObservationMonth] = useState(ALL);
   const [shop, setShop] = useState(ALL);
+  const [pdvAttribution, setPdvAttribution] = useState<"origine" | "destinazione">("origine");
   const [customerType, setCustomerType] = useState(ALL);
   const [search, setSearch] = useState("");
   const [attribution, setAttribution] = useState<"opener" | "seller">("opener");
@@ -53,7 +57,14 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
 
   const data = query.data;
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
-  const model = useMemo(() => buildCjCohortModel(rows, triggerDate), [rows, triggerDate]);
+  const attributionRows = useMemo(() => rows.map(row => ({
+    ...row,
+    pdv: pdvAttribution === "destinazione"
+      ? row.pdvDestinazioneEffettiva || CJ_NO_DESTINATION_FILTER_VALUE
+      : row.pdvOrigine || "",
+  })), [rows, pdvAttribution]);
+  const model = useMemo(() => buildCjCohortModel(attributionRows, triggerDate, pdvAttribution),
+    [attributionRows, triggerDate, pdvAttribution]);
   const typeByJourney = useMemo(() => new Map(rows.map(r => [r.journeyId, r.customerType])), [rows]);
   const cohortMonths = useMemo(() => [...new Set(model.customers.map(c => c.cohort))].sort(), [model.customers]);
   const historicalCohortMonths = useMemo(() => cohortMonths.filter(month => month <= new Date().toISOString().slice(0, 7)), [cohortMonths]);
@@ -74,7 +85,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       (shop === ALL || c.pdv === shop) &&
       (customerType === ALL || typeByJourney.get(c.journeyId) === customerType) &&
       (attribution !== "opener" || employee === ALL || c.opener === employee) &&
-      (!searchText || `${c.cliente} ${c.journeyId} ${c.opener} ${c.pdv}`.toLocaleLowerCase("it").includes(searchText)),
+      (!searchText || `${c.cliente} ${c.journeyId} ${c.opener} ${c.pdvOrigine} ${c.pdvDestinazioneEffettiva}`.toLocaleLowerCase("it").includes(searchText)),
     );
     const clientIds = new Set(customers.map(c => c.journeyId));
     let events = model.events.filter(e =>
@@ -87,8 +98,8 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
 
   const progression = useMemo(() => {
     const customerIds = new Set(scoped.customers.map(customer => customer.journeyId));
-    return buildCjProgression(rows.filter(row => customerIds.has(row.journeyId)), scoped.customers);
-  }, [rows, scoped.customers]);
+    return buildCjProgression(attributionRows.filter(row => customerIds.has(row.journeyId)), scoped.customers);
+  }, [attributionRows, scoped.customers]);
 
   const summary = useMemo(() => summarizeCjCohort(scoped.customers, scoped.events), [scoped.customers, scoped.events]);
   const employeeComparison = useMemo(() => {
@@ -97,7 +108,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       (cohortMonth === ALL || c.cohort === cohortMonth) &&
       (shop === ALL || c.pdv === shop) &&
       (customerType === ALL || typeByJourney.get(c.journeyId) === customerType) &&
-      (!searchText || `${c.cliente} ${c.journeyId} ${c.opener} ${c.pdv}`.toLocaleLowerCase("it").includes(searchText)),
+      (!searchText || `${c.cliente} ${c.journeyId} ${c.opener} ${c.pdvOrigine} ${c.pdvDestinazioneEffettiva}`.toLocaleLowerCase("it").includes(searchText)),
     );
     const baseIds = new Set(baseCustomers.map(c => c.journeyId));
     const baseEvents = model.events.filter(e =>
@@ -173,6 +184,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     evolutionSheet["!cols"] = [{ wch: 36 }, ...progression.months.map(() => ({ wch: 23 }))];
     XLSX.utils.book_append_sheet(workbook, evolutionSheet, "Evoluzione clienti");
     const summaryRows = [
+      { Indicatore: "Attribuzione PDV", Valore: pdvAttribution === "origine" ? "Origine" : "Destinazione effettiva" },
       { Indicatore: "Clienti analizzati (denominatore)", Valore: summary.clients },
       { Indicatore: "Clienti con riacquisto valido", Valore: summary.repurchased },
       { Indicatore: "Tasso riacquisto", Valore: `${summary.percentage.toLocaleString("it-IT", { maximumFractionDigits: 1 })}%` },
@@ -199,7 +211,11 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(clean(employeeComparison as unknown as Record<string, unknown>[])), "Confronto addetti");
     const customerExportRows = (clients: typeof customersWithEvents) => clients.map(({ customer }) => ({
       Cliente: customer.cliente, Journey: customer.journeyId, "Mese di acquisizione": customer.cohort, Apertura: customer.opener,
-      Negozio: customer.pdv, "SIM attiva": customer.mobileActive ? "Sì" : "No",
+      "PDV attribuzione": displayPdv(customer.pdv),
+      "PDV origine": customer.pdvOrigine || "—",
+      "PDV destinazione effettiva": displayPdv(customer.pdvDestinazioneEffettiva),
+      "PDV destinazione manuale": customer.pdvDestinazioneManuale || "—",
+      "SIM attiva": customer.mobileActive ? "Sì" : "No",
       "Bonus generato totale": customer.generated, "Riconosciuto totale incl. presunto": customer.confirmed,
       "Base generata": customer.generated - customer.extraGenerated,
       "Extra generati": customer.extraGenerated, "Extra riconosciuti incl. presunto": customer.extraConfirmed,
@@ -211,7 +227,11 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(customerExportRows(inactiveCohortClients)), "Non più qualificati");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(scoped.events.map(e => ({
       Cliente: e.cliente, Journey: e.journeyId, "Mese di acquisizione": e.cohort, Mese: e.month, Tipo: e.kind,
-      Prodotto: e.product, Venditore: e.seller, Apertura: e.opener, Negozio: e.pdv,
+      Prodotto: e.product, Venditore: e.seller, Apertura: e.opener,
+      "PDV attribuzione": displayPdv(e.pdv),
+      "PDV origine": e.pdvOrigine || "—",
+      "PDV destinazione effettiva": displayPdv(e.pdvDestinazioneEffettiva),
+      "PDV destinazione manuale": e.pdvDestinazioneManuale || "—",
       Fonte: e.source, Attivo: e.active ? "Sì" : "No", "Nuova pista": e.newPista ? "Sì" : "No",
       Generato: e.generated, Confermato: e.confirmed,
       "Extra generato": e.extraGenerated, "Extra riconosciuto": e.extraConfirmed,
@@ -321,10 +341,23 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><CalendarDays className="h-4 w-4 text-primary" />Filtri dell’evoluzione clienti</div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <div><label className="mb-1 block text-xs text-muted-foreground">Mese osservazione</label><Select value={observationMonth} onValueChange={setObservationMonth}><SelectTrigger className={selectClass} data-testid="observation-month"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutti i mesi</SelectItem>{observationMonths.map(m => <SelectItem key={m} value={m}>{monthName(m)}</SelectItem>)}</SelectContent></Select></div>
-        <div><label className="mb-1 block text-xs text-muted-foreground">Negozio apertura</label><Select value={shop} onValueChange={setShop}><SelectTrigger className={selectClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutti i negozi</SelectItem>{shops.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
+        <div><label className="mb-1 block text-xs text-muted-foreground">PDV SIM iniziale</label><Select value={shop} onValueChange={setShop}><SelectTrigger className={selectClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutti i negozi</SelectItem>{shops.map(s => <SelectItem key={s} value={s}>{displayPdv(s)}</SelectItem>)}</SelectContent></Select></div>
         <div><label className="mb-1 block text-xs text-muted-foreground">Tipo cliente</label><Select value={customerType} onValueChange={setCustomerType}><SelectTrigger className={selectClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutti i tipi</SelectItem><SelectItem value="privato">Privato</SelectItem><SelectItem value="azienda">Azienda</SelectItem></SelectContent></Select></div>
         <div><label className="mb-1 block text-xs text-muted-foreground">Attribuzione addetto</label><Select value={attribution} onValueChange={v => { setAttribution(v as "opener" | "seller"); setEmployee(ALL); }}><SelectTrigger className={selectClass} data-testid="attribution-mode"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="opener">Apertura journey</SelectItem><SelectItem value="seller">Venditore evento</SelectItem></SelectContent></Select></div>
         <div><label className="mb-1 block text-xs text-muted-foreground">{attribution === "opener" ? "Addetto apertura" : "Venditore"}</label><Select value={employee} onValueChange={setEmployee}><SelectTrigger className={selectClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}>Tutti gli addetti</SelectItem>{employees.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent></Select></div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="cohort-pdv-attribution">
+        <span className="text-xs font-medium text-muted-foreground">Attribuisci il PDV della SIM iniziale a:</span>
+        {(["origine", "destinazione"] as const).map(value => <Button
+          key={value}
+          type="button"
+          size="sm"
+          variant={pdvAttribution === value ? "default" : "outline"}
+          onClick={() => { setPdvAttribution(value); setShop(ALL); }}
+          data-testid={`button-cohort-attribution-${value}`}
+        >
+          {value === "origine" ? "Origine" : "Destinazione"}
+        </Button>)}
       </div>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative w-full sm:max-w-sm"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca cliente o journey…" className="pl-9" /></div>
@@ -416,7 +449,7 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
               <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:px-4">
                 <button type="button" className="flex min-w-0 flex-1 items-start gap-2 text-left" onClick={() => toggleExpanded(customer.journeyId)} data-testid="client-expand" aria-expanded={isExpanded}>
                   {isExpanded ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />}
-                  <span className="min-w-0"><span className="block truncate text-sm font-medium">{customer.cliente}</span><span className="mt-0.5 block text-xs text-muted-foreground">{monthName(customer.cohort)} · {customer.opener} · {customer.pdv} · {events.filter(e => e.kind === "vendita" && e.active).length} acquisti osservati</span></span>
+                  <span className="min-w-0"><span className="block truncate text-sm font-medium">{customer.cliente}</span><span className="mt-0.5 block text-xs text-muted-foreground">{monthName(customer.cohort)} · {customer.opener} · Origine: {customer.pdvOrigine || "—"} · Destinazione effettiva: {displayPdv(customer.pdvDestinazioneEffettiva)} · {events.filter(e => e.kind === "vendita" && e.active).length} acquisti osservati</span></span>
                 </button>
                 <div className="flex flex-wrap items-center gap-2 pl-6 sm:pl-0">
                   <Badge variant="outline">{customer.mobileActive ? "SIM attiva" : "SIM inattiva"}</Badge>
@@ -427,8 +460,8 @@ export default function CohortReport({ triggerDate, onOpenJourney }: CohortRepor
               </div>
               {isExpanded && <div className="border-t border-border bg-muted/20 px-3 py-3 sm:px-8" data-testid={`cohort-client-details-${customer.journeyId}`}>
                 {events.length === 0 ? <p className="py-2 text-sm text-muted-foreground">Nessun evento nel periodo e nei filtri selezionati. Il cliente resta nel denominatore.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-xs">
-                  <thead className="text-muted-foreground"><tr>{["Mese", "Tipo evento", "Prodotto", "Venditore", "Apertura", "Negozio", "Fonte", "Pista nuova", "Generato", "Riconosciuto"].map(h => <th key={h} className="px-2 py-2 font-medium">{h}</th>)}</tr></thead>
-                  <tbody>{events.map(e => <tr key={eventIdentity(e)} className="border-t border-border/70"><td className="px-2 py-2">{monthName(e.month)}</td><td className="px-2 py-2 capitalize">{e.kind}</td><td className="px-2 py-2">{e.product}</td><td className="px-2 py-2">{e.seller}</td><td className="px-2 py-2">{e.opener}</td><td className="px-2 py-2">{e.pdv}</td><td className="px-2 py-2">{e.source || "—"}</td><td className="px-2 py-2">{e.newPista ? "Sì" : "—"}</td><td className="px-2 py-2 tabular-nums">{e.generated ? euro(e.generated) : "—"}</td><td className="px-2 py-2 tabular-nums">{e.confirmed ? euro(e.confirmed) : "—"}</td></tr>)}</tbody>
+                  <thead className="text-muted-foreground"><tr>{["Mese", "Tipo evento", "Prodotto", "Venditore", "Apertura", "PDV attribuzione", "PDV origine", "PDV destinazione effettiva", "PDV destinazione manuale", "Fonte", "Pista nuova", "Generato", "Riconosciuto"].map(h => <th key={h} className="px-2 py-2 font-medium">{h}</th>)}</tr></thead>
+                  <tbody>{events.map(e => <tr key={eventIdentity(e)} className="border-t border-border/70"><td className="px-2 py-2">{monthName(e.month)}</td><td className="px-2 py-2 capitalize">{e.kind}</td><td className="px-2 py-2">{e.product}</td><td className="px-2 py-2">{e.seller}</td><td className="px-2 py-2">{e.opener}</td><td className="px-2 py-2">{displayPdv(e.pdv)}</td><td className="px-2 py-2">{e.pdvOrigine || "—"}</td><td className="px-2 py-2">{displayPdv(e.pdvDestinazioneEffettiva)}</td><td className="px-2 py-2">{e.pdvDestinazioneManuale || "—"}</td><td className="px-2 py-2">{e.source || "—"}</td><td className="px-2 py-2">{e.newPista ? "Sì" : "—"}</td><td className="px-2 py-2 tabular-nums">{e.generated ? euro(e.generated) : "—"}</td><td className="px-2 py-2 tabular-nums">{e.confirmed ? euro(e.confirmed) : "—"}</td></tr>)}</tbody>
                 </table></div>}
               </div>}
             </div>;

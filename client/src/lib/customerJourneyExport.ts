@@ -144,8 +144,8 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
     const contractRows = contractsBody(items, false, journey, phoneCommercialSales);
     autoTable(doc, {
       startY: afterDrivers + 14,
-      head: [contractsHead().slice(0, 15)],
-      body: contractRows.map(row => row.slice(0, 15)),
+      head: [contractsHead().slice(0, 17)],
+      body: contractRows.map(row => row.slice(0, 17)),
       styles: { fontSize: 7.5, cellPadding: 1.5, valign: "middle", overflow: "linebreak" },
       headStyles: { fillColor: [99, 102, 241], fontSize: 7.5 },
       columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 32 } },
@@ -162,8 +162,8 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
     });
     const provenanceRows = contractRows.filter((_, i) => items[i].driver === "telefono")
       .map(row => [
-        `${row[2]}\nContratto: ${row[3]}\nICCID smartphone: ${row[13]}`,
-        ...row.slice(15),
+        `${row[2]}\nContratto: ${row[3]}\nICCID smartphone: ${row[15]}\n${row[16]}`,
+        ...row.slice(17),
       ]);
     if (provenanceRows.length > 0) {
       // Keep provenance separate from the dense contract table, and do not
@@ -172,7 +172,7 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
       doc.addPage();
       autoTable(doc, {
         startY: 20,
-        head: [["Smartphone", ...contractsHead().slice(15)]],
+        head: [["Smartphone", ...contractsHead().slice(17)]],
         body: provenanceRows,
         rowPageBreak: "avoid",
         showHead: "everyPage",
@@ -212,8 +212,9 @@ export function exportJourneyExcel(data: JourneyExportData): void {
   const wsContracts = XLSX.utils.aoa_to_sheet(contractRows);
   wsContracts["!cols"] = [
     { wch: 4 }, { wch: 16 }, { wch: 30 }, { wch: 16 }, { wch: 18 }, { wch: 18 },
-    { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 9 },
-    { wch: 20 }, { wch: 24 }, { wch: 45 }, { wch: 35 }, { wch: 55 }, { wch: 70 },
+    { wch: 24 }, { wch: 24 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+    { wch: 14 }, { wch: 9 }, { wch: 20 }, { wch: 24 }, { wch: 45 }, { wch: 35 },
+    { wch: 55 }, { wch: 70 },
   ];
   XLSX.utils.book_append_sheet(workbook, wsContracts, "Contratti");
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(journeyGettoneRows(journey, items)), "Gettoni");

@@ -4297,7 +4297,7 @@ export async function registerRoutes(
       // Facet (negozio/addetto/stato) per i filtri della lista schede (Task #187).
       // Stesso isolamento operatore: un operatore vede solo i valori dei propri
       // item, anche su journey con item di addetti diversi.
-      const facets = await storage.getCustomerJourneyItemFacets(journeyIds, addettiFilter);
+      const facets = await storage.getCustomerJourneyItemFacets(profile.organizationId, journeyIds, addettiFilter);
       const gettoni = new Map(buildGettoneJourneys(
         await storage.getCustomerJourneyReportRows(profile.organizationId, addettiFilter, true),
       ).map(g => [g.journeyId, g]));
@@ -4440,6 +4440,16 @@ export async function registerRoutes(
         if (!owns) return res.status(403).json({ error: "Accesso non autorizzato" });
         items = allItems.filter((it) => mine.includes(String(it.addetto || "").toLowerCase().trim()));
       }
+      // La destinazione effettiva è una lettura della vendita sorgente, non il
+      // campo modificabile manualmente item.pdvDestinazione.
+      const addettiFilter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
+      const effectiveDestinationByItem = await storage.getCustomerJourneyItemDestinations(
+        profile.organizationId, journey.id, addettiFilter,
+      );
+      items = items.map((item) => ({
+        ...item,
+        pdvDestinazioneEffettiva: effectiveDestinationByItem.get(item.id) ?? null,
+      }));
 
       // Un driver è "attivato" se ha almeno un item in stato non KO e non
       // stornato. L'energia distingue gas/luce ma per il riepilogo conta come

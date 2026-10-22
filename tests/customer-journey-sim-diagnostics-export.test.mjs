@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as XLSX from "xlsx";
 import { buildGettoneJourneys, filterGettoneByInsertDate, CJ_NO_DESTINATION_FILTER_VALUE } from "../shared/customerJourney.ts";
-import { reconcileCjMobile, CJ_SIM_REASONS } from "../shared/customerJourneyDiagnostics.ts";
+import { reconcileCjMobile, CJ_SIM_REASONS, matchesDiagnosticFilters } from "../shared/customerJourneyDiagnostics.ts";
 import { CJ_DIAGNOSTICS_PAYMENT_WARNING } from "../shared/customerJourneyDiagnosticsExport.ts";
 import { buildCjDiagnosticsWorkbook } from "../client/src/lib/customerJourneyDiagnosticsExport.ts";
 
@@ -23,6 +23,29 @@ const source = (id, changes = {}) => ({
   tipologia: "VOCE", descrizione: "SIM voce", insertedAt: "2026-07-02",
   customerKey: "CF", customerType: "privato", cliente: "Cliente", pdv: "Roma", addetto: "Mario",
   cancelled: false, contract: `000${id}`, ...changes,
+});
+
+test("diagnostic destination filters use the effective sale destination, never the manual CJ value", () => {
+  const linked = row(1, {
+    pdvOrigine: "Origine A",
+    pdvDestinazione: "Manuale CJ",
+    pdvDestinazioneEffettiva: "Destinazione reale",
+  });
+  assert.equal(matchesDiagnosticFilters(linked, {
+    ...filters,
+    pdvDestinazioneFilter: ["Destinazione reale"],
+  }), true);
+  assert.equal(matchesDiagnosticFilters(linked, {
+    ...filters,
+    pdvDestinazioneFilter: ["Manuale CJ"],
+  }), false);
+  assert.equal(matchesDiagnosticFilters(row(2, {
+    pdvOrigine: "Origine B",
+    pdvDestinazione: "Manuale CJ",
+  }), {
+    ...filters,
+    pdvDestinazioneFilter: [CJ_NO_DESTINATION_FILTER_VALUE],
+  }), true);
 });
 function exported(sources, rows, f = filters, start = from, end = to, selection) {
   const selected = selection ?? filterGettoneByInsertDate(buildGettoneJourneys(rows), start, end);
@@ -142,12 +165,12 @@ test("diagnostic XLSX records active origin, destination and company filters, bu
     ragioneSocialeFilter: "Acme",
   });
   assert.equal(active.summary["PDV origine"], "Roma");
-  assert.equal(active.summary["PDV destinazione"], "Senza destinazione · Torino");
+  assert.equal(active.summary["PDV destinazione effettiva"], "Senza destinazione · Torino");
   assert.equal(active.summary["Ragione sociale"], "Acme");
 
   const unset = exported([], [], filters);
   assert.ok(!Object.hasOwn(unset.summary, "PDV origine"));
-  assert.ok(!Object.hasOwn(unset.summary, "PDV destinazione"));
+  assert.ok(!Object.hasOwn(unset.summary, "PDV destinazione effettiva"));
   assert.ok(!Object.hasOwn(unset.summary, "Ragione sociale"));
 });
 

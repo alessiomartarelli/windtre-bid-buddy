@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildCjCohortModel, summarizeCjCohort } from "../shared/customerJourneyCohorts.ts";
+import { CJ_NO_DESTINATION_FILTER_VALUE } from "../shared/customerJourney.ts";
 
 const row = (id, driver, date, extra = {}) => ({
   itemId: id, journeyId: "j1", customerKey: "c1", customerType: "privato", cliente: "Cliente",
@@ -93,6 +94,28 @@ test("attribution stable when source rows reverse, earliest opening SIM not lexi
     row("f", "fisso", "2026-08-03", { addetto: "Marco" })];
   assert.deepEqual(buildCjCohortModel(rows), buildCjCohortModel([...rows].reverse()));
   assert.equal(buildCjCohortModel(rows).customers[0].opener, "Anna");
+});
+test("cohort shop attribution switches between source and effective destination without manual fallback", () => {
+  const openingMobile = {
+    ...mobile,
+    pdvOrigine: "Origine A",
+    pdvDestinazioneEffettiva: "Destinazione effettiva A",
+    pdvDestinazione: "Manuale CJ",
+  };
+  const laterSale = row("f", "fisso", "2026-08-03", {
+    pdvOrigine: "Origine B",
+    pdvDestinazioneEffettiva: null,
+    pdvDestinazione: "Manuale CJ diverso",
+  });
+  const originModel = buildCjCohortModel([openingMobile, laterSale]);
+  const destinationModel = buildCjCohortModel([openingMobile, laterSale], undefined, "destinazione");
+  assert.equal(originModel.customers[0].pdv, "Origine A");
+  assert.equal(destinationModel.customers[0].pdv, "Destinazione effettiva A");
+  assert.equal(destinationModel.customers[0].pdvOrigine, "Origine A");
+  assert.equal(destinationModel.customers[0].pdvDestinazioneManuale, "Manuale CJ");
+  const sale = destinationModel.events.find(event => event.kind === "vendita");
+  assert.equal(sale.pdv, CJ_NO_DESTINATION_FILTER_VALUE);
+  assert.equal(sale.pdvDestinazioneManuale, "Manuale CJ diverso");
 });
 test("missing insertion never fabricates chronological marginal attribution", () => {
   const m = model(row("f", "fisso", "2026-07-02", { insertedAt: null }), row("e", "energia", "2026-08-02"));

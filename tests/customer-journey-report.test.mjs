@@ -42,6 +42,7 @@ const {
   summarizeDriversWithPhase,
   monthOfIso,
   CJ_NO_DESTINATION_FILTER_VALUE,
+  cjReportPdv,
 } = await import('../shared/customerJourney.ts');
 
 test('business search finds company and contact without changing the title or other filters', () => {
@@ -362,19 +363,19 @@ test('report rows keep missing destination distinct from real destinations under
   const rows = [
     {
       id: 'no-destination', customerType: 'azienda', pdv: 'PDV Origine',
-      pdvOrigine: 'PDV Origine', pdvDestinazione: null,
+      pdvOrigine: 'PDV Origine', pdvDestinazioneEffettiva: null, pdvDestinazione: 'Manuale PDV',
       ragioneSociale: 'Gamma Energia Srl', addetto: 'Anna', state: 'inserito',
       economicState: null, cliente: 'Gamma', customerKey: 'GAMMA-1',
     },
     {
       id: 'real-destination', customerType: 'azienda', pdv: 'PDV Origine',
-      pdvOrigine: 'PDV Origine', pdvDestinazione: 'PDV Destinazione',
+      pdvOrigine: 'PDV Origine', pdvDestinazioneEffettiva: 'PDV Destinazione', pdvDestinazione: 'Manuale PDV',
       ragioneSociale: 'Gamma Energia Srl', addetto: 'Anna', state: 'inserito',
       economicState: null, cliente: 'Gamma', customerKey: 'GAMMA-2',
     },
     {
       id: 'other-company', customerType: 'azienda', pdv: 'PDV Origine',
-      pdvOrigine: 'PDV Origine', pdvDestinazione: null,
+      pdvOrigine: 'PDV Origine', pdvDestinazioneEffettiva: null, pdvDestinazione: null,
       ragioneSociale: 'Altra Società', addetto: 'Anna', state: 'inserito',
       economicState: null, cliente: 'Altro', customerKey: 'ALTRO-1',
     },
@@ -385,7 +386,7 @@ test('report rows keep missing destination distinct from real destinations under
     ragioneSocialeFilter: 'eNeRgIa',
   };
   const filterReportRows = (filters) => rows.filter((r) => {
-    const destination = (r.pdvDestinazione ?? '').trim();
+    const destination = (r.pdvDestinazioneEffettiva ?? '').trim();
     return matchesCjFilters({
       customerType: r.customerType,
       pdvs: r.pdv ? [r.pdv] : [],
@@ -394,7 +395,7 @@ test('report rows keep missing destination distinct from real destinations under
       ragioneSociale: r.ragioneSociale,
       addetti: [r.addetto],
       states: [r.state],
-      searchHay: [r.cliente, r.ragioneSociale, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(' '),
+      searchHay: [r.cliente, r.ragioneSociale, r.customerKey, r.addetto, r.pdvOrigine, r.pdvDestinazioneEffettiva].filter(Boolean).join(' '),
     }, filters);
   });
 
@@ -602,6 +603,59 @@ test('riepilogo per negozio: trigger, SIM extra e premio seguono la vendita d or
   assert.equal(detail[0].journeyId, 'j-store-split');
   assert.equal(detail[0].gettoneBase, 0);
   assert.equal(detail[0].extraStimato, 20);
+});
+
+test('attribuzione per destinazione usa solo la vendita e deduplica i totali globali', () => {
+  const rows = [
+    row({
+      journeyId: 'j-split', driver: 'mobile', state: 'attivato', cjTriggerMobile: true,
+      pdvOrigine: 'Origine A', pdvDestinazione: 'Manuale CJ',
+      pdvDestinazioneEffettiva: 'Destinazione A', bisuiteSaleId: 'sale-a',
+    }),
+    row({
+      journeyId: 'j-split', driver: 'energia', state: 'attivato',
+      pdvOrigine: 'Origine A', pdvDestinazione: 'Manuale CJ',
+      pdvDestinazioneEffettiva: 'Destinazione A', bisuiteSaleId: 'sale-a',
+    }),
+    row({
+      journeyId: 'j-split', driver: 'mobile', state: 'attivato',
+      pdvOrigine: 'Origine B', pdvDestinazione: 'Manuale CJ',
+      pdvDestinazioneEffettiva: 'Destinazione B', bisuiteSaleId: 'sale-b',
+      eventDate: '2026-08-12T00:00:00.000Z',
+    }),
+    row({
+      journeyId: 'j-split', driver: 'telefono', state: 'attivato',
+      pdvOrigine: 'Origine B', pdvDestinazione: 'Manuale CJ',
+      pdvDestinazioneEffettiva: 'Destinazione B', bisuiteSaleId: 'sale-b',
+      iccid: '89000000000000000002',
+    }),
+    row({
+      journeyId: 'j-no-dest', driver: 'mobile', state: 'attivato', cjTriggerMobile: true,
+      pdvOrigine: 'Origine C', pdvDestinazione: 'Destinazione manuale',
+      pdvDestinazioneEffettiva: null,
+    }),
+    row({
+      journeyId: 'j-no-dest', driver: 'energia', state: 'attivato',
+      pdvOrigine: 'Origine C', pdvDestinazione: 'Destinazione manuale',
+      pdvDestinazioneEffettiva: null,
+    }),
+  ];
+  assert.equal(cjReportPdv(rows[0]), 'Origine A', 'origine resta il default');
+  assert.equal(cjReportPdv(rows[0], 'destinazione'), 'Destinazione A');
+  assert.equal(cjReportPdv(rows[4], 'destinazione'), CJ_NO_DESTINATION_FILTER_VALUE,
+    'manual destination is not a fallback for missing source destination');
+
+  const journeys = buildGettoneJourneys(rows, 'destinazione');
+  const groups = aggregateGettoneByPdv(journeys, 100);
+  const byKey = new Map(groups.map(group => [group.key, group]));
+  assert.equal(byKey.get('Destinazione A').clienti, 1);
+  assert.equal(byKey.get('Destinazione B').clienti, 1,
+    'the multi-store journey may appear in each relevant store subtotal');
+  assert.equal(byKey.get(CJ_NO_DESTINATION_FILTER_VALUE).label, 'Senza destinazione');
+  assert.equal(byKey.get(CJ_NO_DESTINATION_FILTER_VALUE).clienti, 1);
+  const totals = gettoneTotals(journeys, 100);
+  assert.equal(totals.clienti, 2, 'global client totals count each journey once');
+  assert.equal(totals.simAttivate, 3);
 });
 
 // --- buildGettoneJourneys: finestra T0 — i contratti dei mesi precedenti

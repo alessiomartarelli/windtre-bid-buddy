@@ -1,9 +1,9 @@
 import {
-  CJ_DRIVER_LABELS, cjT0Month, gettoneForPiste, isCjItemActive,
+  CJ_DRIVER_LABELS, CJ_NO_DESTINATION_FILTER_VALUE, cjT0Month, gettoneForPiste, isCjItemActive,
   isCjMobileEligible, monthOfIso, pisteInWindow, effectiveEconomicState,
   cjPhoneEligibility, cjPhoneKey,
 } from "./customerJourney";
-import type { CjReportRow } from "./customerJourney";
+import type { CjPdvAttribution, CjReportRow } from "./customerJourney";
 import type { CjEconomicState } from "./schema";
 
 export interface CjCohortRow extends CjReportRow {
@@ -28,6 +28,9 @@ export interface CjCohortEvent {
   opener: string;
   seller: string;
   pdv: string;
+  pdvOrigine: string;
+  pdvDestinazioneEffettiva: string;
+  pdvDestinazioneManuale: string;
   driver: string;
   product: string;
   active: boolean;
@@ -45,6 +48,9 @@ export interface CjCohortCustomer {
   cohort: string;
   opener: string;
   pdv: string;
+  pdvOrigine: string;
+  pdvDestinazioneEffettiva: string;
+  pdvDestinazioneManuale: string;
   mobileActive: boolean;
   generated: number;
   confirmed: number;
@@ -74,7 +80,11 @@ const order = (a: CjCohortRow, b: CjCohortRow) =>
  * Economic history follows DRMS competence, NEVER upload/update timestamps.
  * Cohort membership stays independent of today's economic cancellation.
  */
-export function buildCjCohortModel(rows: CjCohortRow[], triggerDate?: string | null): CjCohortModel {
+export function buildCjCohortModel(
+  rows: CjCohortRow[],
+  triggerDate?: string | null,
+  pdvAttribution: CjPdvAttribution = "origine",
+): CjCohortModel {
   const model: CjCohortModel = { customers: [], events: [], undatedSales: 0, incompleteHistories: 0, unallocatedGenerated: 0, unallocatedConfirmed: 0 };
   const grouped = new Map<string, CjCohortRow[]>();
   for (const row of rows) {
@@ -92,8 +102,18 @@ export function buildCjCohortModel(rows: CjCohortRow[], triggerDate?: string | n
     if (!mobiles.length) continue;
     const opener = mobiles[0].addetto || "Non attribuito";
     const base = { journeyId, cliente: list[0].cliente, cohort, opener };
+    const sourcePdv = (r: CjCohortRow) => (pdvAttribution === "destinazione"
+      ? (r.pdvDestinazioneEffettiva ?? "").trim() || CJ_NO_DESTINATION_FILTER_VALUE
+      : (r.pdvOrigine ?? "").trim());
+    const destinationPdv = (r: CjCohortRow) =>
+      (r.pdvDestinazioneEffettiva ?? "").trim() || CJ_NO_DESTINATION_FILTER_VALUE;
     const customer: CjCohortCustomer = {
-      ...base, pdv: mobiles[0].pdv, mobileActive: mobiles.some(isCjItemActive), generated: 0, confirmed: 0, extraGenerated: 0, extraConfirmed: 0, unallocatedGenerated: 0, unallocatedConfirmed: 0,
+      ...base,
+      pdv: sourcePdv(mobiles[0]),
+      pdvOrigine: (mobiles[0].pdvOrigine ?? "").trim(),
+      pdvDestinazioneEffettiva: destinationPdv(mobiles[0]),
+      pdvDestinazioneManuale: (mobiles[0].pdvDestinazione ?? "").trim(),
+      mobileActive: mobiles.some(isCjItemActive), generated: 0, confirmed: 0, extraGenerated: 0, extraConfirmed: 0, unallocatedGenerated: 0, unallocatedConfirmed: 0,
     };
     model.customers.push(customer);
     // Structural eligibility retains economic reversal history. Current
@@ -108,7 +128,11 @@ export function buildCjCohortModel(rows: CjCohortRow[], triggerDate?: string | n
     const seen = new Set<string>();
     const makeEvent = (r: CjCohortRow, eventMonth: string, kind: CjCohortEvent["kind"]): CjCohortEvent => ({
       ...base, itemId: r.itemId, month: eventMonth, seller: r.addetto || "Non attribuito",
-      pdv: r.pdv, driver: r.driver, product: r.descrizione || CJ_DRIVER_LABELS[r.driver],
+      pdv: sourcePdv(r),
+      pdvOrigine: (r.pdvOrigine ?? "").trim(),
+      pdvDestinazioneEffettiva: destinationPdv(r),
+      pdvDestinazioneManuale: (r.pdvDestinazione ?? "").trim(),
+      driver: r.driver, product: r.descrizione || CJ_DRIVER_LABELS[r.driver],
       active: isCjItemActive(r), newPista: false, generated: 0, confirmed: 0, extraGenerated: 0, extraConfirmed: 0, source: "", kind,
     });
     for (const r of candidates) {

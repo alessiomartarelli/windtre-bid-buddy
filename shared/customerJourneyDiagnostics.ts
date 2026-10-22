@@ -58,11 +58,11 @@ export function inCjInsertPeriod(date: string | null, from: string, to: string):
 
 export function matchesDiagnosticFilters(
   r: Pick<CjReportRow,
-    "customerType" | "pdv" | "pdvOrigine" | "pdvDestinazione" | "ragioneSociale" |
+    "customerType" | "pdv" | "pdvOrigine" | "pdvDestinazioneEffettiva" | "ragioneSociale" |
     "addetto" | "state" | "economicState" | "cliente" | "customerKey">,
   filters: CjListFilters,
 ) {
-  const destination = (r.pdvDestinazione ?? "").trim();
+  const destination = (r.pdvDestinazioneEffettiva ?? "").trim();
   return matchesCjFilters({
     customerType: r.customerType, pdvs: r.pdv ? [r.pdv] : [],
     pdvOrigini: r.pdvOrigine ? [r.pdvOrigine] : [],
@@ -70,7 +70,8 @@ export function matchesDiagnosticFilters(
     ragioneSociale: r.ragioneSociale ?? null,
     addetti: r.addetto ? [r.addetto] : [],
     states: [r.state, r.economicState].filter((s): s is NonNullable<typeof s> => !!s),
-    searchHay: [r.cliente, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "),
+    searchHay: [r.cliente, r.customerKey, r.addetto, r.pdvOrigine, r.pdvDestinazioneEffettiva]
+      .filter(Boolean).join(" "),
   }, filters);
 }
 

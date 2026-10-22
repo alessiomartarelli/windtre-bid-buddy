@@ -106,19 +106,19 @@ test('actual smartphone PDF/XLSX downloads preserve provenance, ICCIDs and amoun
   assert.deepEqual(rows.slice(1), contractsBody(items, true, journey, sales));
   assert.deepEqual(XLSX.utils.sheet_to_json(workbook.Sheets.Gettoni, { header: 1 }), journeyGettoneRows(journey, items));
   for (let i = 0; i < items.length; i++) {
-    const cell = sheet[XLSX.utils.encode_cell({ r: i + 1, c: 13 })];
+    const cell = sheet[XLSX.utils.encode_cell({ r: i + 1, c: 15 })];
     assert.equal(cell.t, 's', 'ICCID must remain a text cell, never numeric/scientific notation');
     assert.equal(cell.v, items[i].iccid);
     if (items[i].driver === 'telefono') {
-      for (const column of [15, 16, 17]) {
+      for (const column of [17, 18, 19]) {
         assert.equal(sheet[XLSX.utils.encode_cell({ r: i + 1, c: column })].t, 's');
       }
     }
   }
   assert.equal(new Map(journeyGettoneRows(journey, items)).get('Totale stimato'), 40);
-  assert.match(rows[2][16], /Smartphone iniziale/);
-  assert.match(rows[4][16], /Coppia extra/);
-  assert.equal(rows[5][16], 'Escluso dal gettone CJ');
+  assert.match(rows[2][16], /SIM iniziale/);
+  assert.match(rows[4][16], /Coppia successiva/);
+  assert.equal(rows[5][18], 'Escluso dal gettone CJ');
 
   const bytes = await readFile(path.join(output, 'smartphones.pdf'));
   assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
@@ -135,7 +135,7 @@ test('actual smartphone PDF/XLSX downloads preserve provenance, ICCIDs and amoun
       pages.push(joined);
       if (!joined.includes('Canalecommerciale')) continue;
       provenance.push(p);
-      for (const header of ['Smartphone', ...contractsHead().slice(15)]) {
+      for (const header of ['Smartphone', ...contractsHead().slice(17)]) {
         assert.ok(joined.includes(compact(header)), `repeated provenance header "${header}" on page ${p}`);
       }
       for (const token of text.filter(it => it.str.trim())) {

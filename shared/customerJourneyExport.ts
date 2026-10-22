@@ -67,7 +67,7 @@ export function cjAppliedFilterMetadata(
   }
   addMany("PDV", filters.pdvFilter);
   addMany("PDV origine", filters.pdvOrigineFilter);
-  addMany("PDV destinazione", filters.pdvDestinazioneFilter, (value) =>
+  addMany("PDV destinazione effettiva", filters.pdvDestinazioneFilter, (value) =>
     value === CJ_NO_DESTINATION_FILTER_VALUE ? "Senza destinazione" : value);
   add("Ragione sociale", filters.ragioneSocialeFilter);
   if (filters.addettoFilter !== "tutti") add("Addetto", filters.addettoFilter);
@@ -178,7 +178,8 @@ export function driverTableBody(
 
 export function contractsHead(): string[] {
   return [
-    "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV",
+    "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV origine",
+    "PDV destinazione effettiva", "PDV destinazione manuale",
     "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Esito", "Gettone confermato", "ICCID", "Smartphone CJ",
     "Canale commerciale", "Ruolo economico CJ", "Articolo / SIM verificati",
   ];
@@ -226,7 +227,7 @@ function phoneProvenance(link: CjPhoneIccidLink): string[] {
   ];
 }
 
-/** Corpo della tabella Contratti del dettaglio (PDV destinazione → origine). */
+/** Corpo della tabella Contratti: origine, destinazione sorgente e campo manuale restano separati. */
 export function contractsBody(
   items: CustomerJourneyItem[],
   withEmoji: boolean,
@@ -247,7 +248,9 @@ export function contractsBody(
     itemDescription(it),
     it.codiceContratto || "—",
     it.addetto || "—",
-    it.pdvDestinazione || it.pdvOrigine || "—",
+    it.pdvOrigine?.trim() || "—",
+    (it as CustomerJourneyItem & { pdvDestinazioneEffettiva?: string | null }).pdvDestinazioneEffettiva?.trim() || "Senza destinazione",
+    it.pdvDestinazione?.trim() || "—",
     it.imei || "—",
     rataCanone(it),
     fmtDate(it.dataInserimento),

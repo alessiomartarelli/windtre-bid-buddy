@@ -63,17 +63,17 @@ test('PDF/Excel detail provenance keeps initial and extra roles separate and lea
   for (let i = 0; i < items.length; i++) {
     assert.equal(pdf[i].length, contractsHead().length);
     assert.deepEqual(pdf[i].slice(1), excel[i].slice(1));
-    assert.deepEqual(pdf[i].slice(0, 15), baseline[i].slice(0, 15));
+    assert.deepEqual(pdf[i].slice(0, 17), baseline[i].slice(0, 17));
   }
-  assert.deepEqual(pdf[0].slice(15), ['—', '—', '—']);
+  assert.deepEqual(pdf[0].slice(17), ['—', '—', '—']);
   for (const [index, iccid, article] of [[1, A, 1], [3, B, 10]]) {
-    assert.match(pdf[index][15], /MOBILE\/GA/);
-    assert.ok(pdf[index][17].includes(iccid));
-    assert.ok(pdf[index][17].includes(`Articolo BiSuite ${article}`));
-    assert.match(pdf[index][17], /SIM abbinata/);
+    assert.match(pdf[index][17], /MOBILE\/GA/);
+    assert.ok(pdf[index][19].includes(iccid));
+    assert.ok(pdf[index][19].includes(`Articolo BiSuite ${article}`));
+    assert.match(pdf[index][19], /SIM abbinata/);
   }
-  assert.match(pdf[1][16], /Smartphone iniziale.*piste base/);
-  assert.match(pdf[3][16], /Coppia extra.*20 €.*separato dal base/);
+  assert.match(pdf[1][18], /Smartphone iniziale.*piste base/);
+  assert.match(pdf[3][18], /Coppia extra.*20 €.*separato dal base/);
   assert.equal(result(items).fatturato, 40);
   assert.equal(new Map(journeyGettoneRows(journey, items)).get('Extra coppie SIM–smartphone'), 20);
 });
@@ -85,11 +85,11 @@ test('detail exports retain a verified CB article without turning an ICCID corre
   ] }];
   for (const emoji of [false, true]) {
     const row = contractsBody(items, emoji, journey, sales)[1];
-    assert.match(row[15], /^CB/);
-    assert.equal(row[16], 'Escluso dal gettone CJ');
-    assert.match(row[17], /SIM con ICCID corrispondente — non abbinamento CJ valido/);
-    assert.match(row[17], /Riferimento CB verificato per ICCID.*RIVINCOLO.*Articolo 42/);
-    assert.ok(row[17].includes(`ICCID CB: ${A}`));
+    assert.match(row[17], /^CB/);
+    assert.equal(row[18], 'Escluso dal gettone CJ');
+    assert.match(row[19], /SIM con ICCID corrispondente — non abbinamento CJ valido/);
+    assert.match(row[19], /Riferimento CB verificato per ICCID.*RIVINCOLO.*Articolo 42/);
+    assert.ok(row[19].includes(`ICCID CB: ${A}`));
   }
   assert.equal(result(items).fatturato, 0);
 });
@@ -124,9 +124,9 @@ test('detail exports mark absent and ambiguous evidence as unverifiable, never e
       const exported = contractsBody(items, emoji, journey, sales);
       for (const [i, item] of items.entries()) {
         if (item.driver !== 'telefono') continue;
-        assert.match(exported[i][15], channel);
-        assert.match(exported[i][17], reference);
-        assert.doesNotMatch(exported[i][17], /Articolo (?:BiSuite )?\d+|Candidato|ICCID CB:/);
+        assert.match(exported[i][17], channel);
+        assert.match(exported[i][19], reference);
+        assert.doesNotMatch(exported[i][19], /Articolo (?:BiSuite )?\d+|Candidato|ICCID CB:/);
       }
     }
     assert.deepEqual(journeyGettoneRows(journey, items), before);
@@ -311,7 +311,7 @@ test('initial smartphone needs TELEFONIA + SMARTPHONE + opening SIM ICCID; histo
     const validity = computeItemValidity(computeTimeline(journey, items), journey);
     assert.equal(validity.get('phone-2').counts, kind === 'iniziale');
     assert.equal(contractsBody(items, false, journey).length, 2);
-    assert.match(contractsBody(items, false, journey)[1][14], kind === 'iniziale' ? /SIM iniziale/ : /non|Nessuna|ICCID/i);
+    assert.match(contractsBody(items, false, journey)[1][16], kind === 'iniziale' ? /SIM iniziale/ : /non|Nessuna|ICCID/i);
   }
 });
 
