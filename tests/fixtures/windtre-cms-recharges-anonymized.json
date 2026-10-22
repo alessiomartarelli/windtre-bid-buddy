@@ -1,0 +1,6310 @@
+{
+  "description": "CMS 9–12 ottobre 2026: proiezione pseudonimizzata, telefoni sintetici 700…; nessun dato cliente originale.",
+  "providerRows": [
+    {
+      "id": "KEY-1",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000000",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000000"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-1",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-2",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000001",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000001"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-2",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-3",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000002",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000002"
+      ],
+      "amount": 6,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-3",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-4",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000003",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000003"
+      ],
+      "amount": 6,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-4",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-5",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000004",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000004"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-5",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-6",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000005",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000005"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-6",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-7",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000006",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000006"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-7",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-8",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000007",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000007"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-8",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-9",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000008",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000008"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-9",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-10",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000009",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000009"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-10",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-11",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000010",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000010"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-11",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-12",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000011",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000011"
+      ],
+      "amount": 10,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-12",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-13",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000012",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000012"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-13",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-14",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000013",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000013"
+      ],
+      "amount": 5,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-14",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-15",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000014",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000014"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-15",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-16",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000015",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000015"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-16",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-17",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000016",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000016"
+      ],
+      "amount": 6,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-17",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-18",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000017",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000017"
+      ],
+      "amount": 10,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-18",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-19",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000018",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000018"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-19",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-20",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000019",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000019"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-20",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-21",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000020",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000020"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-21",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-22",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000021",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000021"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-22",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-23",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000022",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000022"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-23",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-24",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000023",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000023"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-24",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-25",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000024",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000024"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-25",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-26",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000025",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000025"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-26",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-27",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000026",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000026"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-27",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-28",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000027",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000027"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-28",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-29",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000028",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000028"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-29",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-30",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000029",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000029"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-30",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-31",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000030",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000030"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-31",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-32",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000031",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000031"
+      ],
+      "amount": 10,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-32",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-33",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000032",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000032"
+      ],
+      "amount": 50,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-33",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-34",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000033",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000033"
+      ],
+      "amount": 5,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-34",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-35",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000034",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000034"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-35",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-36",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000035",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000035"
+      ],
+      "amount": 10,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-36",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-37",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000036",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000036"
+      ],
+      "amount": 5,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-37",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-38",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000037",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000037"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-38",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-39",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000038",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000038"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-39",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-40",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000039",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000039"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-40",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-41",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000040",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000040"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-41",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-42",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000041",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000041"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-42",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-43",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000042",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000042"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-43",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-44",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000043",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000043"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-44",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-45",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000044",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000044"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-45",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-46",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000045",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000045"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-46",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-47",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000046",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000046"
+      ],
+      "amount": 40,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-47",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-48",
+      "date": "2026-10-09T00:00:00.000Z",
+      "phone": "7000000047",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000047"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-48",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-49",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000048",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000048"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-49",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-50",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000049",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000049"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-50",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-51",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000050",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000050"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-51",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-52",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000051",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000051"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-52",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-53",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000052",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000052"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-53",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-54",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000053",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000053"
+      ],
+      "amount": 10,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-54",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-55",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000054",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000054"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-55",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-56",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000054",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000054"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-56",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-57",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000055",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000055"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-57",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-58",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000056",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000056"
+      ],
+      "amount": 6,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-58",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-59",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000057",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000057"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-59",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-60",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000058",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000058"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-60",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-61",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000059",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000059"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-61",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-62",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000060",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000060"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-62",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-63",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000061",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000061"
+      ],
+      "amount": 10,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-63",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-64",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000062",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000062"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-64",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-65",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000063",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000063"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-65",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-66",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000064",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000064"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-66",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-67",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000065",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000065"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-67",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-68",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000066",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000066"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-68",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-69",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000067",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000067"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-69",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-70",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000068",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000068"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-70",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-71",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000069",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000069"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-71",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-72",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000070",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000070"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-72",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-73",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000071",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000071"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-73",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-74",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000072",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000072"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-74",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-75",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000073",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000073"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-75",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-76",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000074",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000074"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-76",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-77",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000075",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000075"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-77",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-78",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000076",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000076"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-78",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-79",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000077",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000077"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-79",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-80",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000078",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000078"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-80",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-81",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000079",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000079"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-81",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-82",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000080",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000080"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-82",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-83",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000081",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000081"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-83",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-84",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000081",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000081"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-84",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-85",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000082",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000082"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-85",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-86",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000083",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000083"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-86",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-87",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000083",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000083"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-87",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-88",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000084",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000084"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-88",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-89",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000085",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000085"
+      ],
+      "amount": 6,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-89",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-90",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000086",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000086"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-90",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-91",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000087",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000087"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-91",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-92",
+      "date": "2026-10-10T00:00:00.000Z",
+      "phone": "7000000088",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000088"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-92",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-93",
+      "date": "2026-10-11T00:00:00.000Z",
+      "phone": "7000000089",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000089"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-93",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-94",
+      "date": "2026-10-11T00:00:00.000Z",
+      "phone": "7000000090",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000090"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-94",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-95",
+      "date": "2026-10-11T00:00:00.000Z",
+      "phone": "7000000091",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000091"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-95",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-96",
+      "date": "2026-10-11T00:00:00.000Z",
+      "phone": "7000000092",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000092"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-96",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-97",
+      "date": "2026-10-11T00:00:00.000Z",
+      "phone": "7000000093",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000093"
+      ],
+      "amount": 15,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-97",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-98",
+      "date": "2026-10-11T00:00:00.000Z",
+      "phone": "7000000094",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000094"
+      ],
+      "amount": 25,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-98",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-99",
+      "date": "2026-10-11T00:00:00.000Z",
+      "phone": "7000000095",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000095"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-99",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-100",
+      "date": "2026-10-11T00:00:00.000Z",
+      "phone": "7000000096",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000096"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-100",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-101",
+      "date": "2026-10-12T00:00:00.000Z",
+      "phone": "7000000097",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000097"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-101",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-102",
+      "date": "2026-10-12T00:00:00.000Z",
+      "phone": "7000000098",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000098"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-102",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-103",
+      "date": "2026-10-12T00:00:00.000Z",
+      "phone": "7000000099",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000099"
+      ],
+      "amount": 11,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-103",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-104",
+      "date": "2026-10-12T00:00:00.000Z",
+      "phone": "7000000100",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000100"
+      ],
+      "amount": 10,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-104",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-105",
+      "date": "2026-10-12T00:00:00.000Z",
+      "phone": "7000000101",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000101"
+      ],
+      "amount": 6,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-105",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-106",
+      "date": "2026-10-12T00:00:00.000Z",
+      "phone": "7000000102",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000102"
+      ],
+      "amount": 30,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-106",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-107",
+      "date": "2026-10-12T00:00:00.000Z",
+      "phone": "7000000102",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000102"
+      ],
+      "amount": 6,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-107",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "SIM ATTIVA",
+      "rowCount": 1
+    },
+    {
+      "id": "KEY-108",
+      "date": "2026-10-12T00:00:00.000Z",
+      "phone": "7000000103",
+      "temporaryPhone": "",
+      "phoneCandidates": [
+        "7000000103"
+      ],
+      "amount": 20,
+      "customer": "",
+      "supplier": "WindTre",
+      "transactionId": "KEY-108",
+      "dealerCode": "ORDER-ANON",
+      "pointId": "POS-ANON",
+      "rechargeType": "VSC",
+      "rowCount": 1
+    }
+  ],
+  "sales": [
+    {
+      "id": "sale-1",
+      "bisuiteId": 1,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000097"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-2",
+      "bisuiteId": 2,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000098"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-3",
+      "bisuiteId": 3,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000104"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-4",
+      "bisuiteId": 4,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000105"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-5",
+      "bisuiteId": 5,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000099"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-6",
+      "bisuiteId": 6,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-7",
+      "bisuiteId": 7,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000101"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-8",
+      "bisuiteId": 8,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000102"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000102"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-9",
+      "bisuiteId": 9,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000106"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-10",
+      "bisuiteId": 10,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000107"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-11",
+      "bisuiteId": 11,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000108"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-12",
+      "bisuiteId": 12,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000109"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-13",
+      "bisuiteId": 13,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000103"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-14",
+      "bisuiteId": 14,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000110"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-15",
+      "bisuiteId": 15,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000111"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000112"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-16",
+      "bisuiteId": 16,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000113"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-17",
+      "bisuiteId": 17,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000114"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-18",
+      "bisuiteId": 18,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000115"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000115"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-19",
+      "bisuiteId": 19,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000116"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-20",
+      "bisuiteId": 20,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000117"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-21",
+      "bisuiteId": 21,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000118"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-22",
+      "bisuiteId": 22,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000119"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-23",
+      "bisuiteId": 23,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000120"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-24",
+      "bisuiteId": 24,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000121"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-25",
+      "bisuiteId": 25,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000122"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-26",
+      "bisuiteId": 26,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000123"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-27",
+      "bisuiteId": 27,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000124"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-28",
+      "bisuiteId": 28,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000125"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-29",
+      "bisuiteId": 29,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000126"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-30",
+      "bisuiteId": 30,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000127"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-31",
+      "bisuiteId": 31,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000128"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-32",
+      "bisuiteId": 32,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "ANNULLATA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000129"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-33",
+      "bisuiteId": 33,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000129"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-34",
+      "bisuiteId": 34,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000130"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-35",
+      "bisuiteId": 35,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "ANNULLATA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000131"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-36",
+      "bisuiteId": 36,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000132"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-37",
+      "bisuiteId": 37,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000133"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-38",
+      "bisuiteId": 38,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "40.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000134"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-39",
+      "bisuiteId": 39,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000135"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-40",
+      "bisuiteId": 40,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000136"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-41",
+      "bisuiteId": 41,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000137"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-42",
+      "bisuiteId": 42,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000138"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-43",
+      "bisuiteId": 43,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000139"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-44",
+      "bisuiteId": 44,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000140"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-45",
+      "bisuiteId": 45,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000141"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-46",
+      "bisuiteId": 46,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "40.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000142"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-47",
+      "bisuiteId": 47,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000143"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-48",
+      "bisuiteId": 48,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000144"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-49",
+      "bisuiteId": 49,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000127"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-50",
+      "bisuiteId": 50,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000145"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-51",
+      "bisuiteId": 51,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000146"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-52",
+      "bisuiteId": 52,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000147"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000147"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-53",
+      "bisuiteId": 53,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000148"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-54",
+      "bisuiteId": 54,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000149"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-55",
+      "bisuiteId": 55,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000150"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-56",
+      "bisuiteId": 56,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000151"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000152"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-57",
+      "bisuiteId": 57,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000153"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-58",
+      "bisuiteId": 58,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000154"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-59",
+      "bisuiteId": 59,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000155"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-60",
+      "bisuiteId": 60,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000156"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-61",
+      "bisuiteId": 61,
+      "dataVendita": "2026-10-12 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "5.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000157"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-62",
+      "bisuiteId": 62,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000089"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-63",
+      "bisuiteId": 63,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000158"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000159"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-64",
+      "bisuiteId": 64,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000090"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-65",
+      "bisuiteId": 65,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000091"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-66",
+      "bisuiteId": 66,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000092"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-67",
+      "bisuiteId": 67,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000160"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000161"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000162"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000163"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-68",
+      "bisuiteId": 68,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000164"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-69",
+      "bisuiteId": 69,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "40.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000165"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-70",
+      "bisuiteId": 70,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000093"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-71",
+      "bisuiteId": 71,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000166"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-72",
+      "bisuiteId": 72,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000094"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-73",
+      "bisuiteId": 73,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000167"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-74",
+      "bisuiteId": 74,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000096"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-75",
+      "bisuiteId": 75,
+      "dataVendita": "2026-10-11 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000095"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-76",
+      "bisuiteId": 76,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000048"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-77",
+      "bisuiteId": 77,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000050"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-78",
+      "bisuiteId": 78,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000049"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-79",
+      "bisuiteId": 79,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000051"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-80",
+      "bisuiteId": 80,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000168"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000169"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-81",
+      "bisuiteId": 81,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000052"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-82",
+      "bisuiteId": 82,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000053"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-83",
+      "bisuiteId": 83,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000055"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-84",
+      "bisuiteId": 84,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000056"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-85",
+      "bisuiteId": 85,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000054"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000054"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-86",
+      "bisuiteId": 86,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000057"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-87",
+      "bisuiteId": 87,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000059"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-88",
+      "bisuiteId": 88,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000058"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-89",
+      "bisuiteId": 89,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000060"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-90",
+      "bisuiteId": 90,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000170"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-91",
+      "bisuiteId": 91,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000061"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-92",
+      "bisuiteId": 92,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000171"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-93",
+      "bisuiteId": 93,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000172"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-94",
+      "bisuiteId": 94,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000062"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-95",
+      "bisuiteId": 95,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000063"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-96",
+      "bisuiteId": 96,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000173"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-97",
+      "bisuiteId": 97,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000174"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-98",
+      "bisuiteId": 98,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000064"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-99",
+      "bisuiteId": 99,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000065"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-100",
+      "bisuiteId": 100,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000066"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-101",
+      "bisuiteId": 101,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000070"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-102",
+      "bisuiteId": 102,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000068"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000067"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-103",
+      "bisuiteId": 103,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000069"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-104",
+      "bisuiteId": 104,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000071"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-105",
+      "bisuiteId": 105,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000072"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-106",
+      "bisuiteId": 106,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000073"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-107",
+      "bisuiteId": 107,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000175"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-108",
+      "bisuiteId": 108,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000074"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-109",
+      "bisuiteId": 109,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000075"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-110",
+      "bisuiteId": 110,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000076"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-111",
+      "bisuiteId": 111,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000077"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-112",
+      "bisuiteId": 112,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000078"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-113",
+      "bisuiteId": 113,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000079"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-114",
+      "bisuiteId": 114,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000176"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-115",
+      "bisuiteId": 115,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000177"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-116",
+      "bisuiteId": 116,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000080"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-117",
+      "bisuiteId": 117,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000082"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-118",
+      "bisuiteId": 118,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000081"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000081"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000083"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000083"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-119",
+      "bisuiteId": 119,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000084"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-120",
+      "bisuiteId": 120,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000085"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-121",
+      "bisuiteId": 121,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000178"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-122",
+      "bisuiteId": 122,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000179"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-123",
+      "bisuiteId": 123,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000086"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-124",
+      "bisuiteId": 124,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000088"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-125",
+      "bisuiteId": 125,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000087"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-126",
+      "bisuiteId": 126,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000180"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-127",
+      "bisuiteId": 127,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000181"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-128",
+      "bisuiteId": 128,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000182"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000183"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000184"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-129",
+      "bisuiteId": 129,
+      "dataVendita": "2026-10-10 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000185"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-130",
+      "bisuiteId": 130,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000000"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-131",
+      "bisuiteId": 131,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000001"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-132",
+      "bisuiteId": 132,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000186"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-133",
+      "bisuiteId": 133,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000002"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-134",
+      "bisuiteId": 134,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000003"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-135",
+      "bisuiteId": 135,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000005"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000004"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-136",
+      "bisuiteId": 136,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000006"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000007"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-137",
+      "bisuiteId": 137,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000008"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-138",
+      "bisuiteId": 138,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000009"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-139",
+      "bisuiteId": 139,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000010"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-140",
+      "bisuiteId": 140,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000011"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-141",
+      "bisuiteId": 141,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000012"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-142",
+      "bisuiteId": 142,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "5.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000013"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-143",
+      "bisuiteId": 143,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000014"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-144",
+      "bisuiteId": 144,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000015"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-145",
+      "bisuiteId": 145,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "6.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000016"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-146",
+      "bisuiteId": 146,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000017"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-147",
+      "bisuiteId": 147,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000018"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-148",
+      "bisuiteId": 148,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000019"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-149",
+      "bisuiteId": 149,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000024"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-150",
+      "bisuiteId": 150,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000020"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000021"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000022"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000023"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000025"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-151",
+      "bisuiteId": 151,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000026"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-152",
+      "bisuiteId": 152,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000027"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-153",
+      "bisuiteId": 153,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000028"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-154",
+      "bisuiteId": 154,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000029"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-155",
+      "bisuiteId": 155,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000031"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-156",
+      "bisuiteId": 156,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "50.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000032"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-157",
+      "bisuiteId": 157,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000187"
+            }
+          },
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000188"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-158",
+      "bisuiteId": 158,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "5.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000033"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-159",
+      "bisuiteId": 159,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000035"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-160",
+      "bisuiteId": 160,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "5.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000036"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-161",
+      "bisuiteId": 161,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "30.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000037"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-162",
+      "bisuiteId": 162,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000038"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-163",
+      "bisuiteId": 163,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000189"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-164",
+      "bisuiteId": 164,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "11.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000039"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-165",
+      "bisuiteId": 165,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000190"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-166",
+      "bisuiteId": 166,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000030"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-167",
+      "bisuiteId": 167,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000040"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-168",
+      "bisuiteId": 168,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000041"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-169",
+      "bisuiteId": 169,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000034"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-170",
+      "bisuiteId": 170,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000042"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-171",
+      "bisuiteId": 171,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000043"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-172",
+      "bisuiteId": 172,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "10.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000191"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-173",
+      "bisuiteId": 173,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "15.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000044"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-174",
+      "bisuiteId": 174,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "25.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000045"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-175",
+      "bisuiteId": 175,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "40.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000046"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sale-176",
+      "bisuiteId": 176,
+      "dataVendita": "2026-10-09 00:00:00",
+      "codicePos": "POS-ANON",
+      "nomeNegozio": "",
+      "nomeCliente": "",
+      "stato": "FINALIZZATA IN CASSA",
+      "rawData": {
+        "articoli": [
+          {
+            "categoria": {
+              "nome": "RICARICHE"
+            },
+            "dettaglio": {
+              "prezzo": "20.00",
+              "domandeRisposte": [],
+              "venditaInfo1": "NUMERO TELEFONO: 7000000047"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "expected": {
+    "requestedPeriod": {
+      "from": "2026-10-09",
+      "to": "2026-10-11"
+    },
+    "workbookPeriod": {
+      "from": "2026-10-09",
+      "to": "2026-10-12"
+    },
+    "workbookSourceRows": 108,
+    "salesInSnapshot": 619,
+    "candidatesWithoutPhone": 0,
+    "outsideRequestedPeriod": {
+      "count": 8,
+      "amountCents": 13300
+    },
+    "entireWorkbook": {
+      "providerCount": 108,
+      "bisuiteCount": 198,
+      "states": {
+        "VERIFICATO": {
+          "count": 108,
+          "providerCents": 184100,
+          "bisuiteCents": 184100
+        },
+        "INCONGRUENZA IMPORTO": {
+          "count": 0,
+          "providerCents": 0,
+          "bisuiteCents": 0
+        },
+        "NON PRESENTE SU BISUITE": {
+          "count": 0,
+          "providerCents": 0,
+          "bisuiteCents": 0
+        },
+        "NON PRESENTE SU FILE": {
+          "count": 90,
+          "providerCents": 0,
+          "bisuiteCents": 159500
+        }
+      }
+    },
+    "requestedPeriodOnly": {
+      "providerCount": 100,
+      "bisuiteCount": 134,
+      "states": {
+        "VERIFICATO": {
+          "count": 100,
+          "providerCents": 170800,
+          "bisuiteCents": 170800
+        },
+        "INCONGRUENZA IMPORTO": {
+          "count": 0,
+          "providerCents": 0,
+          "bisuiteCents": 0
+        },
+        "NON PRESENTE SU BISUITE": {
+          "count": 0,
+          "providerCents": 0,
+          "bisuiteCents": 0
+        },
+        "NON PRESENTE SU FILE": {
+          "count": 34,
+          "providerCents": 0,
+          "bisuiteCents": 59100
+        }
+      }
+    },
+    "byDay": [
+      {
+        "day": "2026-10-09",
+        "providerCount": 48,
+        "bisuiteCount": 54,
+        "states": {
+          "VERIFICATO": {
+            "count": 48,
+            "providerCents": 80800,
+            "bisuiteCents": 80800
+          },
+          "INCONGRUENZA IMPORTO": {
+            "count": 0,
+            "providerCents": 0,
+            "bisuiteCents": 0
+          },
+          "NON PRESENTE SU BISUITE": {
+            "count": 0,
+            "providerCents": 0,
+            "bisuiteCents": 0
+          },
+          "NON PRESENTE SU FILE": {
+            "count": 6,
+            "providerCents": 0,
+            "bisuiteCents": 11500
+          }
+        }
+      },
+      {
+        "day": "2026-10-10",
+        "providerCount": 44,
+        "bisuiteCount": 62,
+        "states": {
+          "VERIFICATO": {
+            "count": 44,
+            "providerCents": 75400,
+            "bisuiteCents": 75400
+          },
+          "INCONGRUENZA IMPORTO": {
+            "count": 0,
+            "providerCents": 0,
+            "bisuiteCents": 0
+          },
+          "NON PRESENTE SU BISUITE": {
+            "count": 0,
+            "providerCents": 0,
+            "bisuiteCents": 0
+          },
+          "NON PRESENTE SU FILE": {
+            "count": 18,
+            "providerCents": 0,
+            "bisuiteCents": 32900
+          }
+        }
+      },
+      {
+        "day": "2026-10-11",
+        "providerCount": 8,
+        "bisuiteCount": 18,
+        "states": {
+          "VERIFICATO": {
+            "count": 8,
+            "providerCents": 14600,
+            "bisuiteCents": 14600
+          },
+          "INCONGRUENZA IMPORTO": {
+            "count": 0,
+            "providerCents": 0,
+            "bisuiteCents": 0
+          },
+          "NON PRESENTE SU BISUITE": {
+            "count": 0,
+            "providerCents": 0,
+            "bisuiteCents": 0
+          },
+          "NON PRESENTE SU FILE": {
+            "count": 10,
+            "providerCents": 0,
+            "bisuiteCents": 14700
+          }
+        }
+      },
+      {
+        "day": "2026-10-12",
+        "providerCount": 8,
+        "bisuiteCount": 64,
+        "states": {
+          "VERIFICATO": {
+            "count": 8,
+            "providerCents": 13300,
+            "bisuiteCents": 13300
+          },
+          "INCONGRUENZA IMPORTO": {
+            "count": 0,
+            "providerCents": 0,
+            "bisuiteCents": 0
+          },
+          "NON PRESENTE SU BISUITE": {
+            "count": 0,
+            "providerCents": 0,
+            "bisuiteCents": 0
+          },
+          "NON PRESENTE SU FILE": {
+            "count": 56,
+            "providerCents": 0,
+            "bisuiteCents": 100400
+          }
+        }
+      }
+    ]
+  }
+}

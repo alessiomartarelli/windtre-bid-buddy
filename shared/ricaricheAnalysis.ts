@@ -45,6 +45,8 @@ export interface RechargeProviderRow {
 }
 
 export interface RechargeSaleCandidate {
+  /** Identità della singola ricarica, distinta dall'ID vendita mostrato. */
+  candidateId?: string;
   saleId: string;
   bisuiteId: number;
   date: string;
@@ -318,6 +320,16 @@ function collectPhones(value: unknown, output: Set<string>, parentKey = ""): voi
   }
   if (!value || typeof value !== "object") return;
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    // BiSuite reale salva le risposte anche come testo etichettato nei campi
+    // venditaInfoN, con domandeRisposte vuoto. Non interpretare numeri liberi
+    // (es. ICCID, codici o importi) come telefoni.
+    if (/^venditaInfo[1-5]$/.test(key) && typeof child === "string") {
+      const match = child.match(/^\s*(?:numero\s+(?:di\s+)?telefono(?:\s+da\s+ricaricare)?|msisdn|cellulare|utenza)\s*:\s*([+\d][\d\s()./-]*)\s*$/i);
+      if (match) {
+        const phone = normalizeRechargePhone(match[1]);
+        if (phone.length >= 8) output.add(phone);
+      }
+    }
     if (/(telefon|cellulare|utenza|msisdn|numero.*ricar)/i.test(key)) {
       const phone = normalizeRechargePhone(child);
       if (phone.length >= 8) output.add(phone);
@@ -357,7 +369,7 @@ export function extractRechargeSales(sales: Array<{
   nomeCliente: string | null;
   stato: string | null;
   rawData: unknown;
-}>): RechargeSaleCandidate[] {
+}>, options: { splitArticles?: boolean } = {}): RechargeSaleCandidate[] {
   const out: RechargeSaleCandidate[] = [];
   for (const sale of sales) {
     if ((sale.stato ?? "").trim().toUpperCase() === "ANNULLATA") continue;
@@ -367,29 +379,37 @@ export function extractRechargeSales(sales: Array<{
       text(article?.categoria?.nome).toUpperCase() === "RICARICHE",
     );
     if (!rechargeArticles.length) continue;
-    const phones = new Set<string>();
-    let amountCents = 0;
-    for (const article of rechargeArticles) {
-      collectPhones(article, phones);
-      const amount = parseRechargeAmount(article?.dettaglio?.prezzo ?? article?.dettaglio?.importo ?? article?.prezzo);
-      if (amount !== null) amountCents += Math.round(amount * 100);
+    // WindTre: una Keycode per ricarica, anche se lo scontrino contiene più
+    // ricariche sullo stesso numero o su numeri diversi. VF conserva il
+    // raggruppamento storico per vendita/transazione.
+    const groups = options.splitArticles ? rechargeArticles.map(article => [article]) : [rechargeArticles];
+    for (const [index, group] of groups.entries()) {
+      const phones = new Set<string>();
+      let amountCents = 0;
+      for (const article of group) {
+        collectPhones(article, phones);
+        const amount = parseRechargeAmount(article?.dettaglio?.prezzo ?? article?.dettaglio?.importo ?? article?.prezzo);
+        if (amount !== null) amountCents += Math.round(amount * 100);
+      }
+      if (amountCents <= 0) continue;
+      out.push({
+        ...(options.splitArticles ? { candidateId: `${sale.bisuiteId}:article:${index}` } : {}),
+        saleId: String(sale.bisuiteId),
+        bisuiteId: sale.bisuiteId,
+        date: dateKey(sale.dataVendita),
+        pdv: text(sale.codicePos) || text(sale.nomeNegozio),
+        customer: text(sale.nomeCliente),
+        amount: amountCents / 100,
+        phones: Array.from(phones),
+      });
     }
-    if (amountCents <= 0) continue;
-    out.push({
-      saleId: String(sale.bisuiteId),
-      bisuiteId: sale.bisuiteId,
-      date: dateKey(sale.dataVendita),
-      pdv: text(sale.codicePos) || text(sale.nomeNegozio),
-      customer: text(sale.nomeCliente),
-      amount: amountCents / 100,
-      phones: Array.from(phones),
-    });
   }
   return out;
 }
 
 /**
- * Abbina una sola transazione fornitore a ogni vendita BiSuite al massimo.
+ * Abbina una sola transazione fornitore a ogni candidato BiSuite al massimo
+ * (singola ricarica WindTre o vendita aggregata VF).
  * Una corrispondenza richiede giorno e numero; tra più candidati si preferisce
  * l'importo più vicino, mantenendo deterministico il risultato.
  */
@@ -397,16 +417,17 @@ export function reconcileRechargeRows(
   providerRows: RechargeProviderRow[],
   sales: RechargeSaleCandidate[],
 ): RechargeReconciliationRow[] {
-  const remainingSales = new Set(sales.map((sale) => sale.saleId));
+  const candidateKey = (sale: RechargeSaleCandidate) => sale.candidateId ?? sale.saleId;
+  const remainingSales = new Set(sales.map(candidateKey));
   const assignments = new Map<string, RechargeSaleCandidate>();
   const ordered = [...providerRows].sort((a, b) => {
-    const candidatesA = sales.filter((sale) => sale.date === a.date && sale.phones.some((phone) => a.phoneCandidates.includes(phone))).length;
-    const candidatesB = sales.filter((sale) => sale.date === b.date && sale.phones.some((phone) => b.phoneCandidates.includes(phone))).length;
+    const candidatesA = sales.filter((sale) => sale.date === a.date.slice(0, 10) && sale.phones.some((phone) => a.phoneCandidates.includes(phone))).length;
+    const candidatesB = sales.filter((sale) => sale.date === b.date.slice(0, 10) && sale.phones.some((phone) => b.phoneCandidates.includes(phone))).length;
     return candidatesA - candidatesB || a.transactionId.localeCompare(b.transactionId);
   });
   for (const row of ordered) {
     const candidates = sales.filter((sale) =>
-      remainingSales.has(sale.saleId) &&
+      remainingSales.has(candidateKey(sale)) &&
       sale.date === row.date.slice(0, 10) &&
       sale.phones.some((phone) => row.phoneCandidates.includes(phone)),
     );
@@ -416,7 +437,7 @@ export function reconcileRechargeRows(
     );
     if (candidates[0]) {
       assignments.set(row.transactionId, candidates[0]);
-      remainingSales.delete(candidates[0].saleId);
+      remainingSales.delete(candidateKey(candidates[0]));
     }
   }
 
@@ -441,9 +462,9 @@ export function reconcileRechargeRows(
     };
   });
   for (const sale of sales) {
-    if (!remainingSales.has(sale.saleId)) continue;
+    if (!remainingSales.has(candidateKey(sale))) continue;
     result.push({
-      id: `bisuite:${sale.saleId}`,
+      id: `bisuite:${candidateKey(sale)}`,
       date: sale.date,
       phone: sale.phones[0] || null,
       temporaryPhone: null,

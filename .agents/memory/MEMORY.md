@@ -86,3 +86,4 @@
 - [Smartphone CJ e SIM aggiuntive](cj-smartphone-pairs.md) — coppia successiva +20€ anche con ICCID diverso; una sola CJ, finestra T0–T5 senza reset, DRMS separato.
 - [Privacy log CJ produzione](cj-production-log-privacy.md) — le righe Express dei report possono contenere dati cliente; filtra solo i prefissi di riepilogo scheduler prima di leggere i log.
 - [Perimetro provider ricariche](ricariche-provider-brand.md) — i tenant WindTre e Vodafone/Fastweb vedono e caricano solo i report dei provider associati al proprio brand.
+- [Ricariche WindTre per articolo](windtre-recharge-granularity.md) — Keycode confrontate con le singole ricariche, non col totale dello scontrino; non estendere la regola a VF.

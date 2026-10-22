@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import { readFileSync } from "node:fs";
 import {
@@ -240,4 +241,87 @@ test("Analisi - Ricariche è un modulo indipendente concedibile senza Amministra
     moduliConsentiti: ["analisi_ricariche"],
     key: "analisi_ricariche",
   }), false);
+});
+
+test("telefoni BiSuite reali: venditaInfo etichettato, non ICCID o numeri liberi", () => {
+  const sale = {
+    id: "anon", bisuiteId: 101, dataVendita: "2026-10-09", stato: "FINALIZZATA IN CASSA",
+    codicePos: "POS-ANON", nomeNegozio: "", nomeCliente: "",
+    rawData: { articoli: [{ categoria: { nome: "RICARICHE" }, dettaglio: {
+      prezzo: "15.00", domandeRisposte: [],
+      venditaInfo1: "NUMERO TELEFONO: +39 700 000 0001",
+      venditaInfo2: "ICCID: 8900000000000000000",
+      venditaInfo3: "7000000002",
+    } }] },
+  };
+  assert.deepEqual(extractRechargeSales([sale])[0].phones, ["7000000001"]);
+});
+
+const cmsFixture = JSON.parse(readFileSync(
+  new URL("./fixtures/windtre-cms-recharges-anonymized.json", import.meta.url), "utf8",
+));
+
+test("CMS report intero: 108 Keycode e 1.841 euro verificati senza falsi mancanti", () => {
+  const candidates = extractRechargeSales(cmsFixture.sales, { splitArticles: true });
+  const rows = reconcileRechargeRows(cmsFixture.providerRows, candidates);
+  const verified = rows.filter(r => r.status === "VERIFICATO");
+  const missingFile = rows.filter(r => r.status === "NON PRESENTE SU FILE");
+  assert.equal(cmsFixture.providerRows.length, 108);
+  assert.equal(candidates.length, 198);
+  assert.equal(verified.length, 108);
+  assert.equal(verified.reduce((n, r) => n + Math.round(r.amount * 100), 0), 184100);
+  assert.ok(verified.every(r => r.difference === 0 && r.amount === r.bisuiteAmount));
+  assert.equal(rows.filter(r => r.status === "INCONGRUENZA IMPORTO").length, 0);
+  assert.equal(rows.filter(r => r.status === "NON PRESENTE SU BISUITE").length, 0);
+  assert.equal(missingFile.length, 90);
+  assert.equal(missingFile.reduce((n, r) => n + Math.round(r.bisuiteAmount * 100), 0), 159500);
+  assert.equal(rows.length, new Set(rows.map(r => r.id)).size);
+  assert.equal(rows.reduce((n, r) => n + Math.round((r.bisuiteAmount ?? 0) * 100), 0), 343600);
+  assert.ok(candidates.every(s => s.phones.length === 1));
+  assert.equal(cmsFixture.sales.filter(s => s.stato === "ANNULLATA").length, 2);
+  assert.ok(cmsFixture.providerRows.some(r => r.rechargeType === "SIM ATTIVA"));
+  assert.ok(cmsFixture.providerRows.every(r => /^700\d{7}$/.test(r.phone)), "only synthetic phone identifiers");
+});
+
+test("CMS 9–11 ottobre: separa le 8 ricariche del 12 incluse nel file", () => {
+  const candidates = extractRechargeSales(cmsFixture.sales, { splitArticles: true });
+  const through11 = r => r.date.slice(0, 10) <= "2026-10-11";
+  const included = cmsFixture.providerRows.filter(through11);
+  const excluded = cmsFixture.providerRows.filter(r => !through11(r));
+  const rows = reconcileRechargeRows(included, candidates.filter(through11));
+  assert.equal(included.length, 100);
+  assert.equal(excluded.length, 8);
+  assert.equal(excluded.reduce((n, r) => n + r.amount, 0), 133);
+  assert.equal(rows.filter(r => r.status === "VERIFICATO").length, 100);
+  assert.equal(rows.filter(r => r.status === "NON PRESENTE SU FILE").length, 34);
+  assert.equal(rows.reduce((n, r) => n + (r.amount ?? 0), 0), 1708);
+  assert.equal(rows.filter(r => r.status === "NON PRESENTE SU FILE").reduce((n, r) => n + r.bisuiteAmount, 0), 591);
+});
+
+test("WindTre divide lo scontrino per articolo, VF conserva l'aggregato storico", () => {
+  const multi = cmsFixture.sales.find(s =>
+    s.stato !== "ANNULLATA" && s.rawData.articoli.length > 1 &&
+    new Set(s.rawData.articoli.map(a => a.dettaglio.venditaInfo1)).size > 1,
+  );
+  assert.ok(multi);
+  const single = extractRechargeSales([multi]);
+  const split = extractRechargeSales([multi], { splitArticles: true });
+  assert.equal(single.length, 1);
+  assert.equal(split.length, multi.rawData.articoli.length);
+  assert.equal(split.reduce((n, r) => n + r.amount, 0), single[0].amount);
+  assert.equal(new Set(split.map(s => s.saleId)).size, 1, "visible sale ID remains the original receipt ID");
+  assert.equal(new Set(split.map(s => s.candidateId)).size, split.length);
+  const rows = reconcileRechargeRows([], split);
+  assert.equal(new Set(rows.map(r => r.id)).size, split.length, "unmatched articles have distinct row IDs");
+});
+
+test("candidati più vincolati prima: confronta il giorno anche con timestamp provider", () => {
+  const flexible = recharge("A", "2026-10-09T09:00:00.000Z", "7000000001", "7000000002", 10);
+  const constrained = recharge("B", "2026-10-09T09:00:00.000Z", "7000000001", "", 10);
+  const sales = ["7000000001", "7000000002"].map((phone, i) => ({
+    saleId: String(i + 1), bisuiteId: i + 1, date: "2026-10-09",
+    pdv: "POS-ANON", customer: "", amount: 10, phones: [phone],
+  }));
+  const rows = reconcileRechargeRows([flexible, constrained], sales);
+  assert.equal(rows.filter(r => r.status === "VERIFICATO").length, 2);
 });

@@ -1771,7 +1771,7 @@ export async function registerRoutes(
       const sales = dates.length
         ? await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, dates[0], dates[dates.length - 1], true)
         : [];
-      const reconciled = reconcileRechargeRows(providerRows, extractRechargeSales(sales));
+      const reconciled = reconcileRechargeRows(providerRows, extractRechargeSales(sales, { splitArticles: provider === "windtre" }));
       const pdvs = Array.from(new Set(reconciled.map((r) => r.pdv).filter((v): v is string => !!v)))
         .sort((a, b) => a.localeCompare(b, "it"))
         .map((key) => ({ key, label: key }));

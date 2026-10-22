@@ -27,6 +27,55 @@ function windTreWorkbookBase64() {
   return XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
 }
 
+test("WindTre API riconcilia ogni ricarica dello stesso scontrino senza duplicare gli importi", async () => {
+  const pool = await newPool();
+  const user = await signup({ prefix: "ricariche_w3_items", fullName: "Test WindTre Items" });
+  let brandId;
+  try {
+    const brand = await pool.query("INSERT INTO brands (name) VALUES ($1) RETURNING id",
+      [`WindTre items ${Date.now()} ${Math.random()}`]);
+    brandId = brand.rows[0].id;
+    await pool.query("INSERT INTO organization_brands (organization_id,brand_id) VALUES ($1,$2)", [user.orgId, brandId]);
+    await pool.query(`INSERT INTO bisuite_sales
+      (organization_id,bisuite_id,data_vendita,codice_pos,stato,totale,raw_data)
+      VALUES ($1,901,'2026-10-09 23:59:00','POS-ANON','FINALIZZATA IN CASSA','46.00',$2::jsonb)`,
+    [user.orgId, JSON.stringify({ articoli: [20, 15, 11].map((prezzo, i) => ({
+      categoria: { nome: "RICARICHE" }, dettaglio: {
+        prezzo: String(prezzo), domandeRisposte: [],
+        venditaInfo1: `NUMERO TELEFONO: ${i < 2 ? "7000000001" : "7000000002"}`,
+      },
+    })) })]);
+    const w = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(w, XLSX.utils.aoa_to_sheet([
+      ["Codice Ordine", "Keycode", "MSISDN", "Taglio ricarica", "Tipo ricarica", "Stato", "Data utilizzo", "PDV"],
+      ["ORDER", "KEY-1", "7000000001", 20, "VSC", "BURNED", "2026-10-09", "POS-ANON"],
+      ["ORDER", "KEY-2", "7000000001", 15, "SIM ATTIVA", "BURNED", "2026-10-09", "POS-ANON"],
+    ]), "Report");
+    const headers = { Cookie: user.cookieHeader };
+    const upload = await jsonReq(`${BASE}/api/ricariche-analysis/upload`, {
+      method: "POST", headers, body: JSON.stringify({
+        provider: "windtre", fileName: "anonymous-w3.xlsx",
+        workbookBase64: XLSX.write(w, { type: "base64", bookType: "xlsx" }),
+      }),
+    });
+    assert.equal(upload.status, 201, JSON.stringify(upload.body));
+    const result = await jsonReq(`${BASE}/api/ricariche-analysis?provider=windtre&reportId=${upload.body.reportId}`, { headers });
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    const rows = result.body.rows;
+    assert.equal(rows.length, 3);
+    assert.equal(rows.filter(r => r.status === "VERIFICATO").length, 2);
+    assert.equal(rows.filter(r => r.status === "NON PRESENTE SU FILE").length, 1);
+    assert.ok(rows.every(r => r.saleId === "901"));
+    assert.equal(new Set(rows.map(r => r.id)).size, 3);
+    assert.equal(rows.reduce((n, r) => n + (r.bisuiteAmount ?? 0), 0), 46);
+    assert.equal(rows.reduce((n, r) => n + (r.amount ?? 0), 0), 35);
+  } finally {
+    await cleanupOrg(pool, user.orgId);
+    if (brandId) await pool.query("DELETE FROM brands WHERE id=$1", [brandId]);
+    await pool.end();
+  }
+});
+
 test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione", async () => {
   const pool = await newPool();
   const orgA = await signup({ prefix: "ricariche_authz_a", fullName: "Analisi Ricariche A" });
