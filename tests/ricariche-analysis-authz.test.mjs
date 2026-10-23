@@ -446,13 +446,82 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
 
     const browser = await launchBrowser();
     try {
+      // Extra API-only rows make period, PDV and text filters change the totals independently.
+      for (const [id, date, amount] of [
+        [901100001, "2026-09-01 12:00:00", 7],
+        [901100002, "2026-09-10 12:00:00", 8],
+      ]) {
+        await pool.query(`INSERT INTO bisuite_sales
+          (organization_id,bisuite_id,data_vendita,codice_pos,nome_cliente,stato,totale,raw_data)
+          VALUES ($1,$2,$3,'POS-EXTRA','Cliente extra','Completata',$4,$5::jsonb)`,
+        [orgB.orgId, id, date, String(amount), JSON.stringify({
+          articoli: [{ categoria: { nome: "RICARICHE" }, dettaglio: { prezzo: String(amount), telefono: "7000000099" } }],
+        })]);
+      }
       const apiContext = await newAuthedContext(browser, orgB);
       const apiPage = await apiContext.newPage();
+      await apiPage.clock.setFixedTime(new Date("2026-09-12T18:00:00Z"));
+      const initialRequest = apiPage.waitForRequest(req => req.url().includes("/api/ricariche-analysis?"));
       await apiPage.goto(`${BASE}/analisi-ricariche`, { waitUntil: "networkidle" });
+      const initialUrl = new URL((await initialRequest).url());
+      assert.equal(initialUrl.searchParams.get("from"), "2026-09-01");
+      assert.equal(initialUrl.searchParams.get("to"), "2026-09-12");
       await apiPage.getByRole("heading", { name: "Ricariche da vendite BiSuite" }).waitFor({ state: "visible", timeout: 20000 });
       await apiPage.getByText(String(otherTenantBisuiteId), { exact: true }).waitFor({ state: "visible", timeout: 10000 });
-      await apiPage.getByText("RICEVUTA VIA API", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      await apiPage.getByText("RICEVUTA VIA API", { exact: true }).first().waitFor({ state: "visible", timeout: 10000 });
       await apiPage.getByText("Importo ricarica", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      const fromFilter = apiPage.getByTestId("recharge-filter-from");
+      const toFilter = apiPage.getByTestId("recharge-filter-to");
+      const summary = apiPage.getByTestId("recharge-summaries");
+      const count = apiPage.getByTestId("recharge-count").locator(".tabular-nums");
+      const total = summary.locator(":scope > div").nth(1).locator(".tabular-nums");
+      const checkSummary = async (rows, amount) => {
+        await apiPage.waitForFunction(({ rows, amount }) => {
+          const cards = document.querySelector('[data-testid="recharge-summaries"]');
+          return cards?.children[0]?.querySelector(".tabular-nums")?.textContent === rows
+            && cards?.children[1]?.querySelector(".tabular-nums")?.textContent?.replace(/\s/g, "") === amount;
+        }, { rows: String(rows), amount: `${amount},00€` });
+        assert.equal(await count.textContent(), String(rows));
+        assert.equal((await total.textContent()).replace(/\s/g, ""), `${amount},00€`);
+        assert.equal(await apiPage.locator("tbody tr").count(), rows);
+      };
+      assert.equal(await fromFilter.inputValue(), "2026-09-01");
+      assert.equal(await toFilter.inputValue(), "2026-09-12");
+      assert.equal(await summary.getByText("Fonte dati", { exact: true }).count(), 0);
+      assert.equal(await summary.getByText(/di \d+ operazioni/).count(), 0);
+      await checkSummary(3, 30);
+      await fromFilter.fill("2026-09-10");
+      await checkSummary(2, 23);
+      const applyResponse = apiPage.waitForResponse(res => res.url().includes("/api/ricariche-analysis?") && res.status() === 200);
+      await apiPage.getByRole("button", { name: "Applica periodo" }).click();
+      await applyResponse;
+      await checkSummary(2, 23);
+      // PDV, source, status and free text all feed the same visible rows and summaries.
+      await apiPage.getByRole("combobox").nth(0).click();
+      await apiPage.getByRole("option", { name: "POS-OTHER", exact: true }).click();
+      await checkSummary(1, 15);
+      await apiPage.getByRole("combobox").nth(1).click();
+      await apiPage.getByRole("option", { name: "BiSuite API", exact: true }).click();
+      await checkSummary(1, 15);
+      await apiPage.getByPlaceholder("Cerca…").fill("nessuna corrispondenza");
+      await checkSummary(0, 0);
+      await apiPage.getByPlaceholder("Cerca…").fill("Altro cliente");
+      await checkSummary(1, 15);
+      await apiPage.getByRole("combobox").nth(2).click();
+      await apiPage.getByRole("option", { name: "VERIFICATO", exact: true }).click();
+      await checkSummary(0, 0);
+      const resetResponse = apiPage.waitForResponse(res => res.url().includes("/api/ricariche-analysis?") && res.status() === 200);
+      await apiPage.getByRole("button", { name: "Azzera filtri", exact: true }).first().click();
+      await resetResponse;
+      await checkSummary(3, 30);
+      assert.equal(await fromFilter.inputValue(), "2026-09-01");
+      assert.equal(await toFilter.inputValue(), "2026-09-12");
+      assert.equal(await apiPage.getByPlaceholder("Cerca…").inputValue(), "");
+      assert.equal(await apiPage.getByRole("button", { name: "Azzera filtri", exact: true }).count(), 0);
+      await toFilter.fill("2026-09-10");
+      await checkSummary(2, 15);
+      await apiPage.getByRole("button", { name: "Azzera filtri", exact: true }).click();
+      await checkSummary(3, 30);
       await apiContext.close();
 
       const context = await newAuthedContext(browser, orgA);
@@ -460,6 +529,9 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
       await page.goto(`${BASE}/analisi-ricariche`, { waitUntil: "networkidle" });
       await page.getByRole("heading", { name: "Analisi ricariche" }).waitFor({ state: "visible", timeout: 20000 });
       await page.getByText("INCONGRUENZA IMPORTO", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      assert.equal(await page.getByTestId("recharge-filter-from").inputValue(), "");
+      assert.equal(await page.getByTestId("recharge-filter-to").inputValue(), "");
+      assert.equal(await page.getByTestId("recharge-summaries").getByText("Totale BiSuite", { exact: true }).count(), 1);
       const periodEditor = page.getByTestId("declared-period-editor");
       await page.getByText(/Periodo non confermato/).waitFor({ state: "visible", timeout: 10000 });
       await page.getByTestId("report-period-from").fill("2026-09-12");

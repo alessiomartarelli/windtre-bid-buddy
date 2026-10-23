@@ -14,6 +14,25 @@ import {
   rowsOutsideRechargePeriod,
 } from "../shared/ricaricheAnalysis.ts";
 import { isModuleAccessible, MODULES, sanitizeGrantableModules } from "../shared/modules.ts";
+import { currentRechargePeriod } from "../client/src/lib/ricarichePeriod.ts";
+
+test("periodo iniziale ricariche: calendario locale anche vicino a mezzanotte e al cambio mese", () => {
+  const previousTZ = process.env.TZ;
+  try {
+    for (const [zone, instant, expected] of [
+      ["Europe/Rome", "2026-09-30T22:30:00Z", { from: "2026-10-01", to: "2026-10-01" }],
+      ["America/Los_Angeles", "2026-10-01T00:30:00Z", { from: "2026-09-01", to: "2026-09-30" }],
+      ["Europe/Rome", "2028-02-29T12:00:00Z", { from: "2028-02-01", to: "2028-02-29" }],
+      ["Europe/Rome", "2026-12-31T23:30:00Z", { from: "2027-01-01", to: "2027-01-01" }],
+    ]) {
+      process.env.TZ = zone;
+      assert.deepEqual(currentRechargePeriod(new Date(instant)), expected, zone);
+    }
+  } finally {
+    if (previousTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZ;
+  }
+});
 
 function workbookBytes(headers, rows) {
   const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);

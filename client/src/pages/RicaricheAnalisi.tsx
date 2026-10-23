@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppNavbar } from "@/components/AppNavbar";
 import { apiUrl } from "@/lib/basePath";
+import { currentRechargePeriod } from "@/lib/ricarichePeriod";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,8 +42,9 @@ export default function RicaricheAnalisi() {
   const [uploading, setUploading] = useState(false);
   const [drag, setDrag] = useState(false);
   const [query, setQuery] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [initialPeriod] = useState(currentRechargePeriod);
+  const [from, setFrom] = useState(initialPeriod.from);
+  const [to, setTo] = useState(initialPeriod.to);
   const [declaredFrom, setDeclaredFrom] = useState("");
   const [declaredTo, setDeclaredTo] = useState("");
   const [savingPeriod, setSavingPeriod] = useState(false);
@@ -60,8 +62,9 @@ export default function RicaricheAnalisi() {
       if (requestedProvider) params.set("provider", requestedProvider);
       if (reportId) params.set("reportId", reportId);
       if (!reportId) {
-        if (requestedFrom) params.set("from", requestedFrom);
-        if (requestedTo) params.set("to", requestedTo);
+        const defaultPeriod = currentRechargePeriod();
+        params.set("from", requestedFrom ?? defaultPeriod.from);
+        params.set("to", requestedTo ?? defaultPeriod.to);
         params.set("page", String(page));
       }
       const queryString = params.toString();
@@ -147,8 +150,8 @@ export default function RicaricheAnalisi() {
   const suppliers = useMemo(() => [...new Set(data.rows.map(r => r.supplier).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, "it")), [data.rows]);
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("it");
-    const filterFrom = activeReport ? from : data.apiPeriod?.from ?? "";
-    const filterTo = activeReport ? to : data.apiPeriod?.to ?? "";
+    const filterFrom = from;
+    const filterTo = to;
     return data.rows.filter(r => {
       const d = r.date ? new Date(r.date).toISOString().slice(0, 10) : "";
       const text = [r.customer, r.phone, r.temporaryPhone, r.saleId, r.transactionId, r.rechargeType, r.amount, r.bisuiteAmount, r.difference, r.pdv].join(" ").toLocaleLowerCase("it");
@@ -159,14 +162,19 @@ export default function RicaricheAnalisi() {
   const totalBisuiteAmount = filtered.reduce((sum, r) => sum + (Number(r.bisuiteAmount) || 0), 0);
   const mismatches = activeReport ? filtered.filter(r => r.status !== "VERIFICATO" && r.status !== "FUORI PERIODO").length : 0;
   const apiPeriodChanged = !activeReport && (!!data.apiPeriod && (from !== data.apiPeriod.from || to !== data.apiPeriod.to));
-  const activeFilters = [activeReport ? from : apiPeriodChanged ? from : "", activeReport ? to : apiPeriodChanged ? to : "", pdv !== "all" ? pdv : "", supplier !== "all" ? supplier : "", status !== "all" ? status : "", query].filter(Boolean).length;
+  const defaultPeriod = currentRechargePeriod();
+  const activeFilters = [activeReport ? from : from !== defaultPeriod.from ? "changed" : "", activeReport ? to : to !== defaultPeriod.to ? "changed" : "", pdv !== "all" ? pdv : "", supplier !== "all" ? supplier : "", status !== "all" ? status : "", query].filter(Boolean).length;
   const reset = () => {
     if (activeReport) {
       setFrom("");
       setTo("");
-    } else if (data.apiPeriod) {
-      setFrom(data.apiPeriod.from);
-      setTo(data.apiPeriod.to);
+    } else {
+      const period = currentRechargePeriod();
+      setFrom(period.from);
+      setTo(period.to);
+      if (data.apiPeriod && (data.apiPeriod.from !== period.from || data.apiPeriod.to !== period.to)) {
+        void load({ provider: data.provider ?? undefined, ...period, page: 0 });
+      }
     }
     setPdv("all");
     setSupplier("all");
@@ -228,10 +236,10 @@ export default function RicaricheAnalisi() {
         </div>}
       </section>}
 
-      <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Righe in vista <SlidersHorizontal className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{new Intl.NumberFormat("it-IT").format(filtered.length)}</div><div className="mt-1 text-xs text-[#789092]">di {new Intl.NumberFormat("it-IT").format(data.rows.length)} operazioni</div></div>
+      <section data-testid="recharge-summaries" className={`mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 ${activeReport ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        <div data-testid="recharge-count" className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Righe in vista <SlidersHorizontal className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{new Intl.NumberFormat("it-IT").format(filtered.length)}</div><div className="mt-1 text-xs text-[#789092]">operazioni con i filtri attivi</div></div>
         <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">{activeReport ? "Totale provider" : "Totale ricariche API"} <CircleDollarSign className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{money(totalAmount)}</div><div className="mt-1 text-xs text-[#789092]">importo delle righe filtrate</div></div>
-        <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">{activeReport ? "Totale BiSuite" : "Fonte dati"} <CircleDollarSign className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{activeReport ? money(totalBisuiteAmount) : "BiSuite API"}</div><div className="mt-1 text-xs text-[#789092]">{activeReport ? "importo delle righe filtrate" : "vendite salvate per questo tenant"}</div></div>
+        {activeReport && <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Totale BiSuite <CircleDollarSign className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{money(totalBisuiteAmount)}</div><div className="mt-1 text-xs text-[#789092]">importo delle righe filtrate</div></div>}
         <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">{activeReport ? "Da verificare" : "Report provider"} <AlertCircle className="h-4 w-4 text-[#c77b3e]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{activeReport ? new Intl.NumberFormat("it-IT").format(mismatches) : "—"}</div><div className="mt-1 text-xs text-[#789092]">{activeReport ? "incongruenze o movimenti mancanti" : "caricalo per avviare il confronto"}</div></div>
       </section>
 
@@ -245,8 +253,8 @@ export default function RicaricheAnalisi() {
       <section className="mb-5 overflow-hidden rounded-xl border border-[#d7e2df] bg-[#fbfcfa] shadow-[0_2px_10px_rgba(31,65,66,.035)]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e4ebe8] px-4 py-3"><div className="flex items-center gap-2"><Filter className="h-4 w-4 text-[#168277]" /><h2 className="text-sm font-semibold">Filtri di ricerca</h2>{activeFilters > 0 && <span className="rounded-full bg-[#e1f0ec] px-2 py-0.5 text-[10px] font-bold text-[#16776e]">{activeFilters} attivi</span>}</div>{activeFilters > 0 && <button className="inline-flex items-center gap-1 text-xs font-medium text-[#688083] hover:text-[#11796f]" onClick={reset}><X className="h-3.5 w-3.5" /> Azzera filtri</button>}</div>
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
-          <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">Dal</span><Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-9 border-[#d6e0dd] bg-white text-xs" /></label>
-          <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">Al</span><Input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-9 border-[#d6e0dd] bg-white text-xs" /></label>
+          <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">Dal</span><Input data-testid="recharge-filter-from" type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-9 border-[#d6e0dd] bg-white text-xs" /></label>
+          <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">Al</span><Input data-testid="recharge-filter-to" type="date" value={to} onChange={e => setTo(e.target.value)} className="h-9 border-[#d6e0dd] bg-white text-xs" /></label>
           <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">Punto vendita</span><Select value={pdv} onValueChange={setPdv}><SelectTrigger className="h-9 border-[#d6e0dd] bg-white text-xs"><SelectValue placeholder="Tutti i PDV" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti i PDV</SelectItem>{data.pdvs.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}</SelectContent></Select></label>
           <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">{activeReport ? "Fornitore" : "Fonte"}</span><Select value={supplier} onValueChange={setSupplier}><SelectTrigger className="h-9 border-[#d6e0dd] bg-white text-xs"><SelectValue placeholder="Tutti" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti</SelectItem>{suppliers.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></label>
           <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">Esito</span><Select value={status} onValueChange={setStatus}><SelectTrigger className="h-9 border-[#d6e0dd] bg-white text-xs"><SelectValue placeholder="Tutti gli esiti" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti gli esiti</SelectItem>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></label>
