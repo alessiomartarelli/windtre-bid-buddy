@@ -166,6 +166,7 @@ export interface IStorage {
   listRicaricheAnalysisReports(orgId: string, provider: string): Promise<RicaricheAnalysisReport[]>;
   getRicaricheAnalysisReport(id: string, orgId: string, provider: string): Promise<RicaricheAnalysisReport | undefined>;
   createRicaricheAnalysisReport(report: InsertRicaricheAnalysisReport): Promise<RicaricheAnalysisReport>;
+  setRicaricheAnalysisReportPeriod(id: string, orgId: string, provider: string, from: string | null, to: string | null): Promise<RicaricheAnalysisReport | undefined>;
 
   // Gestione DTS (Task #321)
   getDtsLeads(orgId: string): Promise<DtsLeadRow[]>;
@@ -1036,6 +1037,24 @@ export class DatabaseStorage implements IStorage {
   async createRicaricheAnalysisReport(report: InsertRicaricheAnalysisReport): Promise<RicaricheAnalysisReport> {
     const [created] = await db.insert(ricaricheAnalysisReports).values(report).returning();
     return created;
+  }
+
+  async setRicaricheAnalysisReportPeriod(
+    id: string,
+    orgId: string,
+    provider: string,
+    from: string | null,
+    to: string | null,
+  ): Promise<RicaricheAnalysisReport | undefined> {
+    const [updated] = await db.update(ricaricheAnalysisReports)
+      .set({ declaredPeriodFrom: from, declaredPeriodTo: to })
+      .where(and(
+        eq(ricaricheAnalysisReports.id, id),
+        eq(ricaricheAnalysisReports.organizationId, orgId),
+        eq(ricaricheAnalysisReports.provider, provider),
+      ))
+      .returning();
+    return updated;
   }
 
   // === Gestione DTS (Task #321) ===

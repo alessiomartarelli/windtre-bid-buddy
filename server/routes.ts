@@ -32,9 +32,11 @@ import { BisuiteFetchCoordinator } from "./bisuiteFetchCoordinator";
 import {
   extractRechargeSales,
   getRicaricheAnalysisProvidersForBrands,
+  isRechargeDateWithinPeriod,
   parseVodafoneRechargeWorkbook,
   parseWindTreRechargeWorkbook,
   reconcileRechargeRows,
+  rowsOutsideRechargePeriod,
   RICARICHE_ANALYSIS_PROVIDERS,
 } from "../shared/ricaricheAnalysis";
 import {
@@ -1730,6 +1732,18 @@ export async function registerRoutes(
   // I report sono archiviati per org e provider; ogni tenant può consultare
   // e caricare solo i tracciati associati al proprio brand.
   const rechargeProvider = z.enum(["vodafone_fastweb", "windtre"]);
+  const validRechargeDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  });
+  const declaredRechargePeriod = z.object({
+    provider: rechargeProvider,
+    declaredPeriodFrom: validRechargeDate.nullable(),
+    declaredPeriodTo: validRechargeDate.nullable(),
+  }).refine((period) =>
+    (period.declaredPeriodFrom === null) === (period.declaredPeriodTo === null) &&
+    (period.declaredPeriodFrom === null || period.declaredPeriodFrom <= period.declaredPeriodTo!),
+  );
   app.get("/api/ricariche-analysis", isAuthenticated, requireModule("analisi_ricariche"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
@@ -1760,6 +1774,7 @@ export async function registerRoutes(
           reports: reports.map((r) => ({
             id: r.id, fileName: r.fileName, uploadedAt: r.uploadedAt,
             rowCount: r.rowCount, periodFrom: r.periodFrom, periodTo: r.periodTo,
+            declaredPeriodFrom: r.declaredPeriodFrom, declaredPeriodTo: r.declaredPeriodTo,
           })),
           activeReportId: null,
           rows: [],
@@ -1768,10 +1783,26 @@ export async function registerRoutes(
       }
       const providerRows = Array.isArray(selected.rows) ? selected.rows as any[] : [];
       const dates = providerRows.map((r) => String(r?.date ?? "").slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
-      const sales = dates.length
-        ? await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, dates[0], dates[dates.length - 1], true)
+      const declaredFrom = selected.declaredPeriodFrom;
+      const declaredTo = selected.declaredPeriodTo;
+      const periodConfirmed = !!declaredFrom && !!declaredTo;
+      const salesFrom = periodConfirmed ? declaredFrom! : dates[0];
+      const salesTo = periodConfirmed ? declaredTo! : dates[dates.length - 1];
+      const sales = salesFrom && salesTo
+        ? await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, salesFrom, salesTo, true)
         : [];
-      const reconciled = reconcileRechargeRows(providerRows, extractRechargeSales(sales, { splitArticles: provider === "windtre" }));
+      const candidates = extractRechargeSales(sales, { splitArticles: provider === "windtre" });
+      const reconciled = periodConfirmed
+        ? [
+            ...reconcileRechargeRows(
+              providerRows.filter((row) => isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!)),
+              candidates,
+            ),
+            ...rowsOutsideRechargePeriod(
+              providerRows.filter((row) => !isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!)),
+            ),
+          ].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id))
+        : reconcileRechargeRows(providerRows, candidates, { includeUnmatchedSales: false });
       const pdvs = Array.from(new Set(reconciled.map((r) => r.pdv).filter((v): v is string => !!v)))
         .sort((a, b) => a.localeCompare(b, "it"))
         .map((key) => ({ key, label: key }));
@@ -1781,6 +1812,7 @@ export async function registerRoutes(
         reports: reports.map((r) => ({
           id: r.id, fileName: r.fileName, uploadedAt: r.uploadedAt,
           rowCount: r.rowCount, periodFrom: r.periodFrom, periodTo: r.periodTo,
+          declaredPeriodFrom: r.declaredPeriodFrom, declaredPeriodTo: r.declaredPeriodTo,
         })),
         activeReportId: selected.id,
         rows: reconciled,
@@ -1789,6 +1821,37 @@ export async function registerRoutes(
     } catch (e) {
       console.error("Recharge analysis read failed:", e);
       res.status(500).json({ message: "Errore nel recupero dell'analisi ricariche." });
+    }
+  });
+
+  app.put("/api/ricariche-analysis/:reportId/period", isAuthenticated, requireModule("analisi_ricariche"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ message: "Profilo senza organizzazione." });
+      const parsed = declaredRechargePeriod.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Periodo non valido: inserisci entrambe le date, in ordine, oppure rimuovi la conferma." });
+      const { provider, declaredPeriodFrom, declaredPeriodTo } = parsed.data;
+      const brandNames = (await storage.getOrganizationBrands(profile.organizationId)).map((brand) => brand.name);
+      const allowedProviders = getRicaricheAnalysisProvidersForBrands(brandNames);
+      if (!allowedProviders.includes(provider)) {
+        return res.status(403).json({ message: "Questo fornitore non è disponibile per il brand dell’organizzazione." });
+      }
+      const report = await storage.setRicaricheAnalysisReportPeriod(
+        String(req.params.reportId),
+        profile.organizationId,
+        provider,
+        declaredPeriodFrom,
+        declaredPeriodTo,
+      );
+      if (!report) return res.status(404).json({ message: "Report non trovato." });
+      res.json({
+        ok: true,
+        declaredPeriodFrom: report.declaredPeriodFrom,
+        declaredPeriodTo: report.declaredPeriodTo,
+      });
+    } catch (e) {
+      console.error("Recharge analysis period update failed:", e);
+      res.status(500).json({ message: "Errore nel salvataggio del periodo del report." });
     }
   });
 

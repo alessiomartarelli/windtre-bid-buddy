@@ -61,7 +61,20 @@ test("WindTre API riconcilia ogni ricarica dello stesso scontrino senza duplicar
     assert.equal(upload.status, 201, JSON.stringify(upload.body));
     const result = await jsonReq(`${BASE}/api/ricariche-analysis?provider=windtre&reportId=${upload.body.reportId}`, { headers });
     assert.equal(result.status, 200, JSON.stringify(result.body));
-    const rows = result.body.rows;
+    assert.equal(result.body.rows.length, 2, "without a confirmed full period the API does not infer missing BiSuite sales");
+    assert.equal(result.body.rows.filter(r => r.status === "NON PRESENTE SU FILE").length, 0);
+    const confirm = await jsonReq(`${BASE}/api/ricariche-analysis/${upload.body.reportId}/period`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        provider: "windtre",
+        declaredPeriodFrom: "2026-10-09",
+        declaredPeriodTo: "2026-10-09",
+      }),
+    });
+    assert.equal(confirm.status, 200, JSON.stringify(confirm.body));
+    const confirmed = await jsonReq(`${BASE}/api/ricariche-analysis?provider=windtre&reportId=${upload.body.reportId}`, { headers });
+    const rows = confirmed.body.rows;
     assert.equal(rows.length, 3);
     assert.equal(rows.filter(r => r.status === "VERIFICATO").length, 2);
     assert.equal(rows.filter(r => r.status === "NON PRESENTE SU FILE").length, 1);
@@ -72,6 +85,89 @@ test("WindTre API riconcilia ogni ricarica dello stesso scontrino senza duplicar
   } finally {
     await cleanupOrg(pool, user.orgId);
     if (brandId) await pool.query("DELETE FROM brands WHERE id=$1", [brandId]);
+    await pool.end();
+  }
+});
+
+test("periodo report ricariche: conserva le righe esterne e applica i confini inclusivi", async () => {
+  const pool = await newPool();
+  const user = await signup({ prefix: "ricariche_period_boundary", fullName: "Test periodo ricariche" });
+  let brandId;
+  try {
+    const brand = await pool.query("INSERT INTO brands (name) VALUES ($1) RETURNING id",
+      [`WindTre periodo ${Date.now()} ${Math.random()}`]);
+    brandId = brand.rows[0].id;
+    await pool.query("INSERT INTO organization_brands (organization_id,brand_id) VALUES ($1,$2)", [user.orgId, brandId]);
+    const sales = [
+      ["2026-10-08 12:00:00", 901008, "7000000008", 8],
+      ["2026-10-09 12:00:00", 901009, "7000000009", 9],
+      ["2026-10-10 12:00:00", 901010, "7000000010", 10],
+      ["2026-10-11 12:00:00", 901011, "7000000011", 11],
+      ["2026-10-09 13:00:00", 901012, "7000000012", 12],
+    ];
+    for (const [date, bisuiteId, phone, amount] of sales) {
+      await pool.query(
+        `INSERT INTO bisuite_sales
+          (organization_id,bisuite_id,data_vendita,codice_pos,stato,totale,raw_data)
+         VALUES ($1,$2,$3,'POS-PERIOD','Completata',$4,$5::jsonb)`,
+        [user.orgId, bisuiteId, date, String(amount), JSON.stringify({
+          articoli: [{
+            categoria: { nome: "RICARICHE" },
+            dettaglio: { prezzo: String(amount) },
+            telefono: phone,
+          }],
+        })],
+      );
+    }
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ["Codice Ordine", "Keycode", "MSISDN", "Taglio ricarica", "Tipo ricarica", "Stato", "Data utilizzo", "PDV"],
+      ["ORDER", "PERIOD-08", "7000000008", 8, "VSC", "BURNED", "2026-10-08", "POS-PERIOD"],
+      ["ORDER", "PERIOD-09", "7000000009", 9, "VSC", "BURNED", "2026-10-09", "POS-PERIOD"],
+      ["ORDER", "PERIOD-10", "7000000010", 10, "VSC", "BURNED", "2026-10-10", "POS-PERIOD"],
+      ["ORDER", "PERIOD-11", "7000000011", 11, "VSC", "BURNED", "2026-10-11", "POS-PERIOD"],
+    ]), "Report");
+    const headers = { Cookie: user.cookieHeader };
+    const upload = await jsonReq(`${BASE}/api/ricariche-analysis/upload`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        provider: "windtre",
+        fileName: "report-periodo.xlsx",
+        workbookBase64: XLSX.write(workbook, { type: "base64", bookType: "xlsx" }),
+      }),
+    });
+    assert.equal(upload.status, 201, JSON.stringify(upload.body));
+    const confirm = await jsonReq(`${BASE}/api/ricariche-analysis/${upload.body.reportId}/period`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        provider: "windtre",
+        declaredPeriodFrom: "2026-10-09",
+        declaredPeriodTo: "2026-10-10",
+      }),
+    });
+    assert.equal(confirm.status, 200, JSON.stringify(confirm.body));
+    const result = await jsonReq(`${BASE}/api/ricariche-analysis?provider=windtre&reportId=${upload.body.reportId}`, { headers });
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    const rows = result.body.rows;
+    assert.equal(rows.length, 5, "four original provider rows remain and one in-period BiSuite-only sale is included");
+    assert.equal(rows.filter(row => row.status === "VERIFICATO").length, 2);
+    assert.equal(rows.filter(row => row.status === "FUORI PERIODO").length, 2);
+    assert.deepEqual(
+      rows.filter(row => row.status === "FUORI PERIODO").map(row => row.transactionId).sort(),
+      ["PERIOD-08", "PERIOD-11"],
+    );
+    assert.equal(rows.filter(row => row.status === "NON PRESENTE SU FILE").length, 1);
+    assert.equal(rows.find(row => row.status === "NON PRESENTE SU FILE").date, "2026-10-09");
+    assert.deepEqual(
+      rows.filter(row => row.transactionId).map(row => row.transactionId).sort(),
+      ["PERIOD-08", "PERIOD-09", "PERIOD-10", "PERIOD-11"],
+      "all report rows are retained across the declared boundaries",
+    );
+  } finally {
+    await cleanupOrg(pool, user.orgId);
+    if (brandId) await pool.query("DELETE FROM brands WHERE id=$1", [brandId]).catch(() => {});
     await pool.end();
   }
 });
@@ -260,6 +356,12 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
       await page.goto(`${BASE}/analisi-ricariche`, { waitUntil: "networkidle" });
       await page.getByRole("heading", { name: "Analisi ricariche" }).waitFor({ state: "visible", timeout: 20000 });
       await page.getByText("INCONGRUENZA IMPORTO", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      const periodEditor = page.getByTestId("declared-period-editor");
+      await page.getByText(/Periodo non confermato/).waitFor({ state: "visible", timeout: 10000 });
+      await page.getByTestId("report-period-from").fill("2026-09-12");
+      await page.getByTestId("report-period-to").fill("2026-09-12");
+      await periodEditor.getByRole("button", { name: "Conferma periodo" }).click();
+      await page.getByText(/Periodo dichiarato:/).waitFor({ state: "visible", timeout: 10000 });
       assert.equal(await page.getByTestId("nav-gara-analisi-ricariche").count(), 1);
       assert.equal(await page.getByTestId("nav-amministrazione").count(), 0);
       await page.getByRole("button", { name: /report-vf\.xlsx/ }).click();

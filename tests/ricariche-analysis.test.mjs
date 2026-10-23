@@ -2,14 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
-import { readFileSync } from "node:fs";
 import {
   extractRechargeSales,
   getRicaricheAnalysisProvidersForBrands,
+  isRechargeDateWithinPeriod,
   normalizeRechargePhone,
   parseVodafoneRechargeWorkbook,
   parseWindTreRechargeWorkbook,
   reconcileRechargeRows,
+  rowsOutsideRechargePeriod,
 } from "../shared/ricaricheAnalysis.ts";
 import { isModuleAccessible, MODULES, sanitizeGrantableModules } from "../shared/modules.ts";
 
@@ -105,6 +106,16 @@ test("normalizzazione telefonica rimuove prefisso internazionale senza alterare 
   assert.equal(normalizeRechargePhone("+39 (347) 123-4567"), "3471234567");
   assert.equal(normalizeRechargePhone("0039 347 123 4567"), "3471234567");
   assert.equal(normalizeRechargePhone("3471234567"), "3471234567");
+});
+
+test("periodo report: include entrambi i confini e identifica solo i giorni esterni", () => {
+  const from = "2026-10-09";
+  const to = "2026-10-11";
+  assert.equal(isRechargeDateWithinPeriod("2026-10-09T00:00:00.000Z", from, to), true);
+  assert.equal(isRechargeDateWithinPeriod("2026-10-11T23:59:59.000Z", from, to), true);
+  assert.equal(isRechargeDateWithinPeriod("2026-10-08T23:59:59.000Z", from, to), false);
+  assert.equal(isRechargeDateWithinPeriod("2026-10-12T00:00:00.000Z", from, to), false);
+  assert.equal(isRechargeDateWithinPeriod("data non valida", from, to), false);
 });
 
 test("riconciliazione assegna stati e differenza BiSuite meno fornitore con segno corretto", () => {
@@ -285,13 +296,22 @@ test("CMS report intero: 108 Keycode e 1.841 euro verificati senza falsi mancant
 
 test("CMS 9–11 ottobre: separa le 8 ricariche del 12 incluse nel file", () => {
   const candidates = extractRechargeSales(cmsFixture.sales, { splitArticles: true });
-  const through11 = r => r.date.slice(0, 10) <= "2026-10-11";
-  const included = cmsFixture.providerRows.filter(through11);
-  const excluded = cmsFixture.providerRows.filter(r => !through11(r));
-  const rows = reconcileRechargeRows(included, candidates.filter(through11));
+  const withinPeriod = r => isRechargeDateWithinPeriod(r.date, "2026-10-09", "2026-10-11");
+  const included = cmsFixture.providerRows.filter(withinPeriod);
+  const excluded = cmsFixture.providerRows.filter(r => !withinPeriod(r));
+  const rows = reconcileRechargeRows(included, candidates.filter(withinPeriod));
+  const outsideRows = rowsOutsideRechargePeriod(excluded);
   assert.equal(included.length, 100);
   assert.equal(excluded.length, 8);
   assert.equal(excluded.reduce((n, r) => n + r.amount, 0), 133);
+  assert.equal(outsideRows.length, 8);
+  assert.equal(outsideRows.reduce((n, r) => n + (r.amount ?? 0), 0), 133);
+  assert.ok(outsideRows.every(r => r.status === "FUORI PERIODO"));
+  assert.deepEqual(
+    outsideRows.map(r => r.transactionId).sort(),
+    excluded.map(r => r.transactionId).sort(),
+    "all eight CMS transactions outside the declared 9–11 period remain present",
+  );
   assert.equal(rows.filter(r => r.status === "VERIFICATO").length, 100);
   assert.equal(rows.filter(r => r.status === "NON PRESENTE SU FILE").length, 34);
   assert.equal(rows.reduce((n, r) => n + (r.amount ?? 0), 0), 1708);

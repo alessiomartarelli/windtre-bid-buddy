@@ -392,6 +392,8 @@ export const ricaricheAnalysisReports = pgTable("ricariche_analysis_reports", {
   rowCount: integer("row_count").notNull().default(0),
   periodFrom: varchar("period_from"),
   periodTo: varchar("period_to"),
+  declaredPeriodFrom: varchar("declared_period_from"),
+  declaredPeriodTo: varchar("declared_period_to"),
   uploadedBy: varchar("uploaded_by").references(() => profiles.id),
   uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
 }, (table) => [

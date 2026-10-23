@@ -9,6 +9,7 @@ export const RICARICHE_ANALYSIS_STATUSES = [
   "INCONGRUENZA IMPORTO",
   "NON PRESENTE SU BISUITE",
   "NON PRESENTE SU FILE",
+  "FUORI PERIODO",
 ] as const;
 
 export type RechargeAnalysisStatus = (typeof RICARICHE_ANALYSIS_STATUSES)[number];
@@ -360,6 +361,19 @@ function dateKey(value: unknown): string {
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 }
 
+/** Compara giorni ISO inclusivi senza dipendere dal fuso orario del browser/server. */
+export function isRechargeDateWithinPeriod(value: unknown, from: string, to: string): boolean {
+  const day = dateKey(value);
+  return !!day && day >= from && day <= to;
+}
+
+export function rowsOutsideRechargePeriod(
+  rows: RechargeProviderRow[],
+): RechargeReconciliationRow[] {
+  return reconcileRechargeRows(rows, [], { includeUnmatchedSales: false })
+    .map((row) => ({ ...row, status: "FUORI PERIODO" }));
+}
+
 export function extractRechargeSales(sales: Array<{
   id: string;
   bisuiteId: number;
@@ -416,6 +430,7 @@ export function extractRechargeSales(sales: Array<{
 export function reconcileRechargeRows(
   providerRows: RechargeProviderRow[],
   sales: RechargeSaleCandidate[],
+  options: { includeUnmatchedSales?: boolean } = {},
 ): RechargeReconciliationRow[] {
   const candidateKey = (sale: RechargeSaleCandidate) => sale.candidateId ?? sale.saleId;
   const remainingSales = new Set(sales.map(candidateKey));
@@ -461,7 +476,7 @@ export function reconcileRechargeRows(
       status: !sale ? "NON PRESENTE SU BISUITE" : difference === 0 ? "VERIFICATO" : "INCONGRUENZA IMPORTO",
     };
   });
-  for (const sale of sales) {
+  for (const sale of options.includeUnmatchedSales === false ? [] : sales) {
     if (!remainingSales.has(candidateKey(sale))) continue;
     result.push({
       id: `bisuite:${candidateKey(sale)}`,
