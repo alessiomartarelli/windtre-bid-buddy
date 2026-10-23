@@ -206,6 +206,20 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
         }],
       })],
     );
+    const otherTenantBisuiteId = bisuiteId + 1;
+    await pool.query(
+      `INSERT INTO bisuite_sales
+         (organization_id,bisuite_id,data_vendita,codice_pos,nome_negozio,nome_cliente,
+          stato,totale,raw_data)
+       VALUES ($1,$2,'2026-09-12 16:10:00','POS-OTHER','Altro negozio','Altro cliente',
+          'Completata','15.00',$3::jsonb)`,
+      [orgB.orgId, otherTenantBisuiteId, JSON.stringify({
+        articoli: [{
+          categoria: { nome: "RICARICHE" },
+          dettaglio: { prezzo: "15.00", venditaInfo1: "Numero Telefono: 3477654321" },
+        }],
+      })],
+    );
     const syncedSales = await jsonReq(
       `${BASE}/api/bisuite-sales?from=2026-09-12&to=2026-09-12&includeAnnullate=true`,
       { headers: { Cookie: orgA.cookieHeader } },
@@ -226,6 +240,16 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     assert.equal(deniedByWhitelist.status, 200, `default module access failed: ${JSON.stringify(deniedByWhitelist.body)}`);
     assert.deepEqual(deniedByWhitelist.body.allowedProviders, ["vodafone_fastweb"]);
     assert.equal((await jsonReq(`${BASE}${path}?provider=windtre`, { headers: headersA })).status, 403);
+    const apiOnlyA = await jsonReq(`${BASE}${path}?provider=vodafone_fastweb`, { headers: headersA });
+    assert.equal(apiOnlyA.status, 200, JSON.stringify(apiOnlyA.body));
+    assert.equal(apiOnlyA.body.activeReportId, null);
+    assert.equal(apiOnlyA.body.rows.length, 1);
+    assert.equal(apiOnlyA.body.rows[0].status, "RICEVUTA VIA API");
+    assert.equal(apiOnlyA.body.rows[0].saleId, String(bisuiteId));
+    assert.equal(apiOnlyA.body.rows[0].bisuiteAmount, 10);
+    const apiOnlyB = await jsonReq(`${BASE}${path}`, { headers: { Cookie: orgB.cookieHeader } });
+    assert.equal(apiOnlyB.status, 200, JSON.stringify(apiOnlyB.body));
+    assert.deepEqual(apiOnlyB.body.rows.map((row) => row.saleId), [String(otherTenantBisuiteId)]);
 
     await pool.query(`UPDATE profiles SET moduli_consentiti = $2 WHERE id = $1`, [orgA.profileId, []]);
     assert.equal((await jsonReq(`${BASE}${path}`, { headers: headersA })).status, 403);
@@ -351,6 +375,15 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
 
     const browser = await launchBrowser();
     try {
+      const apiContext = await newAuthedContext(browser, orgB);
+      const apiPage = await apiContext.newPage();
+      await apiPage.goto(`${BASE}/analisi-ricariche`, { waitUntil: "networkidle" });
+      await apiPage.getByRole("heading", { name: "Ricariche da vendite BiSuite" }).waitFor({ state: "visible", timeout: 20000 });
+      await apiPage.getByText(String(otherTenantBisuiteId), { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      await apiPage.getByText("RICEVUTA VIA API", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      await apiPage.getByText("Importo ricarica", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      await apiContext.close();
+
       const context = await newAuthedContext(browser, orgA);
       const page = await context.newPage();
       await page.goto(`${BASE}/analisi-ricariche`, { waitUntil: "networkidle" });

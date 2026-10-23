@@ -35,6 +35,7 @@ import {
   isRechargeDateWithinPeriod,
   parseVodafoneRechargeWorkbook,
   parseWindTreRechargeWorkbook,
+  rechargeApiRows,
   reconcileRechargeRows,
   rowsOutsideRechargePeriod,
   RICARICHE_ANALYSIS_PROVIDERS,
@@ -1768,6 +1769,12 @@ export async function registerRoutes(
         : reports[0];
       if (requestedId && !selected) return res.status(404).json({ message: "Report non trovato." });
       if (!selected) {
+         const sales = await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, undefined, undefined, false);
+         const candidates = extractRechargeSales(sales, { splitArticles: provider === "windtre" });
+         const rows = rechargeApiRows(candidates);
+         const pdvs = Array.from(new Set(rows.map((row) => row.pdv).filter((value): value is string => !!value)))
+           .sort((a, b) => a.localeCompare(b, "it"))
+           .map((key) => ({ key, label: key }));
         return res.json({
           provider,
           allowedProviders,
@@ -1777,8 +1784,8 @@ export async function registerRoutes(
             declaredPeriodFrom: r.declaredPeriodFrom, declaredPeriodTo: r.declaredPeriodTo,
           })),
           activeReportId: null,
-          rows: [],
-          pdvs: [],
+           rows,
+           pdvs,
         });
       }
       const providerRows = Array.isArray(selected.rows) ? selected.rows as any[] : [];

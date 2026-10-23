@@ -9,6 +9,7 @@ import {
   normalizeRechargePhone,
   parseVodafoneRechargeWorkbook,
   parseWindTreRechargeWorkbook,
+  rechargeApiRows,
   reconcileRechargeRows,
   rowsOutsideRechargePeriod,
 } from "../shared/ricaricheAnalysis.ts";
@@ -214,6 +215,23 @@ test("fixture BiSuite anonimizzata: venditaInfo1, prezzo testuale, annullata e m
   assert.equal(row.difference, 0);
   assert.equal(row.customer, "Cliente A");
   assert.equal(row.saleId, "100001");
+});
+
+test("le ricariche BiSuite senza report provider sono righe API distinte e identificabili", () => {
+  const fixture = JSON.parse(readFileSync(
+    new URL("./fixtures/ricariche-bisuite-anonimizzate.json", import.meta.url),
+    "utf8",
+  ));
+  const candidates = extractRechargeSales(fixture.sales, { splitArticles: true });
+  const rows = rechargeApiRows(candidates);
+  assert.equal(rows.length, 2);
+  assert.equal(new Set(rows.map((row) => row.id)).size, 2);
+  assert.ok(rows.every((row) => row.status === "RICEVUTA VIA API"));
+  assert.ok(rows.every((row) => row.amount === null));
+  assert.deepEqual(rows.map((row) => row.bisuiteAmount), [5, 6]);
+  assert.equal(rows.reduce((sum, row) => sum + row.bisuiteAmount, 0), 11);
+  assert.ok(rows.every((row) => row.supplier === "BiSuite API" && row.saleId === "100001"));
+  assert.deepEqual(rows.map((row) => row.phone), ["3471234567", "3471234567"]);
 });
 
 test("venditaInfo1 senza etichetta telefonica non crea un candidato telefono", () => {

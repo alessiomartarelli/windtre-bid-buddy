@@ -10,6 +10,7 @@ export const RICARICHE_ANALYSIS_STATUSES = [
   "NON PRESENTE SU BISUITE",
   "NON PRESENTE SU FILE",
   "FUORI PERIODO",
+  "RICEVUTA VIA API",
 ] as const;
 
 export type RechargeAnalysisStatus = (typeof RICARICHE_ANALYSIS_STATUSES)[number];
@@ -496,4 +497,24 @@ export function reconcileRechargeRows(
     });
   }
   return result.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+}
+
+/** Rows for BiSuite-synced recharge sales when no provider report is selected. */
+export function rechargeApiRows(sales: RechargeSaleCandidate[]): RechargeReconciliationRow[] {
+  return sales.map((sale) => ({
+    id: `bisuite-api:${sale.candidateId ?? sale.saleId}`,
+    date: sale.date,
+    phone: sale.phones.join(", ") || null,
+    temporaryPhone: null,
+    amount: null,
+    customer: sale.customer || null,
+    supplier: "BiSuite API",
+    transactionId: null,
+    rechargeType: "RICARICHE",
+    pdv: sale.pdv || null,
+    saleId: sale.saleId,
+    bisuiteAmount: sale.amount,
+    difference: null,
+    status: "RICEVUTA VIA API",
+  }));
 }
