@@ -135,6 +135,7 @@ export interface IStorage {
   getBisuiteSales(orgId: string, from?: Date, to?: Date, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
+  getBisuiteRechargeSalesPage(orgId: string, fromYMD: string, toYMD: string, page: number, pageSize: number): Promise<{ sales: BisuiteSale[]; hasMore: boolean }>;
   getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
   deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
   reconcileBisuiteSales(orgId: string, fromYMD: string, toYMD: string, threshold: Date): Promise<{ deleted: number }>;
@@ -703,6 +704,40 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(bisuiteSales)
       .where(and(...conditions))
       .orderBy(desc(bisuiteSales.dataVendita));
+  }
+
+  async getBisuiteRechargeSalesPage(
+    orgId: string,
+    fromYMD: string,
+    toYMD: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ sales: BisuiteSale[]; hasMore: boolean }> {
+    const sales = await db.select().from(bisuiteSales)
+      .where(and(
+        eq(bisuiteSales.organizationId, orgId),
+        sql`${bisuiteSales.dataVendita} >= ${fromYMD}::date`,
+        sql`${bisuiteSales.dataVendita} < ${toYMD}::date + interval '1 day'`,
+        sql`upper(coalesce(trim(${bisuiteSales.stato}), '')) <> 'ANNULLATA'`,
+        sql`EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(${bisuiteSales.rawData}->'articoli') = 'array'
+              THEN ${bisuiteSales.rawData}->'articoli'
+              ELSE '[]'::jsonb
+            END
+          ) AS article
+          WHERE upper(trim(article->'categoria'->>'nome')) = 'RICARICHE'
+        )`,
+      ))
+      .orderBy(desc(bisuiteSales.dataVendita), desc(bisuiteSales.id))
+      .limit(pageSize + 1)
+      .offset(page * pageSize);
+    return {
+      sales: sales.slice(0, pageSize),
+      hasMore: sales.length > pageSize,
+    };
   }
 
   async getBisuiteSale(id: string): Promise<BisuiteSale | undefined> {

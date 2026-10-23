@@ -1737,6 +1737,24 @@ export async function registerRoutes(
     const date = new Date(`${value}T00:00:00.000Z`);
     return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
   });
+  const rechargeApiPageSize = 100;
+  const currentItalianYmd = () => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Rome",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  };
+  const defaultRechargeApiPeriod = () => {
+    const to = currentItalianYmd();
+    const [year, month, day] = to.split("-").map(Number);
+    const fromDate = new Date(Date.UTC(year, month - 1, day - 89));
+    const from = `${fromDate.getUTCFullYear()}-${String(fromDate.getUTCMonth() + 1).padStart(2, "0")}-${String(fromDate.getUTCDate()).padStart(2, "0")}`;
+    return { from, to };
+  };
   const declaredRechargePeriod = z.object({
     provider: rechargeProvider,
     declaredPeriodFrom: validRechargeDate.nullable(),
@@ -1769,12 +1787,33 @@ export async function registerRoutes(
         : reports[0];
       if (requestedId && !selected) return res.status(404).json({ message: "Report non trovato." });
       if (!selected) {
-         const sales = await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, undefined, undefined, false);
-         const candidates = extractRechargeSales(sales, { splitArticles: provider === "windtre" });
-         const rows = rechargeApiRows(candidates);
-         const pdvs = Array.from(new Set(rows.map((row) => row.pdv).filter((value): value is string => !!value)))
-           .sort((a, b) => a.localeCompare(b, "it"))
-           .map((key) => ({ key, label: key }));
+        const parsedFrom = req.query.from === undefined ? undefined : validRechargeDate.safeParse(String(req.query.from));
+        const parsedTo = req.query.to === undefined ? undefined : validRechargeDate.safeParse(String(req.query.to));
+        if ((parsedFrom && !parsedFrom.success) || (parsedTo && !parsedTo.success)) {
+          return res.status(400).json({ message: "Periodo non valido." });
+        }
+        if ((parsedFrom?.success && !parsedTo) || (parsedTo?.success && !parsedFrom)) {
+          return res.status(400).json({ message: "Inserisci entrambe le date del periodo." });
+        }
+        const defaultPeriod = defaultRechargeApiPeriod();
+        const periodFrom = parsedFrom?.success ? parsedFrom.data : defaultPeriod.from;
+        const periodTo = parsedTo?.success ? parsedTo.data : defaultPeriod.to;
+        if (periodFrom > periodTo) return res.status(400).json({ message: "La data iniziale non può essere successiva alla data finale." });
+        const parsedPage = z.coerce.number().int().min(0).max(10000).safeParse(req.query.page ?? "0");
+        if (!parsedPage.success) return res.status(400).json({ message: "Pagina non valida." });
+        const page = parsedPage.data;
+        const pageResult = await storage.getBisuiteRechargeSalesPage(
+          profile.organizationId,
+          periodFrom,
+          periodTo,
+          page,
+          rechargeApiPageSize,
+        );
+        const candidates = extractRechargeSales(pageResult.sales, { splitArticles: provider === "windtre" });
+        const rows = rechargeApiRows(candidates);
+        const pdvs = Array.from(new Set(rows.map((row) => row.pdv).filter((value): value is string => !!value)))
+          .sort((a, b) => a.localeCompare(b, "it"))
+          .map((key) => ({ key, label: key }));
         return res.json({
           provider,
           allowedProviders,
@@ -1784,8 +1823,12 @@ export async function registerRoutes(
             declaredPeriodFrom: r.declaredPeriodFrom, declaredPeriodTo: r.declaredPeriodTo,
           })),
           activeReportId: null,
-           rows,
-           pdvs,
+          rows,
+          pdvs,
+          apiPeriod: { from: periodFrom, to: periodTo },
+          apiPage: page,
+          apiPageSize: rechargeApiPageSize,
+          apiHasMore: pageResult.hasMore,
         });
       }
       const providerRows = Array.isArray(selected.rows) ? selected.rows as any[] : [];

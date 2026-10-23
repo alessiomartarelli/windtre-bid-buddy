@@ -89,6 +89,73 @@ test("WindTre API riconcilia ogni ricarica dello stesso scontrino senza duplicar
   }
 });
 
+test("Analisi Ricariche API pagina le vendite per periodo mantenendo l'isolamento tra organizzazioni", async () => {
+  const pool = await newPool();
+  const orgA = await signup({ prefix: "ricariche_page_a", fullName: "Ricariche pagina A" });
+  const orgB = await signup({ prefix: "ricariche_page_b", fullName: "Ricariche pagina B" });
+  try {
+    await pool.query(
+      `INSERT INTO bisuite_sales
+         (organization_id,bisuite_id,data_vendita,codice_pos,nome_cliente,stato,totale,raw_data)
+       SELECT $1, 900000000 + n, '2026-09-12 12:00:00'::timestamp + (n || ' minutes')::interval,
+         'POS-PAGE', 'Cliente ' || n, 'Completata', '1.00',
+         jsonb_build_object('articoli', jsonb_build_array(jsonb_build_object(
+           'categoria', jsonb_build_object('nome', 'RICARICHE'),
+           'dettaglio', jsonb_build_object('prezzo', '1.00', 'telefono', '3471234' || lpad(n::text, 3, '0'))
+         )))
+       FROM generate_series(1, 101) AS n`,
+      [orgA.orgId],
+    );
+    await pool.query(
+      `INSERT INTO bisuite_sales
+         (organization_id,bisuite_id,data_vendita,codice_pos,nome_cliente,stato,totale,raw_data)
+       VALUES ($1,899999999,'2026-08-12 12:00:00','POS-OLDER','Fuori periodo','Completata','3.00',
+         jsonb_build_object('articoli', jsonb_build_array(jsonb_build_object(
+           'categoria', jsonb_build_object('nome', 'RICARICHE'),
+           'dettaglio', jsonb_build_object('prezzo', '3.00', 'telefono', '3477000000')
+         ))))`,
+      [orgA.orgId],
+    );
+    await pool.query(
+      `INSERT INTO bisuite_sales
+         (organization_id,bisuite_id,data_vendita,codice_pos,nome_cliente,stato,totale,raw_data)
+       VALUES ($1,901000001,'2026-09-12 13:00:00','POS-FOREIGN','Altro tenant','Completata','5.00',
+         jsonb_build_object('articoli', jsonb_build_array(jsonb_build_object(
+           'categoria', jsonb_build_object('nome', 'RICARICHE'),
+           'dettaglio', jsonb_build_object('prezzo', '5.00', 'telefono', '3477654321')
+         ))))`,
+      [orgB.orgId],
+    );
+    const period = "from=2026-09-12&to=2026-09-12";
+    const headersA = { Cookie: orgA.cookieHeader };
+    const firstPage = await jsonReq(`${BASE}/api/ricariche-analysis?${period}&page=0`, { headers: headersA });
+    assert.equal(firstPage.status, 200, JSON.stringify(firstPage.body));
+    assert.equal(firstPage.body.rows.length, 100);
+    assert.equal(firstPage.body.apiHasMore, true);
+    assert.equal(firstPage.body.apiPage, 0);
+
+    const secondPage = await jsonReq(`${BASE}/api/ricariche-analysis?${period}&page=1`, { headers: headersA });
+    assert.equal(secondPage.status, 200, JSON.stringify(secondPage.body));
+    assert.equal(secondPage.body.rows.length, 1);
+    assert.equal(secondPage.body.apiHasMore, false);
+    assert.equal(secondPage.body.apiPage, 1);
+    assert.equal(new Set([...firstPage.body.rows, ...secondPage.body.rows].map(row => row.saleId)).size, 101);
+
+    const otherOrganizationPage = await jsonReq(`${BASE}/api/ricariche-analysis?${period}`, {
+      headers: { Cookie: orgB.cookieHeader },
+    });
+    assert.equal(otherOrganizationPage.status, 200, JSON.stringify(otherOrganizationPage.body));
+    assert.deepEqual(otherOrganizationPage.body.rows.map(row => row.saleId), ["901000001"]);
+    assert.equal(otherOrganizationPage.body.apiHasMore, false);
+    assert.equal((await jsonReq(`${BASE}/api/ricariche-analysis?from=2026-09-13&page=0`, { headers: headersA })).status, 400,
+      "the API requires a complete date range");
+  } finally {
+    await cleanupOrg(pool, orgA.orgId);
+    await cleanupOrg(pool, orgB.orgId);
+    await pool.end();
+  }
+});
+
 test("periodo report ricariche: conserva le righe esterne e applica i confini inclusivi", async () => {
   const pool = await newPool();
   const user = await signup({ prefix: "ricariche_period_boundary", fullName: "Test periodo ricariche" });
@@ -240,14 +307,18 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     assert.equal(deniedByWhitelist.status, 200, `default module access failed: ${JSON.stringify(deniedByWhitelist.body)}`);
     assert.deepEqual(deniedByWhitelist.body.allowedProviders, ["vodafone_fastweb"]);
     assert.equal((await jsonReq(`${BASE}${path}?provider=windtre`, { headers: headersA })).status, 403);
-    const apiOnlyA = await jsonReq(`${BASE}${path}?provider=vodafone_fastweb`, { headers: headersA });
+    const apiOnlyA = await jsonReq(`${BASE}${path}?provider=vodafone_fastweb&from=2026-09-12&to=2026-09-12`, { headers: headersA });
     assert.equal(apiOnlyA.status, 200, JSON.stringify(apiOnlyA.body));
     assert.equal(apiOnlyA.body.activeReportId, null);
     assert.equal(apiOnlyA.body.rows.length, 1);
+    assert.equal(apiOnlyA.body.apiPage, 0);
+    assert.equal(apiOnlyA.body.apiPageSize, 100);
+    assert.equal(apiOnlyA.body.apiHasMore, false);
+    assert.deepEqual(apiOnlyA.body.apiPeriod, { from: "2026-09-12", to: "2026-09-12" });
     assert.equal(apiOnlyA.body.rows[0].status, "RICEVUTA VIA API");
     assert.equal(apiOnlyA.body.rows[0].saleId, String(bisuiteId));
     assert.equal(apiOnlyA.body.rows[0].bisuiteAmount, 10);
-    const apiOnlyB = await jsonReq(`${BASE}${path}`, { headers: { Cookie: orgB.cookieHeader } });
+    const apiOnlyB = await jsonReq(`${BASE}${path}?from=2026-09-12&to=2026-09-12`, { headers: { Cookie: orgB.cookieHeader } });
     assert.equal(apiOnlyB.status, 200, JSON.stringify(apiOnlyB.body));
     assert.deepEqual(apiOnlyB.body.rows.map((row) => row.saleId), [String(otherTenantBisuiteId)]);
 

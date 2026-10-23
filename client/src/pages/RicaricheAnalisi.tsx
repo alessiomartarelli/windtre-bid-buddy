@@ -11,8 +11,20 @@ import * as XLSX from "xlsx";
 type Report = { id: string; fileName: string; uploadedAt: string; rowCount: number; periodFrom: string | null; periodTo: string | null; declaredPeriodFrom: string | null; declaredPeriodTo: string | null };
 type Row = { id: string; date: string; phone: string | null; temporaryPhone: string | null; amount: number | string | null; customer: string | null; supplier: string | null; transactionId: string | null; rechargeType: string | null; pdv: string | null; saleId: string | null; bisuiteAmount: number | string | null; difference: number | string | null; status: string };
 type Provider = "vodafone_fastweb" | "windtre";
-type Payload = { provider: Provider | null; allowedProviders: Provider[]; reports: Report[]; activeReportId: string | null; rows: Row[]; pdvs: { key: string; label: string }[] };
-const EMPTY: Payload = { provider: null, allowedProviders: [], reports: [], activeReportId: null, rows: [], pdvs: [] };
+type Payload = {
+  provider: Provider | null;
+  allowedProviders: Provider[];
+  reports: Report[];
+  activeReportId: string | null;
+  rows: Row[];
+  pdvs: { key: string; label: string }[];
+  apiPeriod: { from: string; to: string } | null;
+  apiPage: number;
+  apiPageSize: number;
+  apiHasMore: boolean;
+};
+const EMPTY: Payload = { provider: null, allowedProviders: [], reports: [], activeReportId: null, rows: [], pdvs: [], apiPeriod: null, apiPage: 0, apiPageSize: 100, apiHasMore: false };
+type LoadOptions = { silent?: boolean; reportId?: string; provider?: Provider; page?: number; from?: string; to?: string };
 const PROVIDER_LABEL: Record<Provider, string> = { vodafone_fastweb: "Vodafone / Fastweb", windtre: "WindTre" };
 const STATUSES = ["VERIFICATO", "INCONGRUENZA IMPORTO", "NON PRESENTE SU BISUITE", "NON PRESENTE SU FILE", "FUORI PERIODO", "RICEVUTA VIA API"];
 const money = (v: number | string | null | undefined) => { if (v === null || v === undefined || v === "") return "—"; const n = Number(v); return Number.isFinite(n) ? new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n) : "—"; };
@@ -40,19 +52,42 @@ export default function RicaricheAnalisi() {
   const [sort, setSort] = useState<{ key: keyof Row; dir: "asc" | "desc" }>({ key: "date", dir: "desc" });
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async (silent = false, reportId?: string, requestedProvider?: Provider) => {
+  const load = useCallback(async ({ silent = false, reportId, provider: requestedProvider, page = 0, from: requestedFrom, to: requestedTo }: LoadOptions = {}) => {
     if (!silent) setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
       if (requestedProvider) params.set("provider", requestedProvider);
       if (reportId) params.set("reportId", reportId);
+      if (!reportId) {
+        if (requestedFrom) params.set("from", requestedFrom);
+        if (requestedTo) params.set("to", requestedTo);
+        params.set("page", String(page));
+      }
       const queryString = params.toString();
       const query = queryString ? `?${queryString}` : "";
       const res = await fetch(apiUrl(`/api/ricariche-analysis${query}`), { credentials: "include" });
       if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.message || "Impossibile caricare i report."); }
       const json = await res.json();
-      setData({ ...EMPTY, ...json, allowedProviders: json.allowedProviders || [], reports: json.reports || [], rows: json.rows || [], pdvs: json.pdvs || [] });
+      setData({
+        ...EMPTY,
+        ...json,
+        allowedProviders: json.allowedProviders || [],
+        reports: json.reports || [],
+        rows: json.rows || [],
+        pdvs: json.pdvs || [],
+        apiPeriod: json.apiPeriod || null,
+        apiPage: json.apiPage ?? 0,
+        apiPageSize: json.apiPageSize ?? EMPTY.apiPageSize,
+        apiHasMore: json.apiHasMore ?? false,
+      });
+      if (json.apiPeriod) {
+        setFrom(json.apiPeriod.from);
+        setTo(json.apiPeriod.to);
+      } else if (json.activeReportId) {
+        setFrom("");
+        setTo("");
+      }
       const selectedReport = (json.reports || []).find((report: Report) => report.id === json.activeReportId);
       setDeclaredFrom(selectedReport?.declaredPeriodFrom || selectedReport?.periodFrom?.slice(0, 10) || "");
       setDeclaredTo(selectedReport?.declaredPeriodTo || selectedReport?.periodTo?.slice(0, 10) || "");
@@ -72,7 +107,7 @@ export default function RicaricheAnalisi() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Caricamento non riuscito.");
       toast({ title: "Report acquisito", description: `${body.rowCount ?? 0} righe elaborate.` });
-      await load(true, undefined, data.provider);
+      await load({ silent: true, provider: data.provider });
     } catch (e) { toast({ title: "Errore di caricamento", description: e instanceof Error ? e.message : "Riprova tra poco.", variant: "destructive" }); }
     finally { setUploading(false); if (inputRef.current) inputRef.current.value = ""; }
   };
@@ -100,7 +135,7 @@ export default function RicaricheAnalisi() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Periodo non salvato.");
       toast({ title: clear ? "Conferma rimossa" : "Periodo confermato", description: clear ? "Il confronto inverso è sospeso finché il periodo non viene confermato." : "Le date sono state salvate e applicate al confronto." });
-      await load(true, activeReport.id, data.provider);
+      await load({ silent: true, reportId: activeReport.id, provider: data.provider });
     } catch (e) {
       toast({ title: "Errore nel periodo", description: e instanceof Error ? e.message : "Riprova tra poco.", variant: "destructive" });
     } finally {
@@ -108,21 +143,47 @@ export default function RicaricheAnalisi() {
     }
   };
 
+  const activeReport = data.reports.find(r => r.id === data.activeReportId);
   const suppliers = useMemo(() => [...new Set(data.rows.map(r => r.supplier).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, "it")), [data.rows]);
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("it");
+    const filterFrom = activeReport ? from : data.apiPeriod?.from ?? "";
+    const filterTo = activeReport ? to : data.apiPeriod?.to ?? "";
     return data.rows.filter(r => {
       const d = r.date ? new Date(r.date).toISOString().slice(0, 10) : "";
       const text = [r.customer, r.phone, r.temporaryPhone, r.saleId, r.transactionId, r.rechargeType, r.amount, r.bisuiteAmount, r.difference, r.pdv].join(" ").toLocaleLowerCase("it");
-      return (!from || d >= from) && (!to || d <= to) && (pdv === "all" || r.pdv === pdv) && (supplier === "all" || r.supplier === supplier) && (status === "all" || r.status === status) && (!q || text.includes(q));
+      return (!filterFrom || d >= filterFrom) && (!filterTo || d <= filterTo) && (pdv === "all" || r.pdv === pdv) && (supplier === "all" || r.supplier === supplier) && (status === "all" || r.status === status) && (!q || text.includes(q));
     }).sort((a, b) => { const av = a[sort.key] ?? ""; const bv = b[sort.key] ?? ""; const an = Number(av), bn = Number(bv); const cmp = Number.isFinite(an) && Number.isFinite(bn) && av !== "" && bv !== "" ? an - bn : String(av).localeCompare(String(bv), "it", { numeric: true }); return sort.dir === "asc" ? cmp : -cmp; });
-  }, [data.rows, from, to, pdv, supplier, status, query, sort]);
-  const activeReport = data.reports.find(r => r.id === data.activeReportId);
+  }, [data.rows, data.apiPeriod, activeReport, from, to, pdv, supplier, status, query, sort]);
   const totalAmount = filtered.reduce((sum, r) => sum + (Number(activeReport ? r.amount : r.bisuiteAmount) || 0), 0);
   const totalBisuiteAmount = filtered.reduce((sum, r) => sum + (Number(r.bisuiteAmount) || 0), 0);
   const mismatches = activeReport ? filtered.filter(r => r.status !== "VERIFICATO" && r.status !== "FUORI PERIODO").length : 0;
-  const activeFilters = [from, to, pdv !== "all" ? pdv : "", supplier !== "all" ? supplier : "", status !== "all" ? status : "", query].filter(Boolean).length;
-  const reset = () => { setFrom(""); setTo(""); setPdv("all"); setSupplier("all"); setStatus("all"); setQuery(""); };
+  const apiPeriodChanged = !activeReport && (!!data.apiPeriod && (from !== data.apiPeriod.from || to !== data.apiPeriod.to));
+  const activeFilters = [activeReport ? from : apiPeriodChanged ? from : "", activeReport ? to : apiPeriodChanged ? to : "", pdv !== "all" ? pdv : "", supplier !== "all" ? supplier : "", status !== "all" ? status : "", query].filter(Boolean).length;
+  const reset = () => {
+    if (activeReport) {
+      setFrom("");
+      setTo("");
+    } else if (data.apiPeriod) {
+      setFrom(data.apiPeriod.from);
+      setTo(data.apiPeriod.to);
+    }
+    setPdv("all");
+    setSupplier("all");
+    setStatus("all");
+    setQuery("");
+  };
+  const currentApiPeriod = !activeReport && data.apiPeriod
+    ? { from: data.apiPeriod.from, to: data.apiPeriod.to }
+    : {};
+  const currentApiPage = !activeReport ? data.apiPage : 0;
+  const applyApiPeriod = () => {
+    if (!from || !to || from > to) {
+      toast({ title: "Periodo non valido", description: "Inserisci entrambe le date e verifica che la data iniziale non sia successiva a quella finale.", variant: "destructive" });
+      return;
+    }
+    void load({ provider: data.provider ?? undefined, from, to, page: 0 });
+  };
   const doExport = (kind: "csv" | "xlsx") => {
     if (!filtered.length) { toast({ title: "Nessun dato da esportare", description: "Modifica i filtri e riprova." }); return; }
      const out = exportRows(filtered, !!activeReport);
@@ -144,7 +205,7 @@ export default function RicaricheAnalisi() {
     <main className="mx-auto max-w-[1600px] px-4 pb-12 pt-6 sm:px-6 lg:px-9">
       <header className="mb-6 flex flex-col justify-between gap-5 border-b border-[#d7e2df] pb-6 md:flex-row md:items-end">
         <div><div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.19em] text-[#168277]"><Signal className="h-3.5 w-3.5" /> Controllo operativo / Ricariche</div><h1 className="font-display text-3xl font-semibold tracking-[-.04em] sm:text-[38px]">Analisi ricariche</h1><p className="mt-1.5 max-w-2xl text-sm text-[#687c7e]">{activeReport ? `Confronta il report ${providerLabel} con le vendite registrate in BiSuite.` : "Le ricariche delle vendite già ricevute via API da BiSuite sono mostrate qui. Carica un report provider per confrontarle."}</p></div>
-        <div className="flex flex-wrap items-center gap-2">{data.allowedProviders.length > 1 && <Select value={data.provider ?? undefined} onValueChange={value => void load(false, undefined, value as Provider)}><SelectTrigger className="w-[190px] border-[#cbd9d6] bg-[#fbfcfa] text-xs"><SelectValue placeholder="Seleziona provider" /></SelectTrigger><SelectContent>{data.allowedProviders.map(p => <SelectItem key={p} value={p}>{PROVIDER_LABEL[p]}</SelectItem>)}</SelectContent></Select>}<Button variant="outline" onClick={() => void load(false, undefined, data.provider ?? undefined)} disabled={loading} className="border-[#cbd9d6] bg-[#fbfcfa] text-[#385456]"><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Aggiorna</Button><Button onClick={() => inputRef.current?.click()} disabled={uploading || !data.provider} className="bg-[#11796f] text-white hover:bg-[#0d655e]"><CloudUpload className="mr-2 h-4 w-4" />{uploading ? "Caricamento…" : "Carica report"}</Button><input ref={inputRef} className="hidden" type="file" accept=".xlsx,.xls" onChange={e => void onFile(e.target.files?.[0])} /></div>
+        <div className="flex flex-wrap items-center gap-2">{data.allowedProviders.length > 1 && <Select value={data.provider ?? undefined} onValueChange={value => void load({ provider: value as Provider, ...currentApiPeriod })}><SelectTrigger className="w-[190px] border-[#cbd9d6] bg-[#fbfcfa] text-xs"><SelectValue placeholder="Seleziona provider" /></SelectTrigger><SelectContent>{data.allowedProviders.map(p => <SelectItem key={p} value={p}>{PROVIDER_LABEL[p]}</SelectItem>)}</SelectContent></Select>}<Button variant="outline" onClick={() => void load({ provider: data.provider ?? undefined, ...currentApiPeriod })} disabled={loading} className="border-[#cbd9d6] bg-[#fbfcfa] text-[#385456]"><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Aggiorna</Button><Button onClick={() => inputRef.current?.click()} disabled={uploading || !data.provider} className="bg-[#11796f] text-white hover:bg-[#0d655e]"><CloudUpload className="mr-2 h-4 w-4" />{uploading ? "Caricamento…" : "Carica report"}</Button><input ref={inputRef} className="hidden" type="file" accept=".xlsx,.xls" onChange={e => void onFile(e.target.files?.[0])} /></div>
       </header>
 
       {activeReport && <section data-testid="declared-period-editor" className={`mb-5 rounded-xl border p-4 ${outsidePeriodRows.length ? "border-[#e2c894] bg-[#fff8e8]" : periodConfirmed ? "border-[#cbded4] bg-[#f2f8f4]" : "border-[#e4c89b] bg-[#fff8e8]"}`}>
@@ -191,16 +252,20 @@ export default function RicaricheAnalisi() {
           <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">Esito</span><Select value={status} onValueChange={setStatus}><SelectTrigger className="h-9 border-[#d6e0dd] bg-white text-xs"><SelectValue placeholder="Tutti gli esiti" /></SelectTrigger><SelectContent><SelectItem value="all">Tutti gli esiti</SelectItem>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></label>
           <label className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#789092]">Cliente, importo, telefono</span><div className="relative"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8ba09f]" /><Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Cerca…" className="h-9 border-[#d6e0dd] bg-white pl-8 text-xs" /></div></label>
         </div>
+        {!activeReport && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e8eeeb] px-4 py-3">
+          <p className="text-[11px] text-[#718587]">L’intervallo viene caricato dal server; filtri ed export operano sulla pagina caricata.</p>
+          <Button size="sm" onClick={applyApiPeriod} disabled={loading || !apiPeriodChanged} className="bg-[#11796f] text-xs text-white hover:bg-[#0d655e]">Applica periodo</Button>
+        </div>}
       </section>
 
       <section className="overflow-hidden rounded-xl border border-[#d7e2df] bg-[#fbfcfa] shadow-[0_2px_10px_rgba(31,65,66,.035)]">
         <div className="flex flex-col justify-between gap-3 border-b border-[#e4ebe8] px-4 py-3 sm:flex-row sm:items-center"><div className="flex min-w-0 items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#e5efec] text-[#168277]"><History className="h-4 w-4" /></div><div className="min-w-0"><h2 className="text-sm font-semibold">{activeReport ? "Riconciliazione" : "Ricariche da vendite BiSuite"}</h2><p className="truncate text-[11px] text-[#819294]">{activeReport ? `${activeReport.fileName} · caricato ${dateLabel(activeReport.uploadedAt)}` : "Vendite registrate per il tenant tramite API"}</p></div></div><div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" onClick={() => doExport("csv")} className="h-8 border-[#d6e0dd] bg-white text-xs"><Download className="mr-1.5 h-3.5 w-3.5" /> CSV</Button><Button variant="outline" size="sm" onClick={() => doExport("xlsx")} className="h-8 border-[#d6e0dd] bg-white text-xs"><FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" /> Excel</Button></div></div>
-        {!!data.reports.length && <div className="flex gap-2 overflow-x-auto border-b border-[#e8eeeb] px-4 py-2.5">{data.reports.map(r => <button key={r.id} onClick={() => { void load(true, r.id, data.provider ?? undefined); }} className={`flex min-w-[200px] max-w-[280px] items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${r.id === data.activeReportId ? "border-[#9bc8bd] bg-[#edf6f2]" : "border-[#e0e8e5] bg-white hover:border-[#b8d3ca]"}`}><FileSpreadsheet className="h-4 w-4 shrink-0 text-[#24877b]" /><span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-semibold">{r.fileName}</span><span className="mt-0.5 block text-[10px] text-[#849596]">{new Intl.NumberFormat("it-IT").format(r.rowCount)} righe · {dateLabel(r.uploadedAt)}</span></span>{r.id === data.activeReportId && <Check className="h-4 w-4 shrink-0 text-[#168277]" />}</button>)}</div>}
+        {!!data.reports.length && <div className="flex gap-2 overflow-x-auto border-b border-[#e8eeeb] px-4 py-2.5">{data.reports.map(r => <button key={r.id} onClick={() => { void load({ silent: true, reportId: r.id, provider: data.provider ?? undefined }); }} className={`flex min-w-[200px] max-w-[280px] items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${r.id === data.activeReportId ? "border-[#9bc8bd] bg-[#edf6f2]" : "border-[#e0e8e5] bg-white hover:border-[#b8d3ca]"}`}><FileSpreadsheet className="h-4 w-4 shrink-0 text-[#24877b]" /><span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-semibold">{r.fileName}</span><span className="mt-0.5 block text-[10px] text-[#849596]">{new Intl.NumberFormat("it-IT").format(r.rowCount)} righe · {dateLabel(r.uploadedAt)}</span></span>{r.id === data.activeReportId && <Check className="h-4 w-4 shrink-0 text-[#168277]" />}</button>)}</div>}
         {error ? (
           <div className="m-4 flex items-start gap-3 rounded-lg border border-[#e8c9c0] bg-[#fbefeb] p-4">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#b45c47]" />
             <div className="flex-1"><div className="text-sm font-semibold text-[#743e32]">Dati non disponibili</div><p className="mt-1 text-xs text-[#8c6359]">{error}</p></div>
-            <Button variant="outline" size="sm" onClick={() => void load(false, undefined, data.provider ?? undefined)} className="border-[#ddbbb0] bg-transparent text-[#804d41]">Riprova</Button>
+            <Button variant="outline" size="sm" onClick={() => void load({ provider: data.provider ?? undefined, ...currentApiPeriod, page: currentApiPage })} className="border-[#ddbbb0] bg-transparent text-[#804d41]">Riprova</Button>
           </div>
         ) : loading ? (
           <div className="space-y-3 p-5"><div className="h-4 w-44 animate-pulse rounded bg-[#e6eeeb]" /><div className="h-10 animate-pulse rounded bg-[#edf2f0]" /><div className="h-10 animate-pulse rounded bg-[#edf2f0]" /><div className="h-10 animate-pulse rounded bg-[#edf2f0]" /></div>
@@ -268,6 +333,25 @@ export default function RicaricheAnalisi() {
             <div className="flex items-center justify-between border-t border-[#e8eeeb] px-4 py-2.5 text-[10px] text-[#829394]"><span>{new Intl.NumberFormat("it-IT").format(filtered.length)} operazioni visualizzate</span><span>Importi e telefoni letti dagli articoli RICARICHE in BiSuite</span></div>
           </div>
         )}
+        {!activeReport && data.apiPeriod && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e8eeeb] px-4 py-3">
+          <span className="text-[10px] text-[#829394]">
+            Pagina {data.apiPage + 1} · periodo {dateLabel(data.apiPeriod.from)} – {dateLabel(data.apiPeriod.to)} · export limitato ai risultati filtrati di questa pagina
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={loading || data.apiPage === 0} onClick={() => void load({
+              provider: data.provider ?? undefined,
+              from: data.apiPeriod!.from,
+              to: data.apiPeriod!.to,
+              page: data.apiPage - 1,
+            })}>Precedente</Button>
+            <Button variant="outline" size="sm" disabled={loading || !data.apiHasMore} onClick={() => void load({
+              provider: data.provider ?? undefined,
+              from: data.apiPeriod!.from,
+              to: data.apiPeriod!.to,
+              page: data.apiPage + 1,
+            })}>Successiva</Button>
+          </div>
+        </div>}
       </section>
       <footer className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#8a9a9b]"><span>Report salvati <strong className="font-semibold text-[#61797a]">{data.reports.length}</strong>{activeReport ? ` · periodo ${periodConfirmed ? "dichiarato" : "rilevato"} ${dateLabel(periodConfirmed ? activeReport.declaredPeriodFrom : activeReport.periodFrom)} – ${dateLabel(periodConfirmed ? activeReport.declaredPeriodTo : activeReport.periodTo)}` : ""}</span><span>Esportazione limitata ai risultati filtrati</span></footer>
     </main>
