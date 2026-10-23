@@ -1802,15 +1802,22 @@ export async function registerRoutes(
         const parsedPage = z.coerce.number().int().min(0).max(10000).safeParse(req.query.page ?? "0");
         if (!parsedPage.success) return res.status(400).json({ message: "Pagina non valida." });
         const page = parsedPage.data;
-        const pageResult = await storage.getBisuiteRechargeSalesPage(
-          profile.organizationId,
-          periodFrom,
-          periodTo,
-          page,
-          rechargeApiPageSize,
-        );
+        const [pageResult, rechargeSummary] = await Promise.all([
+          storage.getBisuiteRechargeSalesPage(
+            profile.organizationId,
+            periodFrom,
+            periodTo,
+            page,
+            rechargeApiPageSize,
+          ),
+          storage.getBisuiteRechargeSalesSummary(profile.organizationId, periodFrom, periodTo),
+        ]);
         const candidates = extractRechargeSales(pageResult.sales, { splitArticles: provider === "windtre" });
         const rows = rechargeApiRows(candidates);
+        const apiRechargeCount = provider === "windtre" ? rechargeSummary.articleCount : rechargeSummary.saleCount;
+        const apiRechargeAmountCents = provider === "windtre"
+          ? rechargeSummary.articleAmountCents
+          : rechargeSummary.saleAmountCents;
         const pdvs = Array.from(new Set(rows.map((row) => row.pdv).filter((value): value is string => !!value)))
           .sort((a, b) => a.localeCompare(b, "it"))
           .map((key) => ({ key, label: key }));
@@ -1829,6 +1836,8 @@ export async function registerRoutes(
           apiPage: page,
           apiPageSize: rechargeApiPageSize,
           apiHasMore: pageResult.hasMore,
+          apiRechargeCount,
+          apiRechargeAmount: apiRechargeAmountCents / 100,
         });
       }
       const providerRows = Array.isArray(selected.rows) ? selected.rows as any[] : [];

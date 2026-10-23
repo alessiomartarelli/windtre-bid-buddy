@@ -133,12 +133,16 @@ test("Analisi Ricariche API pagina le vendite per periodo mantenendo l'isolament
     assert.equal(firstPage.body.rows.length, 100);
     assert.equal(firstPage.body.apiHasMore, true);
     assert.equal(firstPage.body.apiPage, 0);
+    assert.equal(firstPage.body.apiRechargeCount, 101);
+    assert.equal(firstPage.body.apiRechargeAmount, 101);
 
     const secondPage = await jsonReq(`${BASE}/api/ricariche-analysis?${period}&page=1`, { headers: headersA });
     assert.equal(secondPage.status, 200, JSON.stringify(secondPage.body));
     assert.equal(secondPage.body.rows.length, 1);
     assert.equal(secondPage.body.apiHasMore, false);
     assert.equal(secondPage.body.apiPage, 1);
+    assert.equal(secondPage.body.apiRechargeCount, 101);
+    assert.equal(secondPage.body.apiRechargeAmount, 101);
     assert.equal(new Set([...firstPage.body.rows, ...secondPage.body.rows].map(row => row.saleId)).size, 101);
 
     const otherOrganizationPage = await jsonReq(`${BASE}/api/ricariche-analysis?${period}`, {
@@ -147,6 +151,8 @@ test("Analisi Ricariche API pagina le vendite per periodo mantenendo l'isolament
     assert.equal(otherOrganizationPage.status, 200, JSON.stringify(otherOrganizationPage.body));
     assert.deepEqual(otherOrganizationPage.body.rows.map(row => row.saleId), ["901000001"]);
     assert.equal(otherOrganizationPage.body.apiHasMore, false);
+    assert.equal(otherOrganizationPage.body.apiRechargeCount, 1);
+    assert.equal(otherOrganizationPage.body.apiRechargeAmount, 5);
     assert.equal((await jsonReq(`${BASE}/api/ricariche-analysis?from=2026-09-13&page=0`, { headers: headersA })).status, 400,
       "the API requires a complete date range");
   } finally {
@@ -287,6 +293,21 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
         }],
       })],
     );
+    const windTreBisuiteId = otherTenantBisuiteId + 1;
+    await pool.query(
+      `INSERT INTO bisuite_sales
+         (organization_id,bisuite_id,data_vendita,codice_pos,nome_negozio,nome_cliente,
+           stato,totale,raw_data)
+       VALUES ($1,$2,'2026-09-12 17:10:00','POS-W3','Negozio WindTre','Cliente WindTre',
+           'Completata','6.25',$3::jsonb)`,
+      [orgWindTre.orgId, windTreBisuiteId, JSON.stringify({
+        articoli: [
+          { categoria: { nome: "RICARICHE" }, dettaglio: { prezzo: "2,50", telefono: "3471111111" } },
+          { categoria: { nome: "RICARICHE" }, dettaglio: { importo: "3.75", telefono: "3472222222" } },
+          { categoria: { nome: "ACCESSORI" }, dettaglio: { prezzo: "99.00" } },
+        ],
+      })],
+    );
     const syncedSales = await jsonReq(
       `${BASE}/api/bisuite-sales?from=2026-09-12&to=2026-09-12&includeAnnullate=true`,
       { headers: { Cookie: orgA.cookieHeader } },
@@ -314,6 +335,8 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     assert.equal(apiOnlyA.body.apiPage, 0);
     assert.equal(apiOnlyA.body.apiPageSize, 100);
     assert.equal(apiOnlyA.body.apiHasMore, false);
+    assert.equal(apiOnlyA.body.apiRechargeCount, 1);
+    assert.equal(apiOnlyA.body.apiRechargeAmount, 10);
     assert.deepEqual(apiOnlyA.body.apiPeriod, { from: "2026-09-12", to: "2026-09-12" });
     assert.equal(apiOnlyA.body.rows[0].status, "RICEVUTA VIA API");
     assert.equal(apiOnlyA.body.rows[0].saleId, String(bisuiteId));
@@ -321,6 +344,16 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     const apiOnlyB = await jsonReq(`${BASE}${path}?from=2026-09-12&to=2026-09-12`, { headers: { Cookie: orgB.cookieHeader } });
     assert.equal(apiOnlyB.status, 200, JSON.stringify(apiOnlyB.body));
     assert.deepEqual(apiOnlyB.body.rows.map((row) => row.saleId), [String(otherTenantBisuiteId)]);
+    assert.equal(apiOnlyB.body.apiRechargeCount, 1);
+    assert.equal(apiOnlyB.body.apiRechargeAmount, 15);
+    const windTreApi = await jsonReq(
+      `${BASE}${path}?provider=windtre&from=2026-09-12&to=2026-09-12`,
+      { headers: { Cookie: orgWindTre.cookieHeader } },
+    );
+    assert.equal(windTreApi.status, 200, JSON.stringify(windTreApi.body));
+    assert.equal(windTreApi.body.rows.length, 2);
+    assert.equal(windTreApi.body.apiRechargeCount, 2);
+    assert.equal(windTreApi.body.apiRechargeAmount, 6.25);
 
     await pool.query(`UPDATE profiles SET moduli_consentiti = $2 WHERE id = $1`, [orgA.profileId, []]);
     assert.equal((await jsonReq(`${BASE}${path}`, { headers: headersA })).status, 403);
@@ -474,54 +507,61 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
       const toFilter = apiPage.getByTestId("recharge-filter-to");
       const summary = apiPage.getByTestId("recharge-summaries");
       const count = apiPage.getByTestId("recharge-count").locator(".tabular-nums");
-      const total = summary.locator(":scope > div").nth(1).locator(".tabular-nums");
-      const checkSummary = async (rows, amount) => {
-        await apiPage.waitForFunction(({ rows, amount }) => {
+      const periodCount = apiPage.getByTestId("recharge-period-count");
+      const periodAmount = apiPage.getByTestId("recharge-period-amount");
+      const visibleAmount = apiPage.getByTestId("recharge-visible-amount");
+      const checkSummary = async (rows, amount, periodRows, periodTotal) => {
+        await apiPage.waitForFunction(({ rows, amount, periodRows, periodTotal }) => {
+          const normalize = value => value?.replace(/\s/g, "");
           const cards = document.querySelector('[data-testid="recharge-summaries"]');
-          return cards?.children[0]?.querySelector(".tabular-nums")?.textContent === rows
-            && cards?.children[1]?.querySelector(".tabular-nums")?.textContent?.replace(/\s/g, "") === amount;
-        }, { rows: String(rows), amount: `${amount},00€` });
+          return cards?.querySelector('[data-testid="recharge-period-count"]')?.textContent === periodRows
+            && normalize(cards?.querySelector('[data-testid="recharge-period-amount"]')?.textContent) === `${periodTotal},00€`
+            && cards?.querySelector('[data-testid="recharge-count"] .tabular-nums')?.textContent === rows
+            && normalize(cards?.querySelector('[data-testid="recharge-visible-amount"]')?.textContent) === `${amount},00€`;
+        }, { rows: String(rows), amount, periodRows: String(periodRows), periodTotal });
         assert.equal(await count.textContent(), String(rows));
-        assert.equal((await total.textContent()).replace(/\s/g, ""), `${amount},00€`);
+        assert.equal((await visibleAmount.textContent()).replace(/\s/g, ""), `${amount},00€`);
+        assert.equal(await periodCount.textContent(), String(periodRows));
+        assert.equal((await periodAmount.textContent()).replace(/\s/g, ""), `${periodTotal},00€`);
         assert.equal(await apiPage.locator("tbody tr").count(), rows);
       };
       assert.equal(await fromFilter.inputValue(), "2026-09-01");
       assert.equal(await toFilter.inputValue(), "2026-09-12");
       assert.equal(await summary.getByText("Fonte dati", { exact: true }).count(), 0);
       assert.equal(await summary.getByText(/di \d+ operazioni/).count(), 0);
-      await checkSummary(3, 30);
+      await checkSummary(3, "30", 3, "30");
       await fromFilter.fill("2026-09-10");
-      await checkSummary(2, 23);
+      await checkSummary(2, "23", 3, "30");
       const applyResponse = apiPage.waitForResponse(res => res.url().includes("/api/ricariche-analysis?") && res.status() === 200);
       await apiPage.getByRole("button", { name: "Applica periodo" }).click();
       await applyResponse;
-      await checkSummary(2, 23);
+      await checkSummary(2, "23", 2, "23");
       // PDV, source, status and free text all feed the same visible rows and summaries.
       await apiPage.getByRole("combobox").nth(0).click();
       await apiPage.getByRole("option", { name: "POS-OTHER", exact: true }).click();
-      await checkSummary(1, 15);
+      await checkSummary(1, "15", 2, "23");
       await apiPage.getByRole("combobox").nth(1).click();
       await apiPage.getByRole("option", { name: "BiSuite API", exact: true }).click();
-      await checkSummary(1, 15);
+      await checkSummary(1, "15", 2, "23");
       await apiPage.getByPlaceholder("Cerca…").fill("nessuna corrispondenza");
-      await checkSummary(0, 0);
+      await checkSummary(0, "0", 2, "23");
       await apiPage.getByPlaceholder("Cerca…").fill("Altro cliente");
-      await checkSummary(1, 15);
+      await checkSummary(1, "15", 2, "23");
       await apiPage.getByRole("combobox").nth(2).click();
       await apiPage.getByRole("option", { name: "VERIFICATO", exact: true }).click();
-      await checkSummary(0, 0);
+      await checkSummary(0, "0", 2, "23");
       const resetResponse = apiPage.waitForResponse(res => res.url().includes("/api/ricariche-analysis?") && res.status() === 200);
       await apiPage.getByRole("button", { name: "Azzera filtri", exact: true }).first().click();
       await resetResponse;
-      await checkSummary(3, 30);
+      await checkSummary(3, "30", 3, "30");
       assert.equal(await fromFilter.inputValue(), "2026-09-01");
       assert.equal(await toFilter.inputValue(), "2026-09-12");
       assert.equal(await apiPage.getByPlaceholder("Cerca…").inputValue(), "");
       assert.equal(await apiPage.getByRole("button", { name: "Azzera filtri", exact: true }).count(), 0);
       await toFilter.fill("2026-09-10");
-      await checkSummary(2, 15);
+      await checkSummary(2, "15", 3, "30");
       await apiPage.getByRole("button", { name: "Azzera filtri", exact: true }).click();
-      await checkSummary(3, 30);
+      await checkSummary(3, "30", 3, "30");
       await apiContext.close();
 
       const context = await newAuthedContext(browser, orgA);

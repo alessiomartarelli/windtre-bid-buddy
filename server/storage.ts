@@ -136,6 +136,12 @@ export interface IStorage {
   getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteRechargeSalesPage(orgId: string, fromYMD: string, toYMD: string, page: number, pageSize: number): Promise<{ sales: BisuiteSale[]; hasMore: boolean }>;
+  getBisuiteRechargeSalesSummary(orgId: string, fromYMD: string, toYMD: string): Promise<{
+    articleCount: number;
+    articleAmountCents: number;
+    saleCount: number;
+    saleAmountCents: number;
+  }>;
   getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
   deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
   reconcileBisuiteSales(orgId: string, fromYMD: string, toYMD: string, threshold: Date): Promise<{ deleted: number }>;
@@ -737,6 +743,87 @@ export class DatabaseStorage implements IStorage {
     return {
       sales: sales.slice(0, pageSize),
       hasMore: sales.length > pageSize,
+    };
+  }
+
+  async getBisuiteRechargeSalesSummary(
+    orgId: string,
+    fromYMD: string,
+    toYMD: string,
+  ): Promise<{ articleCount: number; articleAmountCents: number; saleCount: number; saleAmountCents: number }> {
+    const result = await db.execute(sql`
+      WITH scoped_sales AS (
+        SELECT s.id, s.raw_data
+        FROM ${bisuiteSales} s
+        WHERE s.organization_id = ${orgId}
+          AND s.data_vendita >= ${fromYMD}::date
+          AND s.data_vendita < ${toYMD}::date + interval '1 day'
+          AND upper(coalesce(trim(s.stato), '')) <> 'ANNULLATA'
+      ),
+      recharge_articles AS (
+        SELECT s.id AS sale_id,
+          (
+            coalesce(
+              nullif(article.value->'dettaglio'->'prezzo', 'null'::jsonb),
+              nullif(article.value->'dettaglio'->'importo', 'null'::jsonb),
+              nullif(article.value->'prezzo', 'null'::jsonb)
+            )
+          ) #>> '{}' AS raw_amount
+        FROM scoped_sales s
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(s.raw_data->'articoli') = 'array' THEN s.raw_data->'articoli'
+            ELSE '[]'::jsonb
+          END
+        ) AS article(value)
+        WHERE upper(trim(article.value->'categoria'->>'nome')) = 'RICARICHE'
+      ),
+      compacted AS (
+        SELECT sale_id, regexp_replace(coalesce(raw_amount, ''), '[^0-9,.-]', '', 'g') AS amount_text
+        FROM recharge_articles
+      ),
+      normalized AS (
+        SELECT sale_id,
+          CASE
+            WHEN strpos(amount_text, ',') > 0 AND strpos(amount_text, '.') > 0 THEN
+              CASE
+                WHEN strpos(reverse(amount_text), ',') < strpos(reverse(amount_text), '.') THEN
+                  replace(replace(amount_text, '.', ''), ',', '.')
+                ELSE replace(amount_text, ',', '')
+              END
+            WHEN strpos(amount_text, ',') > 0 THEN replace(amount_text, ',', '.')
+            ELSE amount_text
+          END AS amount_text
+        FROM compacted
+      ),
+      parsed_amounts AS (
+        SELECT sale_id,
+          CASE
+            WHEN amount_text ~ '^-?([0-9]+([.][0-9]*)?|[.][0-9]+)$'
+              THEN floor(amount_text::double precision * 100 + 0.5)::bigint
+            ELSE NULL
+          END AS amount_cents
+        FROM normalized
+      ),
+      sale_amounts AS (
+        SELECT sale_id, sum(coalesce(amount_cents, 0)) AS total_cents
+        FROM parsed_amounts
+        GROUP BY sale_id
+      )
+      SELECT
+        (count(*) FILTER (WHERE amount_cents > 0))::text AS article_count,
+        coalesce(sum(amount_cents) FILTER (WHERE amount_cents > 0), 0)::text AS article_amount_cents,
+        (SELECT count(*)::text FROM sale_amounts WHERE total_cents > 0) AS sale_count,
+        coalesce((SELECT sum(total_cents)::text FROM sale_amounts WHERE total_cents > 0), '0') AS sale_amount_cents
+      FROM parsed_amounts
+    `);
+    const rows = (result as unknown as { rows?: any[] }).rows ?? (result as unknown as any[]);
+    const row = rows[0] ?? {};
+    return {
+      articleCount: Number(row.article_count ?? 0),
+      articleAmountCents: Number(row.article_amount_cents ?? 0),
+      saleCount: Number(row.sale_count ?? 0),
+      saleAmountCents: Number(row.sale_amount_cents ?? 0),
     };
   }
 

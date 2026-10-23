@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, ArrowDown, ArrowUp, Check, ChevronDown, CircleDollarSign, CloudUpload, Download, FileSpreadsheet, Filter, History, LoaderCircle, RefreshCw, Search, Signal, SlidersHorizontal, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, Check, ChevronDown, CircleDollarSign, CloudUpload, Download, FileSpreadsheet, Filter, History, LoaderCircle, RefreshCw, Search, Signal, X } from "lucide-react";
 import * as XLSX from "xlsx";
 
 type Report = { id: string; fileName: string; uploadedAt: string; rowCount: number; periodFrom: string | null; periodTo: string | null; declaredPeriodFrom: string | null; declaredPeriodTo: string | null };
@@ -23,8 +23,10 @@ type Payload = {
   apiPage: number;
   apiPageSize: number;
   apiHasMore: boolean;
+  apiRechargeCount: number;
+  apiRechargeAmount: number | string;
 };
-const EMPTY: Payload = { provider: null, allowedProviders: [], reports: [], activeReportId: null, rows: [], pdvs: [], apiPeriod: null, apiPage: 0, apiPageSize: 100, apiHasMore: false };
+const EMPTY: Payload = { provider: null, allowedProviders: [], reports: [], activeReportId: null, rows: [], pdvs: [], apiPeriod: null, apiPage: 0, apiPageSize: 100, apiHasMore: false, apiRechargeCount: 0, apiRechargeAmount: 0 };
 type LoadOptions = { silent?: boolean; reportId?: string; provider?: Provider; page?: number; from?: string; to?: string };
 const PROVIDER_LABEL: Record<Provider, string> = { vodafone_fastweb: "Vodafone / Fastweb", windtre: "WindTre" };
 const STATUSES = ["VERIFICATO", "INCONGRUENZA IMPORTO", "NON PRESENTE SU BISUITE", "NON PRESENTE SU FILE", "FUORI PERIODO", "RICEVUTA VIA API"];
@@ -83,6 +85,8 @@ export default function RicaricheAnalisi() {
         apiPage: json.apiPage ?? 0,
         apiPageSize: json.apiPageSize ?? EMPTY.apiPageSize,
         apiHasMore: json.apiHasMore ?? false,
+        apiRechargeCount: json.apiRechargeCount ?? 0,
+        apiRechargeAmount: json.apiRechargeAmount ?? 0,
       });
       if (json.apiPeriod) {
         setFrom(json.apiPeriod.from);
@@ -237,9 +241,30 @@ export default function RicaricheAnalisi() {
       </section>}
 
       <section data-testid="recharge-summaries" className={`mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 ${activeReport ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
-        <div data-testid="recharge-count" className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Righe in vista <SlidersHorizontal className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{new Intl.NumberFormat("it-IT").format(filtered.length)}</div><div className="mt-1 text-xs text-[#789092]">operazioni con i filtri attivi</div></div>
-        <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">{activeReport ? "Totale provider" : "Totale ricariche API"} <CircleDollarSign className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{money(totalAmount)}</div><div className="mt-1 text-xs text-[#789092]">importo delle righe filtrate</div></div>
+        {activeReport ? (
+          <div data-testid="recharge-count" className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]">
+            <div className="text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Ricariche mostrate</div>
+            <div className="mt-2 font-display text-3xl font-semibold tabular-nums">{new Intl.NumberFormat("it-IT").format(filtered.length)}</div>
+            <div className="mt-1 text-xs text-[#789092]">transazioni del report con i filtri attivi</div>
+          </div>
+        ) : (
+          <>
+            <div data-testid="recharge-total-period" className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]">
+              <div className="text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Totale ricariche nel periodo</div>
+              <div data-testid="recharge-period-count" className="mt-2 font-display text-3xl font-semibold tabular-nums">{new Intl.NumberFormat("it-IT").format(data.apiRechargeCount)}</div>
+              <div className="mt-1 text-xs text-[#789092]">Importo totale: <strong data-testid="recharge-period-amount" className="font-semibold text-[#385456]">{money(data.apiRechargeAmount)}</strong></div>
+              <div className="mt-1 text-[10px] text-[#8a9a9b]">intero periodo, prima dei filtri della pagina</div>
+            </div>
+            <div data-testid="recharge-count" className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]">
+              <div className="text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Ricariche mostrate</div>
+              <div className="mt-2 font-display text-3xl font-semibold tabular-nums">{new Intl.NumberFormat("it-IT").format(filtered.length)}</div>
+              <div className="mt-1 text-xs text-[#789092]">Importo delle ricariche mostrate: <strong data-testid="recharge-visible-amount" className="font-semibold text-[#385456]">{money(totalAmount)}</strong></div>
+              <div className="mt-1 text-[10px] text-[#8a9a9b]">pagina corrente dopo i filtri</div>
+            </div>
+          </>
+        )}
         {activeReport && <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Totale BiSuite <CircleDollarSign className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{money(totalBisuiteAmount)}</div><div className="mt-1 text-xs text-[#789092]">importo delle righe filtrate</div></div>}
+        {activeReport && <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">Totale provider <CircleDollarSign className="h-4 w-4 text-[#168277]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{money(totalAmount)}</div><div className="mt-1 text-xs text-[#789092]">importo delle righe filtrate</div></div>}
         <div className="rounded-xl border border-[#d5e1dd] bg-[#fbfcfa] p-4 shadow-[0_2px_8px_rgba(31,65,66,.035)]"><div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[.13em] text-[#718386]">{activeReport ? "Da verificare" : "Report provider"} <AlertCircle className="h-4 w-4 text-[#c77b3e]" /></div><div className="mt-2 font-display text-3xl font-semibold tabular-nums">{activeReport ? new Intl.NumberFormat("it-IT").format(mismatches) : "—"}</div><div className="mt-1 text-xs text-[#789092]">{activeReport ? "incongruenze o movimenti mancanti" : "caricalo per avviare il confronto"}</div></div>
       </section>
 
@@ -310,7 +335,7 @@ export default function RicaricheAnalisi() {
                 </tr>;
               })}</tbody>
             </table>
-            <div className="flex items-center justify-between border-t border-[#e8eeeb] px-4 py-2.5 text-[10px] text-[#829394]"><span>{new Intl.NumberFormat("it-IT").format(filtered.length)} operazioni visualizzate</span><span>Differenza = BiSuite − provider</span></div>
+            <div className="flex items-center justify-between border-t border-[#e8eeeb] px-4 py-2.5 text-[10px] text-[#829394]"><span>{new Intl.NumberFormat("it-IT").format(filtered.length)} transazioni mostrate · provider: {money(totalAmount)} · BiSuite: {money(totalBisuiteAmount)}</span><span>Differenza = BiSuite − provider</span></div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -338,7 +363,7 @@ export default function RicaricheAnalisi() {
                 <td className="whitespace-nowrap px-3 py-2.5"><span className="inline-flex items-center gap-1.5 rounded-full bg-[#e4eefb] px-2 py-1 text-[9px] font-bold tracking-[.045em] text-[#315f91]"><span className="h-1.5 w-1.5 rounded-full bg-[#5d89bd]" />{r.status}</span></td>
               </tr>)}</tbody>
             </table>
-            <div className="flex items-center justify-between border-t border-[#e8eeeb] px-4 py-2.5 text-[10px] text-[#829394]"><span>{new Intl.NumberFormat("it-IT").format(filtered.length)} operazioni visualizzate</span><span>Importi e telefoni letti dagli articoli RICARICHE in BiSuite</span></div>
+            <div className="flex items-center justify-between border-t border-[#e8eeeb] px-4 py-2.5 text-[10px] text-[#829394]"><span>{new Intl.NumberFormat("it-IT").format(filtered.length)} ricariche mostrate in pagina · importo: {money(totalAmount)}</span><span>Importi e telefoni letti dagli articoli RICARICHE in BiSuite</span></div>
           </div>
         )}
         {!activeReport && data.apiPeriod && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e8eeeb] px-4 py-3">
