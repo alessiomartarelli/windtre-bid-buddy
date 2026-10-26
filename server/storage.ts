@@ -172,7 +172,12 @@ export interface IStorage {
   // Analisi Ricariche: i report sono persistiti e isolati per org/provider.
   listRicaricheAnalysisReports(orgId: string, provider: string): Promise<RicaricheAnalysisReport[]>;
   getRicaricheAnalysisReport(id: string, orgId: string, provider: string): Promise<RicaricheAnalysisReport | undefined>;
-  createRicaricheAnalysisReport(report: InsertRicaricheAnalysisReport): Promise<RicaricheAnalysisReport>;
+  importRicaricheAnalysisReport(report: InsertRicaricheAnalysisReport): Promise<{
+    report: RicaricheAnalysisReport | null;
+    insertedCount: number;
+    duplicatesSkipped: number;
+  }>;
+  deleteRicaricheAnalysisReport(id: string, orgId: string): Promise<boolean>;
   setRicaricheAnalysisReportPeriod(id: string, orgId: string, provider: string, from: string | null, to: string | null): Promise<RicaricheAnalysisReport | undefined>;
 
   // Gestione DTS (Task #321)
@@ -1156,9 +1161,80 @@ export class DatabaseStorage implements IStorage {
     return report;
   }
 
-  async createRicaricheAnalysisReport(report: InsertRicaricheAnalysisReport): Promise<RicaricheAnalysisReport> {
-    const [created] = await db.insert(ricaricheAnalysisReports).values(report).returning();
-    return created;
+  async importRicaricheAnalysisReport(report: InsertRicaricheAnalysisReport): Promise<{
+    report: RicaricheAnalysisReport | null;
+    insertedCount: number;
+    duplicatesSkipped: number;
+  }> {
+    return db.transaction(async (tx) => {
+      const lockKey = `ricariche-analysis:${report.organizationId}:${report.provider}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+      const savedReports = await tx.select({ rows: ricaricheAnalysisReports.rows })
+        .from(ricaricheAnalysisReports)
+        .where(and(
+          eq(ricaricheAnalysisReports.organizationId, report.organizationId),
+          eq(ricaricheAnalysisReports.provider, report.provider),
+        ));
+      const existingIds = new Set<string>();
+      for (const saved of savedReports) {
+        const rows = Array.isArray(saved.rows) ? saved.rows as Array<{ transactionId?: unknown }> : [];
+        for (const row of rows) {
+          if (typeof row.transactionId === "string" && row.transactionId.trim()) {
+            existingIds.add(row.transactionId.trim());
+          }
+        }
+      }
+      const incomingRows = Array.isArray(report.rows)
+        ? report.rows as Array<{ transactionId?: unknown; date?: unknown }>
+        : [];
+      const uniqueRows = incomingRows.filter((row) => {
+        const id = typeof row.transactionId === "string" ? row.transactionId.trim() : "";
+        if (!id || existingIds.has(id)) return false;
+        existingIds.add(id);
+        return true;
+      });
+      const duplicatesSkipped = incomingRows.length - uniqueRows.length;
+      if (!uniqueRows.length) {
+        return { report: null, insertedCount: 0, duplicatesSkipped };
+      }
+      const dates = uniqueRows
+        .map((row) => typeof row.date === "string" ? row.date.slice(0, 10) : "")
+        .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+        .sort();
+      const [created] = await tx.insert(ricaricheAnalysisReports)
+        .values({
+          ...report,
+          rows: uniqueRows as any,
+          rowCount: uniqueRows.length,
+          periodFrom: dates[0] ?? null,
+          periodTo: dates[dates.length - 1] ?? null,
+        })
+        .returning();
+      return { report: created, insertedCount: uniqueRows.length, duplicatesSkipped };
+    });
+  }
+
+  async deleteRicaricheAnalysisReport(id: string, orgId: string): Promise<boolean> {
+    return db.transaction(async (tx) => {
+      const [report] = await tx.select({
+        provider: ricaricheAnalysisReports.provider,
+      }).from(ricaricheAnalysisReports)
+        .where(and(
+          eq(ricaricheAnalysisReports.id, id),
+          eq(ricaricheAnalysisReports.organizationId, orgId),
+        ));
+      if (!report) return false;
+      const lockKey = `ricariche-analysis:${orgId}:${report.provider}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+      const deleted = await tx.delete(ricaricheAnalysisReports)
+        .where(and(
+          eq(ricaricheAnalysisReports.id, id),
+          eq(ricaricheAnalysisReports.organizationId, orgId),
+          eq(ricaricheAnalysisReports.provider, report.provider),
+        ))
+        .returning({ id: ricaricheAnalysisReports.id });
+      return deleted.length > 0;
+    });
   }
 
   async setRicaricheAnalysisReportPeriod(

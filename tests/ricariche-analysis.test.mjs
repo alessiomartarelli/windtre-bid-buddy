@@ -7,9 +7,11 @@ import {
   getRicaricheAnalysisProvidersForBrands,
   isRechargeDateWithinPeriod,
   normalizeRechargePhone,
+  normalizeRechargeSupplier,
   parseVodafoneRechargeWorkbook,
   parseWindTreRechargeWorkbook,
   rechargeApiRows,
+  rechargeReportOverlapsPeriod,
   reconcileRechargeRows,
   rowsOutsideRechargePeriod,
 } from "../shared/ricaricheAnalysis.ts";
@@ -73,6 +75,29 @@ test("parser VF normalizza data e importi e accorpa i duplicati dello stesso ID"
   assert.equal(rows[0].customer, "", "dealer login must not be presented as customer name");
   assert.equal(rows[0].date, "2026-09-30T23:59:18.000Z");
   assert.equal(rows[1].amount, 1234.5);
+  assert.equal(rows[0].supplier, "Vodafone");
+});
+
+test("fornitore VF e lista report: normalizza Vodafone Store e filtra per sovrapposizione periodo", () => {
+  assert.equal(normalizeRechargeSupplier("Vodafone Store"), "Vodafone");
+  assert.equal(normalizeRechargeSupplier(" vodafone store "), "Vodafone");
+  assert.equal(normalizeRechargeSupplier("Fastweb"), "Fastweb");
+  const report = {
+    periodFrom: "2026-09-01",
+    periodTo: "2026-09-30",
+    declaredPeriodFrom: "2026-09-10",
+    declaredPeriodTo: "2026-09-20",
+  };
+  assert.equal(rechargeReportOverlapsPeriod(report, "2026-09-20", "2026-10-01"), true);
+  assert.equal(rechargeReportOverlapsPeriod(report, "2026-08-01", "2026-09-09"), false);
+  assert.equal(rechargeReportOverlapsPeriod(report, "2026-09-21", "2026-09-30"), false);
+  assert.equal(rechargeReportOverlapsPeriod({
+    periodFrom: "2026-09-01",
+    periodTo: "2026-09-30",
+    declaredPeriodFrom: null,
+    declaredPeriodTo: null,
+  }, "2026-09-29", "2026-10-01"), true);
+  assert.equal(rechargeReportOverlapsPeriod(report), true);
 });
 
 test("parser rejects fogli non-VF e righe valorizzate prive di ID transazione", () => {

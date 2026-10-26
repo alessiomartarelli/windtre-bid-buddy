@@ -21,6 +21,8 @@ toggle, column projection). UI tests are ~25s vs ~1s for pure ones.
 - Seed/cleanup the dev DB directly via `pg` Pool on `DATABASE_URL` (deterministic, no reconcile).
   Routes re-read the profile each request, so operator-isolation tests can `UPDATE profiles
   SET role=..., bisuite_addetti=$arr::text[]` then reload the page.
+- For native confirmation dialogs, register a `page.once("dialog", async dialog => await dialog.accept())`
+  handler before clicking; accept inside the handler so the click cannot stall behind the dialog.
 - The wrapper script must wait for `localhost:5000` (app workflow must be running) before
   launching, like the other run-*.sh scripts.
 - Same stack works for one-off VISUAL checks of standalone HTML (e.g. the Telegram

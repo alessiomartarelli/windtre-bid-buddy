@@ -86,6 +86,32 @@ export function normalizeRechargePhone(value: unknown): string {
   return digits;
 }
 
+export function normalizeRechargeSupplier(value: unknown): string {
+  const supplier = text(value);
+  return supplier.toLocaleLowerCase("it") === "vodafone store" ? "Vodafone" : supplier;
+}
+
+export function rechargeReportOverlapsPeriod(
+  report: {
+    periodFrom: string | null;
+    periodTo: string | null;
+    declaredPeriodFrom?: string | null;
+    declaredPeriodTo?: string | null;
+  },
+  from?: string,
+  to?: string,
+): boolean {
+  if (!from && !to) return true;
+  const periodFrom = report.declaredPeriodFrom && report.declaredPeriodTo
+    ? report.declaredPeriodFrom.slice(0, 10)
+    : report.periodFrom?.slice(0, 10);
+  const periodTo = report.declaredPeriodFrom && report.declaredPeriodTo
+    ? report.declaredPeriodTo.slice(0, 10)
+    : report.periodTo?.slice(0, 10);
+  if (!periodFrom || !periodTo) return false;
+  return (!from || periodTo >= from) && (!to || periodFrom <= to);
+}
+
 function parseRechargeAmount(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return Math.round(value * 100) / 100;
   let raw = text(value).replace(/[€\s]/g, "").replace(/[^\d,.-]/g, "");
@@ -202,7 +228,7 @@ export function parseVodafoneRechargeWorkbook(bytes: Uint8Array): RechargeProvid
       // Il campo Login è l'utente del dealer, non il nominativo del cliente.
       // Il nominativo viene mostrato solo quando proviene dalla vendita BiSuite.
       customer: "",
-      supplier: prev?.supplier || text(columns.supplier >= 0 ? row[columns.supplier] : ""),
+      supplier: prev?.supplier || normalizeRechargeSupplier(columns.supplier >= 0 ? row[columns.supplier] : ""),
       transactionId,
       dealerCode: prev?.dealerCode || text(columns.dealerCode >= 0 ? row[columns.dealerCode] : ""),
       pointId: prev?.pointId || text(columns.pointId >= 0 ? row[columns.pointId] : ""),
@@ -467,7 +493,7 @@ export function reconcileRechargeRows(
       temporaryPhone: row.temporaryPhone || null,
       amount: row.amount,
       customer: sale?.customer || row.customer || null,
-      supplier: row.supplier || "Vodafone/Fastweb",
+      supplier: normalizeRechargeSupplier(row.supplier) || "Vodafone/Fastweb",
       transactionId: row.transactionId,
       rechargeType: row.rechargeType || null,
       pdv: sale?.pdv || (row.supplier === "WindTre" ? row.pointId : "") || null,

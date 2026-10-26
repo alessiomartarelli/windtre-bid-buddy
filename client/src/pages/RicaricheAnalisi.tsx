@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppNavbar } from "@/components/AppNavbar";
 import { apiUrl } from "@/lib/basePath";
 import { currentRechargePeriod } from "@/lib/ricarichePeriod";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, ArrowDown, ArrowUp, Check, ChevronDown, CircleDollarSign, CloudUpload, Download, FileSpreadsheet, Filter, History, LoaderCircle, RefreshCw, Search, Signal, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, Check, ChevronDown, CircleDollarSign, CloudUpload, Download, FileSpreadsheet, Filter, History, LoaderCircle, RefreshCw, Search, Signal, Trash2, X } from "lucide-react";
+import { rechargeReportOverlapsPeriod } from "@shared/ricaricheAnalysis";
 import * as XLSX from "xlsx";
 
 type Report = { id: string; fileName: string; uploadedAt: string; rowCount: number; periodFrom: string | null; periodTo: string | null; declaredPeriodFrom: string | null; declaredPeriodTo: string | null };
@@ -37,11 +39,13 @@ const exportRows = (rows: Row[], hasProviderReport: boolean) => rows.map(r => ha
   : ({ PDV: r.pdv ?? "", Data: dateLabel(r.date), "ID vendita": r.saleId ?? "", Cliente: r.customer ?? "", Fonte: "BiSuite API", Categoria: r.rechargeType ?? "RICARICHE", "Importo ricarica": r.bisuiteAmount ?? "", Telefono: r.phone ?? "", Stato: r.status }));
 
 export default function RicaricheAnalisi() {
+  const { profile } = useAuth();
   const { toast } = useToast();
   const [data, setData] = useState<Payload>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
   const [query, setQuery] = useState("");
   const [initialPeriod] = useState(currentRechargePeriod);
@@ -113,10 +117,35 @@ export default function RicaricheAnalisi() {
       const res = await fetch(apiUrl("/api/ricariche-analysis/upload"), { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: data.provider, fileName: file.name, workbookBase64: base64 }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Caricamento non riuscito.");
-      toast({ title: "Report acquisito", description: `${body.rowCount ?? 0} righe elaborate.` });
+      const skipped = Number(body.duplicatesSkipped) || 0;
+      toast({
+        title: "Report acquisito",
+        description: skipped
+          ? `${body.rowCount ?? 0} nuove transazioni importate; ${skipped} già caricate ignorate.`
+          : `${body.rowCount ?? 0} righe elaborate.`,
+      });
       await load({ silent: true, provider: data.provider });
     } catch (e) { toast({ title: "Errore di caricamento", description: e instanceof Error ? e.message : "Riprova tra poco.", variant: "destructive" }); }
     finally { setUploading(false); if (inputRef.current) inputRef.current.value = ""; }
+  };
+
+  const deleteReport = async (report: Report) => {
+    if (!data.provider || !window.confirm(`Eliminare definitivamente il report “${report.fileName}”? Le righe contenute non saranno più disponibili.`)) return;
+    setDeletingReportId(report.id);
+    try {
+      const res = await fetch(apiUrl(`/api/ricariche-analysis/${encodeURIComponent(report.id)}`), {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Eliminazione non riuscita.");
+      toast({ title: "Report eliminato", description: "Il file e le sue righe sono stati rimossi dall’analisi." });
+      await load({ silent: true, provider: data.provider });
+    } catch (e) {
+      toast({ title: "Errore di eliminazione", description: e instanceof Error ? e.message : "Riprova tra poco.", variant: "destructive" });
+    } finally {
+      setDeletingReportId(null);
+    }
   };
 
   const saveDeclaredPeriod = async (clear = false) => {
@@ -151,6 +180,11 @@ export default function RicaricheAnalisi() {
   };
 
   const activeReport = data.reports.find(r => r.id === data.activeReportId);
+  const visibleReports = useMemo(
+    () => data.reports.filter(report => rechargeReportOverlapsPeriod(report, from, to)),
+    [data.reports, from, to],
+  );
+  const canDeleteReports = profile?.role === "admin" || profile?.role === "super_admin";
   const suppliers = useMemo(() => [...new Set(data.rows.map(r => r.supplier).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, "it")), [data.rows]);
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("it");
@@ -293,7 +327,24 @@ export default function RicaricheAnalisi() {
 
       <section className="overflow-hidden rounded-xl border border-[#d7e2df] bg-[#fbfcfa] shadow-[0_2px_10px_rgba(31,65,66,.035)]">
         <div className="flex flex-col justify-between gap-3 border-b border-[#e4ebe8] px-4 py-3 sm:flex-row sm:items-center"><div className="flex min-w-0 items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#e5efec] text-[#168277]"><History className="h-4 w-4" /></div><div className="min-w-0"><h2 className="text-sm font-semibold">{activeReport ? "Riconciliazione" : "Ricariche da vendite BiSuite"}</h2><p className="truncate text-[11px] text-[#819294]">{activeReport ? `${activeReport.fileName} · caricato ${dateLabel(activeReport.uploadedAt)}` : "Vendite registrate per il tenant tramite API"}</p></div></div><div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" onClick={() => doExport("csv")} className="h-8 border-[#d6e0dd] bg-white text-xs"><Download className="mr-1.5 h-3.5 w-3.5" /> CSV</Button><Button variant="outline" size="sm" onClick={() => doExport("xlsx")} className="h-8 border-[#d6e0dd] bg-white text-xs"><FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" /> Excel</Button></div></div>
-        {!!data.reports.length && <div className="flex gap-2 overflow-x-auto border-b border-[#e8eeeb] px-4 py-2.5">{data.reports.map(r => <button key={r.id} onClick={() => { void load({ silent: true, reportId: r.id, provider: data.provider ?? undefined }); }} className={`flex min-w-[200px] max-w-[280px] items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${r.id === data.activeReportId ? "border-[#9bc8bd] bg-[#edf6f2]" : "border-[#e0e8e5] bg-white hover:border-[#b8d3ca]"}`}><FileSpreadsheet className="h-4 w-4 shrink-0 text-[#24877b]" /><span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-semibold">{r.fileName}</span><span className="mt-0.5 block text-[10px] text-[#849596]">{new Intl.NumberFormat("it-IT").format(r.rowCount)} righe · {dateLabel(r.uploadedAt)}</span></span>{r.id === data.activeReportId && <Check className="h-4 w-4 shrink-0 text-[#168277]" />}</button>)}</div>}
+        {!!data.reports.length && <div className="flex gap-2 overflow-x-auto border-b border-[#e8eeeb] px-4 py-2.5">
+          {visibleReports.map(r => <div key={r.id} className={`flex min-w-[220px] max-w-[300px] items-center rounded-lg border transition-colors ${r.id === data.activeReportId ? "border-[#9bc8bd] bg-[#edf6f2]" : "border-[#e0e8e5] bg-white hover:border-[#b8d3ca]"}`}>
+            <button onClick={() => { void load({ silent: true, reportId: r.id, provider: data.provider ?? undefined }); }} className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left">
+              <FileSpreadsheet className="h-4 w-4 shrink-0 text-[#24877b]" />
+              <span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-semibold">{r.fileName}</span><span className="mt-0.5 block text-[10px] text-[#849596]">{new Intl.NumberFormat("it-IT").format(r.rowCount)} righe · {dateLabel(r.uploadedAt)}</span></span>
+              {r.id === data.activeReportId && <Check className="h-4 w-4 shrink-0 text-[#168277]" />}
+            </button>
+            {canDeleteReports && <button
+              type="button"
+              aria-label={`Elimina report ${r.fileName}`}
+              title="Elimina report"
+              disabled={deletingReportId === r.id}
+              onClick={() => void deleteReport(r)}
+              className="mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-[#879796] transition-colors hover:bg-[#fbefeb] hover:text-[#a54d3b] disabled:opacity-50"
+            ><Trash2 className="h-4 w-4" /></button>}
+          </div>)}
+          {!visibleReports.length && <p className="py-2 text-xs text-[#718587]">Nessun report caricato nel periodo selezionato.</p>}
+        </div>}
         {error ? (
           <div className="m-4 flex items-start gap-3 rounded-lg border border-[#e8c9c0] bg-[#fbefeb] p-4">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#b45c47]" />

@@ -1946,7 +1946,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: error instanceof Error ? error.message : "Formato report non riconosciuto." });
       }
       const dates = rows.map((r) => r.date.slice(0, 10)).sort();
-      const report = await storage.createRicaricheAnalysisReport({
+      const imported = await storage.importRicaricheAnalysisReport({
         organizationId: profile.organizationId,
         provider,
         fileName,
@@ -1956,10 +1956,37 @@ export async function registerRoutes(
         periodTo: dates[dates.length - 1] ?? null,
         uploadedBy: profile.id,
       });
-      res.status(201).json({ ok: true, reportId: report.id, rowCount: report.rowCount });
+      if (!imported.report) {
+        return res.status(409).json({
+          message: "Tutte le transazioni del file risultano già caricate. Non è stato creato un report duplicato.",
+          duplicatesSkipped: imported.duplicatesSkipped,
+        });
+      }
+      res.status(201).json({
+        ok: true,
+        reportId: imported.report.id,
+        rowCount: imported.insertedCount,
+        duplicatesSkipped: imported.duplicatesSkipped,
+      });
     } catch (e) {
       console.error("Recharge analysis upload failed:", e);
       res.status(500).json({ message: "Errore nel salvataggio del report ricariche." });
+    }
+  });
+
+  app.delete("/api/ricariche-analysis/:reportId", isAuthenticated, requireModule("analisi_ricariche"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const deleted = await storage.deleteRicaricheAnalysisReport(
+        String(req.params.reportId),
+        profile.organizationId!,
+      );
+      if (!deleted) return res.status(404).json({ message: "Report ricariche non trovato." });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("Recharge analysis report delete failed:", e);
+      res.status(500).json({ message: "Errore nell'eliminazione del report ricariche." });
     }
   });
 

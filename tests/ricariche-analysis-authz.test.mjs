@@ -5,15 +5,19 @@ import {
   BASE, jsonReq, signup, newPool, setRole, cleanupOrg, launchBrowser, newAuthedContext,
 } from "./helpers/uiTest.mjs";
 
-function workbookBase64(amount = "€10.00", transactionId = "AUTHZ-TX-1") {
-  const rows = [
+function workbookBase64Rows(rows) {
+  const source = [
     ["Ora di  Ricarica", "Numero Telefono", "Numero Telefono Temporaneo", "Importo Ricarica", "ID Transazione", "Canale di Vendite SAP"],
-    ["12/09/26 15:10:00", "3471234567", "", amount, transactionId, "Vodafone Store"],
+    ...rows,
   ];
-  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  const worksheet = XLSX.utils.aoa_to_sheet(source);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "IC REPORT 1 - RECHARGES");
   return XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
+}
+
+function workbookBase64(amount = "€10.00", transactionId = "AUTHZ-TX-1", supplier = "Vodafone Store") {
+  return workbookBase64Rows([["12/09/26 15:10:00", "3471234567", "", amount, transactionId, supplier]]);
 }
 
 function windTreWorkbookBase64() {
@@ -380,17 +384,63 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     });
     assert.equal(upload.status, 201, JSON.stringify(upload.body));
     reportId = upload.body.reportId;
+    assert.equal(upload.body.rowCount, 1);
 
-    const result = await jsonReq(`${BASE}${path}?provider=vodafone_fastweb`, { headers: headersA });
+    const duplicateUpload = await jsonReq(`${BASE}${path}/upload`, {
+      method: "POST",
+      headers: headersA,
+      body: JSON.stringify({
+        provider: "vodafone_fastweb",
+        fileName: "report-vf-duplicato.xlsx",
+        workbookBase64: workbookBase64("€99.00", "AUTHZ-TX-1"),
+      }),
+    });
+    assert.equal(duplicateUpload.status, 409);
+    assert.match(duplicateUpload.body.message, /già caricate/i);
+    assert.equal(duplicateUpload.body.duplicatesSkipped, 1);
+    assert.equal((await jsonReq(`${BASE}${path}?provider=vodafone_fastweb`, { headers: headersA })).body.reports.length, 1,
+      "an upload with only existing transaction IDs must not create a report");
+    assert.equal((await jsonReq(`${BASE}${path}/${encodeURIComponent(reportId)}`, {
+      method: "DELETE",
+      headers: headersA,
+    })).status, 403, "operators with module access cannot delete uploaded reports");
+
+    const mixedUpload = await jsonReq(`${BASE}${path}/upload`, {
+      method: "POST",
+      headers: headersA,
+      body: JSON.stringify({
+        provider: "vodafone_fastweb",
+        fileName: "report-vf-misto.xlsx",
+        workbookBase64: workbookBase64Rows([
+          ["12/09/26 15:10:00", "3471234567", "", "€99.00", "AUTHZ-TX-1", "Vodafone Store"],
+          ["12/09/26 16:10:00", "3479999999", "", "€2.00", "AUTHZ-TX-3", "Vodafone Store"],
+        ]),
+      }),
+    });
+    assert.equal(mixedUpload.status, 201, JSON.stringify(mixedUpload.body));
+    assert.equal(mixedUpload.body.rowCount, 1);
+    assert.equal(mixedUpload.body.duplicatesSkipped, 1);
+    const mixedReport = await jsonReq(
+      `${BASE}${path}?provider=vodafone_fastweb&reportId=${encodeURIComponent(mixedUpload.body.reportId)}`,
+      { headers: headersA },
+    );
+    assert.equal(mixedReport.status, 200, JSON.stringify(mixedReport.body));
+    assert.deepEqual(mixedReport.body.rows.map(row => row.transactionId), ["AUTHZ-TX-3"]);
+
+    const result = await jsonReq(
+      `${BASE}${path}?provider=vodafone_fastweb&reportId=${encodeURIComponent(reportId)}`,
+      { headers: headersA },
+    );
     assert.equal(result.status, 200, JSON.stringify(result.body));
     assert.equal(result.body.rows.length, 1);
     assert.equal(result.body.rows[0].status, "VERIFICATO");
     assert.equal(result.body.rows[0].saleId, String(bisuiteId));
     assert.equal(result.body.rows[0].customer, "Cliente Test");
     assert.equal(result.body.rows[0].amount, 10);
+    assert.equal(result.body.rows[0].supplier, "Vodafone");
     assert.equal(result.body.rows[0].bisuiteAmount, 10);
     assert.equal(result.body.rows[0].difference, 0);
-    assert.equal(result.body.reports[0].fileName, "report-vf.xlsx");
+    assert.equal(result.body.reports.some(report => report.id === reportId && report.fileName === "report-vf.xlsx"), true);
 
     const secondUpload = await jsonReq(`${BASE}${path}/upload`, {
       method: "POST",
@@ -413,7 +463,7 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     });
     assert.equal(wrongProviderUpload.status, 403, "Vodafone tenants cannot upload WindTre reports");
     const latest = await jsonReq(`${BASE}${path}?provider=vodafone_fastweb`, { headers: headersA });
-    assert.equal(latest.body.reports.length, 2);
+    assert.equal(latest.body.reports.length, 3);
     assert.equal(latest.body.rows[0].status, "INCONGRUENZA IMPORTO");
     assert.equal(latest.body.rows[0].difference, -2);
     const previous = await jsonReq(`${BASE}${path}?provider=vodafone_fastweb&reportId=${encodeURIComponent(reportId)}`, { headers: headersA });
@@ -427,6 +477,8 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
 
     const noAdminModuleNeeded = await jsonReq(`${BASE}${path}`, { headers: headersA });
     assert.equal(noAdminModuleNeeded.status, 200, "operatore with module grant can use the separate API");
+
+    await setRole(pool, orgA.profileId, "admin");
 
     await pool.query(
       `INSERT INTO bisuite_sales
@@ -580,7 +632,31 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
       await page.getByText(/Periodo dichiarato:/).waitFor({ state: "visible", timeout: 10000 });
       assert.equal(await page.getByTestId("nav-gara-analisi-ricariche").count(), 1);
       assert.equal(await page.getByTestId("nav-amministrazione").count(), 0);
-      await page.getByRole("button", { name: /report-vf\.xlsx/ }).click();
+      await page.getByTestId("recharge-filter-from").fill("2026-09-13");
+      await page.getByTestId("recharge-filter-to").fill("2026-09-15");
+      await page.getByText("Nessun report caricato nel periodo selezionato.").waitFor({ state: "visible", timeout: 10000 });
+      await page.getByRole("button", { name: "Azzera filtri", exact: true }).first().click();
+      await page.getByRole("button", { name: /report-vf-successivo\.xlsx/ }).first().waitFor({ state: "visible", timeout: 10000 });
+      const deleteDialog = new Promise((resolve, reject) => {
+        page.once("dialog", async dialog => {
+          try {
+            assert.equal(dialog.type(), "confirm");
+            resolve(dialog.message());
+            await dialog.accept();
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+      const deleteResponse = page.waitForResponse(res =>
+        res.url().includes(`/api/ricariche-analysis/${encodeURIComponent(secondUpload.body.reportId)}`) &&
+        res.request().method() === "DELETE",
+      );
+      await page.getByRole("button", { name: "Elimina report report-vf-successivo.xlsx" }).click();
+      assert.match(await deleteDialog, /report-vf-successivo\.xlsx/);
+      assert.equal((await deleteResponse).status(), 200);
+      await page.getByRole("button", { name: /report-vf-successivo\.xlsx/ }).first().waitFor({ state: "detached", timeout: 10000 });
+      await page.getByRole("button", { name: /report-vf\.xlsx/ }).first().click();
       await page.getByText("VERIFICATO", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
       const csvDownload = page.waitForEvent("download");
       await page.getByRole("button", { name: "CSV" }).click();
@@ -594,6 +670,21 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
       await windPage.getByText("Nuovo report WindTre", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
       assert.equal(await windPage.getByText("Nuovo report Vodafone / Fastweb", { exact: true }).count(), 0);
       await windContext.close();
+
+      const sameIdOtherTenant = await jsonReq(`${BASE}${path}/upload`, {
+        method: "POST",
+        headers: { Cookie: orgB.cookieHeader },
+        body: JSON.stringify({
+          provider: "vodafone_fastweb",
+          fileName: "stesso-id-altro-tenant.xlsx",
+          workbookBase64: workbookBase64("€10.00", "AUTHZ-TX-1"),
+        }),
+      });
+      assert.equal(sameIdOtherTenant.status, 201, "transaction IDs are unique only inside an organization and provider");
+      assert.equal((await jsonReq(`${BASE}${path}/${encodeURIComponent(reportId)}`, {
+        method: "DELETE",
+        headers: { Cookie: orgB.cookieHeader },
+      })).status, 404, "an admin cannot delete another organization's report");
     } finally {
       await browser.close().catch(() => {});
     }
