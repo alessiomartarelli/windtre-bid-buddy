@@ -13,3 +13,6 @@ description: Quattro slot di invio Telegram per-org, compatibilità legacy, sche
   **Why:** deduplicare soltanto per fascia sopprimerebbe il secondo e il terzo invio parziale dello stesso giorno.
   **How to apply:** l'identità di invio resta distinta dal tipo di contenuto; spostare un orario crea un nuovo slot recuperabile entro la finestra prevista.
 - Lo scheduler pianifica sull'unione degli orari di tutte le org abilitate e rilegge la config a ogni giro; il POST della config chiama `rescheduleTelegramReports()` per ri-armare subito il timer (altrimenti un nuovo orario futuro di oggi verrebbe perso). Generation counter per invalidare i giri superati.
+- **Test di recovery al boot:** per asserire “nessun invio” con gli orari predefiniti, segnare come già inviati tutti e quattro gli slot (13:30, 16:00, 19:00, 22:15), oppure usare orari espliciti fuori dalla finestra di recovery.
+  **Why:** lo scheduler recupera gli slot predefiniti passati da meno di 90 minuti; un fixture legacy a due slot può inviare alle 16:00 o alle 19:00 in base all'ora reale del test.
+  **How to apply:** mantenere `sent` coerente con tutti gli orari usati da `collectSendTimes` nel test.
