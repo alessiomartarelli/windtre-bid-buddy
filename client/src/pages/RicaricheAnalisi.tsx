@@ -34,6 +34,16 @@ const PROVIDER_LABEL: Record<Provider, string> = { vodafone_fastweb: "Vodafone /
 const STATUSES = ["VERIFICATO", "INCONGRUENZA IMPORTO", "NON PRESENTE SU BISUITE", "NON PRESENTE SU FILE", "FUORI PERIODO", "RICEVUTA VIA API"];
 const money = (v: number | string | null | undefined) => { if (v === null || v === undefined || v === "") return "—"; const n = Number(v); return Number.isFinite(n) ? new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n) : "—"; };
 const dateLabel = (v: string | null | undefined) => v ? new Intl.DateTimeFormat("it-IT", { timeZone: "UTC" }).format(new Date(v)) : "—";
+const duplicateSummary = (count: number, rawIds: unknown) => {
+  const ids = Array.isArray(rawIds)
+    ? Array.from(new Set(rawIds.filter((id): id is string => typeof id === "string").map((id) => id.trim()).filter(Boolean)))
+    : [];
+  const shownIds = ids.slice(0, 3);
+  const idsLabel = shownIds.length
+    ? ` ID: ${shownIds.join(", ")}${ids.length > shownIds.length ? `, +${ids.length - shownIds.length} altri` : ""}.`
+    : "";
+  return `${count} ${count === 1 ? "transazione già caricata ignorata." : "transazioni già caricate ignorate."}${idsLabel}`;
+};
 const exportRows = (rows: Row[], hasProviderReport: boolean) => rows.map(r => hasProviderReport
   ? ({ PDV: r.pdv ?? "", Data: dateLabel(r.date), "ID vendita": r.saleId ?? "", "ID transazione provider": r.transactionId ?? "", Cliente: r.customer ?? "", Fornitore: r.supplier ?? "", "Tipo ricarica": r.rechargeType ?? "", "Importo fornitore": r.amount ?? "", "Importo BiSuite": r.bisuiteAmount ?? "", Differenza: r.difference ?? "", Telefono: r.phone ?? r.temporaryPhone ?? "", Stato: r.status })
   : ({ PDV: r.pdv ?? "", Data: dateLabel(r.date), "ID vendita": r.saleId ?? "", Cliente: r.customer ?? "", Fonte: "BiSuite API", Categoria: r.rechargeType ?? "RICARICHE", "Importo ricarica": r.bisuiteAmount ?? "", Telefono: r.phone ?? "", Stato: r.status }));
@@ -116,12 +126,21 @@ export default function RicaricheAnalisi() {
       const base64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1] || ""); reader.onerror = () => reject(new Error("Lettura del file non riuscita.")); reader.readAsDataURL(file); });
       const res = await fetch(apiUrl("/api/ricariche-analysis/upload"), { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: data.provider, fileName: file.name, workbookBase64: base64 }) });
       const body = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        const skipped = Number(body.duplicatesSkipped) || 0;
+        toast({
+          title: "Nessuna nuova transazione",
+          description: duplicateSummary(skipped, body.skippedTransactionIds),
+        });
+        await load({ silent: true, provider: data.provider });
+        return;
+      }
       if (!res.ok) throw new Error(body.message || "Caricamento non riuscito.");
       const skipped = Number(body.duplicatesSkipped) || 0;
       toast({
         title: "Report acquisito",
         description: skipped
-          ? `${body.rowCount ?? 0} nuove transazioni importate; ${skipped} già caricate ignorate.`
+          ? `${body.rowCount ?? 0} nuove transazioni importate; ${duplicateSummary(skipped, body.skippedTransactionIds)}`
           : `${body.rowCount ?? 0} righe elaborate.`,
       });
       await load({ silent: true, provider: data.provider });

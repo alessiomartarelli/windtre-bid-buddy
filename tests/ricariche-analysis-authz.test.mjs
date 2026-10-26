@@ -131,6 +131,7 @@ test("Analisi Ricariche: upload simultanei deduplicano solo per organizzazione e
     const duplicate = sameScopeResults.find(result => result.status === 409);
     assert.match(duplicate.body.message, /già caricate/i);
     assert.equal(duplicate.body.duplicatesSkipped, 1);
+    assert.deepEqual(duplicate.body.skippedTransactionIds, [transactionId]);
     for (const result of [otherOrganization, otherProvider]) {
       assert.equal(result.status, 201, JSON.stringify(result.body));
       assert.equal(result.body.rowCount, 1);
@@ -594,6 +595,12 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     assert.equal(duplicateUpload.status, 409);
     assert.match(duplicateUpload.body.message, /già caricate/i);
     assert.equal(duplicateUpload.body.duplicatesSkipped, 1);
+    assert.deepEqual(duplicateUpload.body.skippedTransactionIds, ["AUTHZ-TX-1"]);
+    assert.deepEqual(Object.keys(duplicateUpload.body).sort(), [
+      "duplicatesSkipped",
+      "message",
+      "skippedTransactionIds",
+    ], "the duplicate-only response contains transaction identifiers, not customer details");
     assert.equal((await jsonReq(`${BASE}${path}?provider=vodafone_fastweb`, { headers: headersA })).body.reports.length, 1,
       "an upload with only existing transaction IDs must not create a report");
     assert.equal((await jsonReq(`${BASE}${path}/${encodeURIComponent(reportId)}`, {
@@ -616,6 +623,7 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
     assert.equal(mixedUpload.status, 201, JSON.stringify(mixedUpload.body));
     assert.equal(mixedUpload.body.rowCount, 1);
     assert.equal(mixedUpload.body.duplicatesSkipped, 1);
+    assert.deepEqual(mixedUpload.body.skippedTransactionIds, ["AUTHZ-TX-1"]);
     const mixedReport = await jsonReq(
       `${BASE}${path}?provider=vodafone_fastweb&reportId=${encodeURIComponent(mixedUpload.body.reportId)}`,
       { headers: headersA },
@@ -817,6 +825,13 @@ test("Analisi Ricariche: modulo, persistenza report e isolamento organizzazione"
       await page.goto(`${BASE}/analisi-ricariche`, { waitUntil: "networkidle" });
       await page.getByRole("heading", { name: "Analisi ricariche" }).waitFor({ state: "visible", timeout: 20000 });
       await page.getByText("INCONGRUENZA IMPORTO", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "report-vf-duplicato-ui.xlsx",
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        buffer: Buffer.from(workbookBase64("€99.00", "AUTHZ-TX-1"), "base64"),
+      });
+      await page.getByText("Nessuna nuova transazione", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      await page.getByText("1 transazione già caricata ignorata. ID: AUTHZ-TX-1.", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
       assert.equal(await page.getByTestId("recharge-filter-from").inputValue(), "");
       assert.equal(await page.getByTestId("recharge-filter-to").inputValue(), "");
       assert.equal(await page.getByTestId("recharge-summaries").getByText("Totale BiSuite", { exact: true }).count(), 1);

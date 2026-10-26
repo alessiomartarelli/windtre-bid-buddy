@@ -1960,6 +1960,7 @@ export async function registerRoutes(
         return res.status(409).json({
           message: "Tutte le transazioni del file risultano già caricate. Non è stato creato un report duplicato.",
           duplicatesSkipped: imported.duplicatesSkipped,
+          skippedTransactionIds: imported.skippedTransactionIds,
         });
       }
       res.status(201).json({
@@ -1967,6 +1968,7 @@ export async function registerRoutes(
         reportId: imported.report.id,
         rowCount: imported.insertedCount,
         duplicatesSkipped: imported.duplicatesSkipped,
+        skippedTransactionIds: imported.skippedTransactionIds,
       });
     } catch (e) {
       console.error("Recharge analysis upload failed:", e);

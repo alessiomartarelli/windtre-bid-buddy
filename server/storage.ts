@@ -176,6 +176,7 @@ export interface IStorage {
     report: RicaricheAnalysisReport | null;
     insertedCount: number;
     duplicatesSkipped: number;
+    skippedTransactionIds: string[];
   }>;
   deleteRicaricheAnalysisReport(id: string, orgId: string): Promise<boolean>;
   setRicaricheAnalysisReportPeriod(id: string, orgId: string, provider: string, from: string | null, to: string | null): Promise<RicaricheAnalysisReport | undefined>;
@@ -1165,6 +1166,7 @@ export class DatabaseStorage implements IStorage {
     report: RicaricheAnalysisReport | null;
     insertedCount: number;
     duplicatesSkipped: number;
+    skippedTransactionIds: string[];
   }> {
     return db.transaction(async (tx) => {
       const lockKey = `ricariche-analysis:${report.organizationId}:${report.provider}`;
@@ -1187,15 +1189,19 @@ export class DatabaseStorage implements IStorage {
       const incomingRows = Array.isArray(report.rows)
         ? report.rows as Array<{ transactionId?: unknown; date?: unknown }>
         : [];
+      const skippedTransactionIds = new Set<string>();
       const uniqueRows = incomingRows.filter((row) => {
         const id = typeof row.transactionId === "string" ? row.transactionId.trim() : "";
-        if (!id || existingIds.has(id)) return false;
+        if (!id || existingIds.has(id)) {
+          if (id) skippedTransactionIds.add(id);
+          return false;
+        }
         existingIds.add(id);
         return true;
       });
       const duplicatesSkipped = incomingRows.length - uniqueRows.length;
       if (!uniqueRows.length) {
-        return { report: null, insertedCount: 0, duplicatesSkipped };
+        return { report: null, insertedCount: 0, duplicatesSkipped, skippedTransactionIds: Array.from(skippedTransactionIds) };
       }
       const dates = uniqueRows
         .map((row) => typeof row.date === "string" ? row.date.slice(0, 10) : "")
@@ -1210,7 +1216,12 @@ export class DatabaseStorage implements IStorage {
           periodTo: dates[dates.length - 1] ?? null,
         })
         .returning();
-      return { report: created, insertedCount: uniqueRows.length, duplicatesSkipped };
+      return {
+        report: created,
+        insertedCount: uniqueRows.length,
+        duplicatesSkipped,
+        skippedTransactionIds: Array.from(skippedTransactionIds),
+      };
     });
   }
 
