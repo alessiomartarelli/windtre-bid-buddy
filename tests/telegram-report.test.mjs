@@ -3088,10 +3088,10 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       const otherLabel = futureLabel === pastLabel ? labelOfMinutes(nowMin + 360) : futureLabel;
 
       await test("startTelegramReportScheduler arma UN solo timer sul prossimo slot", async () => {
-        // Entrambe le fasce già inviate: il recovery al boot non deve inviare.
+        // Tutti e quattro gli slot di default già inviati: il recovery al boot non deve inviare.
         setupScenario({
-          orgs: [{ id: "org-a" }], // default 13:30/22:15
-          sent: { "org-a": ["13:30", "22:15"] },
+          orgs: [{ id: "org-a" }],
+          sent: { "org-a": ["13:30", "16:00", "19:00", "22:15"] },
         });
         schedMod.startTelegramReportScheduler();
         await flush();
