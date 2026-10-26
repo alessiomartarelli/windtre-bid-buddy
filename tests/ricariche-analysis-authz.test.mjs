@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createServer as createNetServer } from "node:net";
 import * as XLSX from "xlsx";
 import {
   BASE, jsonReq, signup, newPool, setRole, cleanupOrg, launchBrowser, newAuthedContext,
@@ -29,6 +31,62 @@ function windTreWorkbookBase64(transactionId = "AUTHZ-W3-KEY") {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
   return XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
+}
+
+async function getAvailablePort() {
+  const server = createNetServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const { port } = server.address();
+  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  return port;
+}
+
+async function startSecondAppProcess() {
+  const port = await getAvailablePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: String(port) },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  const capture = chunk => {
+    output = `${output}${chunk}`.slice(-20_000);
+  };
+  child.stdout.on("data", capture);
+  child.stderr.on("data", capture);
+
+  try {
+    for (let attempt = 0; attempt < 90; attempt++) {
+      if (child.exitCode !== null) {
+        throw new Error(`second app process exited before becoming ready (code ${child.exitCode}):\n${output}`);
+      }
+      try {
+        const response = await fetch(`${baseUrl}/api/auth/user`, { signal: AbortSignal.timeout(1_000) });
+        if (response.status < 500) return { child, baseUrl };
+      } catch {
+        // The app is still starting; retry briefly.
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    throw new Error(`second app process did not become ready:\n${output}`);
+  } catch (error) {
+    child.kill("SIGTERM");
+    throw error;
+  }
+}
+
+async function stopAppProcess(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  await Promise.race([
+    new Promise(resolve => child.once("exit", resolve)),
+    new Promise(resolve => setTimeout(resolve, 5_000)),
+  ]);
+  if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
 }
 
 test("Analisi Ricariche: upload simultanei deduplicano solo per organizzazione e provider", async () => {
@@ -106,6 +164,64 @@ test("Analisi Ricariche: upload simultanei deduplicano solo per organizzazione e
   } finally {
     await cleanupOrg(pool, orgA.orgId);
     await cleanupOrg(pool, orgB.orgId);
+    if (brandIds.length) await pool.query("DELETE FROM brands WHERE id = ANY($1::uuid[])", [brandIds]).catch(() => {});
+    await pool.end();
+  }
+});
+
+test("Analisi Ricariche: processi applicativi distinti deduplicano upload paralleli sul database condiviso", async () => {
+  const pool = await newPool();
+  const org = await signup({ prefix: "ricariche_cross_process", fullName: "Ricariche processi distinti" });
+  const brandIds = [];
+  let appProcess;
+  const transactionId = `CROSS-PROCESS-${Date.now()}-${Math.random()}`;
+  try {
+    const brand = await pool.query(
+      "INSERT INTO brands (name) VALUES ($1) RETURNING id",
+      [`Vodafone cross process ${Date.now()} ${Math.random()}`],
+    );
+    brandIds.push(brand.rows[0].id);
+    await pool.query(
+      "INSERT INTO organization_brands (organization_id,brand_id) VALUES ($1,$2)",
+      [org.orgId, brandIds[0]],
+    );
+
+    appProcess = await startSecondAppProcess();
+    const workbook = workbookBase64("€10.00", transactionId);
+    const upload = (baseUrl, fileName) => jsonReq(`${baseUrl}/api/ricariche-analysis/upload`, {
+      method: "POST",
+      headers: { Cookie: org.cookieHeader },
+      body: JSON.stringify({ provider: "vodafone_fastweb", fileName, workbookBase64: workbook }),
+    });
+    const [firstProcessResult, secondProcessResult] = await Promise.all([
+      upload(BASE, "cross-process-primary.xlsx"),
+      upload(appProcess.baseUrl, "cross-process-secondary.xlsx"),
+    ]);
+    const results = [firstProcessResult, secondProcessResult];
+    assert.deepEqual(
+      results.map(result => result.status).sort(),
+      [201, 409],
+      `parallel uploads handled by separate app processes should save once: ${JSON.stringify(results)}`,
+    );
+    const duplicate = results.find(result => result.status === 409);
+    assert.match(duplicate.body.message, /già caricate/i);
+    assert.equal(duplicate.body.duplicatesSkipped, 1);
+
+    const reports = await jsonReq(`${BASE}/api/ricariche-analysis?provider=vodafone_fastweb`, {
+      headers: { Cookie: org.cookieHeader },
+    });
+    assert.equal(reports.status, 200, JSON.stringify(reports.body));
+    assert.equal(reports.body.reports.length, 1, "only one report should persist across both app processes");
+    assert.equal(reports.body.reports[0].rowCount, 1);
+    const savedReport = await jsonReq(
+      `${BASE}/api/ricariche-analysis?provider=vodafone_fastweb&reportId=${encodeURIComponent(reports.body.reports[0].id)}`,
+      { headers: { Cookie: org.cookieHeader } },
+    );
+    assert.equal(savedReport.status, 200, JSON.stringify(savedReport.body));
+    assert.deepEqual(savedReport.body.rows.map(row => row.transactionId), [transactionId]);
+  } finally {
+    if (appProcess) await stopAppProcess(appProcess.child);
+    await cleanupOrg(pool, org.orgId);
     if (brandIds.length) await pool.query("DELETE FROM brands WHERE id = ANY($1::uuid[])", [brandIds]).catch(() => {});
     await pool.end();
   }
