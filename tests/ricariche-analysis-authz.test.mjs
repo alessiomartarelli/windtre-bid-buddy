@@ -20,16 +20,96 @@ function workbookBase64(amount = "€10.00", transactionId = "AUTHZ-TX-1", suppl
   return workbookBase64Rows([["12/09/26 15:10:00", "3471234567", "", amount, transactionId, supplier]]);
 }
 
-function windTreWorkbookBase64() {
+function windTreWorkbookBase64(transactionId = "AUTHZ-W3-KEY") {
   const rows = [
     ["Codice Ordine", "Keycode", "MSISDN", "ICCID", "Taglio ricarica", "Tipo ricarica", "Stato", "Data utilizzo", "PDV", "alias"],
-    ["AUTHZ-W3-ORDER", "AUTHZ-W3-KEY", "3471234567", "8939880846057080279", 15, "VSC", "BURNED", "2026-10-09", "POS-W3", "Test"],
+    ["AUTHZ-W3-ORDER", transactionId, "3471234567", "8939880846057080279", 15, "VSC", "BURNED", "2026-10-09", "POS-W3", "Test"],
   ];
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
   return XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
 }
+
+test("Analisi Ricariche: upload simultanei deduplicano solo per organizzazione e provider", async () => {
+  const pool = await newPool();
+  const orgA = await signup({ prefix: "ricariche_concurrent_a", fullName: "Ricariche concorrenti A" });
+  const orgB = await signup({ prefix: "ricariche_concurrent_b", fullName: "Ricariche concorrenti B" });
+  const brandIds = [];
+  const transactionId = `CONCURRENT-${Date.now()}-${Math.random()}`;
+  try {
+    for (const [orgId, name] of [
+      [orgA.orgId, `Vodafone concurrent ${Date.now()} ${Math.random()}`],
+      [orgA.orgId, `WindTre concurrent ${Date.now()} ${Math.random()}`],
+      [orgB.orgId, `Vodafone concurrent ${Date.now()} ${Math.random()}`],
+    ]) {
+      const brand = await pool.query("INSERT INTO brands (name) VALUES ($1) RETURNING id", [name]);
+      const brandId = brand.rows[0].id;
+      brandIds.push(brandId);
+      await pool.query(
+        "INSERT INTO organization_brands (organization_id,brand_id) VALUES ($1,$2)",
+        [orgId, brandId],
+      );
+    }
+
+    const upload = (user, provider, fileName, workbook) => jsonReq(`${BASE}/api/ricariche-analysis/upload`, {
+      method: "POST",
+      headers: { Cookie: user.cookieHeader },
+      body: JSON.stringify({ provider, fileName, workbookBase64: workbook }),
+    });
+    const [sameScopeA, sameScopeB, otherOrganization, otherProvider] = await Promise.all([
+      upload(orgA, "vodafone_fastweb", "concurrent-a.xlsx", workbookBase64("€10.00", transactionId)),
+      upload(orgA, "vodafone_fastweb", "concurrent-b.xlsx", workbookBase64("€10.00", transactionId)),
+      upload(orgB, "vodafone_fastweb", "concurrent-other-org.xlsx", workbookBase64("€10.00", transactionId)),
+      upload(orgA, "windtre", "concurrent-other-provider.xlsx", windTreWorkbookBase64(transactionId)),
+    ]);
+
+    const sameScopeResults = [sameScopeA, sameScopeB];
+    assert.deepEqual(
+      sameScopeResults.map(result => result.status).sort(),
+      [201, 409],
+      `parallel uploads for the same organization/provider should save exactly one report: ${JSON.stringify(sameScopeResults)}`,
+    );
+    const duplicate = sameScopeResults.find(result => result.status === 409);
+    assert.match(duplicate.body.message, /già caricate/i);
+    assert.equal(duplicate.body.duplicatesSkipped, 1);
+    for (const result of [otherOrganization, otherProvider]) {
+      assert.equal(result.status, 201, JSON.stringify(result.body));
+      assert.equal(result.body.rowCount, 1);
+      assert.equal(result.body.duplicatesSkipped, 0);
+    }
+
+    const vodafoneA = await jsonReq(`${BASE}/api/ricariche-analysis?provider=vodafone_fastweb`, {
+      headers: { Cookie: orgA.cookieHeader },
+    });
+    const vodafoneB = await jsonReq(`${BASE}/api/ricariche-analysis?provider=vodafone_fastweb`, {
+      headers: { Cookie: orgB.cookieHeader },
+    });
+    const windTreA = await jsonReq(`${BASE}/api/ricariche-analysis?provider=windtre`, {
+      headers: { Cookie: orgA.cookieHeader },
+    });
+    assert.equal(vodafoneA.body.reports.length, 1, "the concurrent duplicate must not create a second report");
+    assert.equal(vodafoneB.body.reports.length, 1);
+    assert.equal(windTreA.body.reports.length, 1);
+    for (const [user, provider, reportId] of [
+      [orgA, "vodafone_fastweb", vodafoneA.body.reports[0].id],
+      [orgB, "vodafone_fastweb", vodafoneB.body.reports[0].id],
+      [orgA, "windtre", windTreA.body.reports[0].id],
+    ]) {
+      const report = await jsonReq(
+        `${BASE}/api/ricariche-analysis?provider=${provider}&reportId=${encodeURIComponent(reportId)}`,
+        { headers: { Cookie: user.cookieHeader } },
+      );
+      assert.equal(report.status, 200, JSON.stringify(report.body));
+      assert.deepEqual(report.body.rows.map(row => row.transactionId), [transactionId]);
+    }
+  } finally {
+    await cleanupOrg(pool, orgA.orgId);
+    await cleanupOrg(pool, orgB.orgId);
+    if (brandIds.length) await pool.query("DELETE FROM brands WHERE id = ANY($1::uuid[])", [brandIds]).catch(() => {});
+    await pool.end();
+  }
+});
 
 test("WindTre API riconcilia ogni ricarica dello stesso scontrino senza duplicare gli importi", async () => {
   const pool = await newPool();
