@@ -449,6 +449,45 @@ export function extractRechargeSales(sales: Array<{
 }
 
 /**
+ * Compatibilità con report salvati quando le righe ripetute non erano ancora
+ * accorpate in importazione. La transazione provider resta l'unità di match.
+ */
+function aggregateProviderRowsByTransaction(rows: RechargeProviderRow[]): RechargeProviderRow[] {
+  const grouped = new Map<string, RechargeProviderRow>();
+  for (const row of rows) {
+    const transactionId = text(row.transactionId);
+    const previous = grouped.get(transactionId);
+    if (!previous) {
+      grouped.set(transactionId, {
+        ...row,
+        phoneCandidates: Array.from(new Set([
+          ...(row.phoneCandidates ?? []),
+          row.phone,
+          row.temporaryPhone,
+        ].map(normalizeRechargePhone).filter(Boolean))),
+      });
+      continue;
+    }
+    const totalCents = Math.round(previous.amount * 100) + Math.round(row.amount * 100);
+    grouped.set(transactionId, {
+      ...previous,
+      date: previous.date < row.date ? previous.date : row.date,
+      phone: previous.phone || row.phone,
+      temporaryPhone: previous.temporaryPhone || row.temporaryPhone,
+      phoneCandidates: Array.from(new Set([
+        ...previous.phoneCandidates,
+        ...(row.phoneCandidates ?? []),
+        row.phone,
+        row.temporaryPhone,
+      ].map(normalizeRechargePhone).filter(Boolean))),
+      amount: totalCents / 100,
+      rowCount: (previous.rowCount ?? 1) + (row.rowCount ?? 1),
+    });
+  }
+  return Array.from(grouped.values());
+}
+
+/**
  * Abbina una sola transazione fornitore a ogni candidato BiSuite al massimo
  * (singola ricarica WindTre o vendita aggregata VF).
  * Una corrispondenza richiede giorno e numero; tra più candidati si preferisce
@@ -459,10 +498,11 @@ export function reconcileRechargeRows(
   sales: RechargeSaleCandidate[],
   options: { includeUnmatchedSales?: boolean } = {},
 ): RechargeReconciliationRow[] {
+  const transactions = aggregateProviderRowsByTransaction(providerRows);
   const candidateKey = (sale: RechargeSaleCandidate) => sale.candidateId ?? sale.saleId;
   const remainingSales = new Set(sales.map(candidateKey));
   const assignments = new Map<string, RechargeSaleCandidate>();
-  const ordered = [...providerRows].sort((a, b) => {
+  const ordered = [...transactions].sort((a, b) => {
     const candidatesA = sales.filter((sale) => sale.date === a.date.slice(0, 10) && sale.phones.some((phone) => a.phoneCandidates.includes(phone))).length;
     const candidatesB = sales.filter((sale) => sale.date === b.date.slice(0, 10) && sale.phones.some((phone) => b.phoneCandidates.includes(phone))).length;
     return candidatesA - candidatesB || a.transactionId.localeCompare(b.transactionId);
@@ -483,7 +523,7 @@ export function reconcileRechargeRows(
     }
   }
 
-  const result: RechargeReconciliationRow[] = providerRows.map((row) => {
+  const result: RechargeReconciliationRow[] = transactions.map((row) => {
     const sale = assignments.get(row.transactionId);
     const difference = sale ? Math.round((sale.amount - row.amount) * 100) / 100 : null;
     return {

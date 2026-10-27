@@ -198,6 +198,30 @@ test("una stessa vendita BiSuite non può verificare due transazioni del report"
   assert.equal(rows.filter((r) => r.status === "NON PRESENTE SU BISUITE").length, 1);
 });
 
+test("ricariche Vodafone duplicate salvate si sommano per ID prima del match BiSuite", () => {
+  const phone = "3470766534";
+  const duplicateRows = [
+    recharge("1412523", "2026-09-30T10:00:00.000Z", phone, "", 5),
+    recharge("1412523", "2026-09-30T10:00:00.000Z", phone, "", 10),
+  ];
+  const [row] = reconcileRechargeRows(duplicateRows, [
+    {
+      saleId: "1412523",
+      bisuiteId: 1412523,
+      date: "2026-09-30",
+      pdv: "VODAFONE STORE POMEZIA",
+      customer: "",
+      amount: 15,
+      phones: [phone],
+    },
+  ]);
+  assert.equal(row.status, "VERIFICATO");
+  assert.equal(row.amount, 15);
+  assert.equal(row.bisuiteAmount, 15);
+  assert.equal(row.difference, 0);
+  assert.equal(row.transactionId, "1412523");
+});
+
 test("riconciliazione WindTre conserva il provider e abbina la singola Keycode alla vendita", () => {
   const providerRows = parseWindTreRechargeWorkbook(workbookBytes(windTreHeaders, [
     ["ORD-1", "KEY-1", "3471112233", "ICCID-1", 15, "VSC", "BURNED", "2026-10-09", "POS-1", "alias"],
