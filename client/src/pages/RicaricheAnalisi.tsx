@@ -12,7 +12,7 @@ import { rechargeReportOverlapsPeriod } from "@shared/ricaricheAnalysis";
 import * as XLSX from "xlsx";
 
 type Report = { id: string; fileName: string; uploadedAt: string; rowCount: number; periodFrom: string | null; periodTo: string | null; declaredPeriodFrom: string | null; declaredPeriodTo: string | null };
-type Row = { id: string; date: string; phone: string | null; temporaryPhone: string | null; amount: number | string | null; customer: string | null; supplier: string | null; transactionId: string | null; rechargeType: string | null; pdv: string | null; saleId: string | null; bisuiteAmount: number | string | null; difference: number | string | null; status: string };
+type Row = { id: string; date: string; fileDate?: string | null; bisuiteDate?: string | null; phone: string | null; temporaryPhone: string | null; amount: number | string | null; customer: string | null; supplier: string | null; transactionId: string | null; rechargeType: string | null; pdv: string | null; saleId: string | null; bisuiteAmount: number | string | null; difference: number | string | null; status: string };
 type Provider = "vodafone_fastweb" | "windtre";
 type Payload = {
   provider: Provider | null;
@@ -45,7 +45,7 @@ const duplicateSummary = (count: number, rawIds: unknown) => {
   return `${count} ${count === 1 ? "transazione già caricata ignorata." : "transazioni già caricate ignorate."}${idsLabel}`;
 };
 const exportRows = (rows: Row[], hasProviderReport: boolean) => rows.map(r => hasProviderReport
-  ? ({ PDV: r.pdv ?? "", Data: dateLabel(r.date), "ID vendita": r.saleId ?? "", "ID transazione provider": r.transactionId ?? "", Cliente: r.customer ?? "", Fornitore: r.supplier ?? "", "Tipo ricarica": r.rechargeType ?? "", "Importo fornitore": r.amount ?? "", "Importo BiSuite": r.bisuiteAmount ?? "", Differenza: r.difference ?? "", Telefono: r.phone ?? r.temporaryPhone ?? "", Stato: r.status })
+  ? ({ PDV: r.pdv ?? "", "Data file": dateLabel(r.fileDate ?? (r.amount !== null ? r.date : null)), "Data BiSuite": dateLabel(r.bisuiteDate), "ID vendita": r.saleId ?? "", "ID transazione provider": r.transactionId ?? "", Cliente: r.customer ?? "", Fornitore: r.supplier ?? "", "Tipo ricarica": r.rechargeType ?? "", "Importo fornitore": r.amount ?? "", "Importo BiSuite": r.bisuiteAmount ?? "", Differenza: r.difference ?? "", Telefono: r.phone ?? r.temporaryPhone ?? "", Stato: r.status })
   : ({ PDV: r.pdv ?? "", Data: dateLabel(r.date), "ID vendita": r.saleId ?? "", Cliente: r.customer ?? "", Fonte: "BiSuite API", Categoria: r.rechargeType ?? "RICARICHE", "Importo ricarica": r.bisuiteAmount ?? "", Telefono: r.phone ?? "", Stato: r.status }));
 
 export default function RicaricheAnalisi() {
@@ -259,7 +259,7 @@ export default function RicaricheAnalisi() {
     } else { const ws = XLSX.utils.json_to_sheet(out); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Ricariche"); XLSX.writeFile(wb, "analisi-ricariche.xlsx"); }
   };
   const sortBy = (key: keyof Row) => setSort(prev => ({ key, dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc" }));
-  const columns: { label: string; key: keyof Row; cls?: string }[] = [{ label: "PDV", key: "pdv" }, { label: "Data", key: "date" }, { label: "ID vendita", key: "saleId" }, { label: "Cliente", key: "customer" }, { label: "Fornitore", key: "supplier" }, { label: "Importo provider", key: "amount" }, { label: "BiSuite", key: "bisuiteAmount" }, { label: "Differenza", key: "difference" }, { label: "Telefono", key: "phone" }, { label: "Stato", key: "status" }];
+  const columns: { label: string; key: keyof Row; cls?: string }[] = [{ label: "PDV", key: "pdv" }, { label: "Data file", key: "fileDate" }, { label: "Data BiSuite", key: "bisuiteDate" }, { label: "ID vendita", key: "saleId" }, { label: "Cliente", key: "customer" }, { label: "Fornitore", key: "supplier" }, { label: "Importo provider", key: "amount" }, { label: "BiSuite", key: "bisuiteAmount" }, { label: "Differenza", key: "difference" }, { label: "Telefono", key: "phone" }, { label: "Stato", key: "status" }];
   const providerLabel = data.provider ? PROVIDER_LABEL[data.provider] : "provider";
   const periodConfirmed = !!activeReport?.declaredPeriodFrom && !!activeReport?.declaredPeriodTo;
   const outsidePeriodRows = data.rows.filter(r => r.status === "FUORI PERIODO");
@@ -393,7 +393,8 @@ export default function RicaricheAnalisi() {
                 const tone = r.status === "VERIFICATO" ? "ok" : r.status === "INCONGRUENZA IMPORTO" || r.status === "FUORI PERIODO" ? "warn" : "bad";
                 return <tr key={r.id || `${r.date}-${r.transactionId}-${i}`} className={`group transition-colors ${r.status === "FUORI PERIODO" ? "bg-[#fffaf0] hover:bg-[#fff5df]" : "hover:bg-[#f2f8f5]"}`}>
                   <td className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-[#314d4f]">{r.pdv || "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] text-[#52696b]">{dateLabel(r.date)}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] text-[#52696b]">{dateLabel(r.fileDate ?? (r.amount !== null ? r.date : null))}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] text-[#52696b]">{dateLabel(r.bisuiteDate)}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] text-[#496164]">{r.saleId || "—"}</td>
                   <td className="max-w-[180px] truncate px-3 py-2.5 text-xs font-medium text-[#304a4c]" title={r.customer || ""}>{r.customer || "—"}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-xs text-[#52696b]">{r.supplier || "—"}</td>

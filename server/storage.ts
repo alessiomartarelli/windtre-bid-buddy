@@ -135,6 +135,7 @@ export interface IStorage {
   getBisuiteSales(orgId: string, from?: Date, to?: Date, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
+  getBisuiteRechargeSalesByPhones(orgId: string, phones: string[]): Promise<BisuiteSale[]>;
   getBisuiteRechargeSalesPage(orgId: string, fromYMD: string, toYMD: string, page: number, pageSize: number): Promise<{ sales: BisuiteSale[]; hasMore: boolean }>;
   getBisuiteRechargeSalesSummary(orgId: string, fromYMD: string, toYMD: string): Promise<{
     articleCount: number;
@@ -716,6 +717,32 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(bisuiteSales)
       .where(and(...conditions))
       .orderBy(desc(bisuiteSales.dataVendita));
+  }
+
+  async getBisuiteRechargeSalesByPhones(orgId: string, phones: string[]): Promise<BisuiteSale[]> {
+    const uniquePhones = Array.from(new Set(phones.filter(phone => /^\d{8,15}$/.test(phone))));
+    if (!uniquePhones.length) return [];
+    // Phones are normalized digit strings, so the alternation is safe to use
+    // against digits-only article JSON and also handles formatted/+39 values.
+    const phonePattern = `(${uniquePhones.join("|")})`;
+    return await db.select().from(bisuiteSales)
+      .where(and(
+        eq(bisuiteSales.organizationId, orgId),
+        sql`upper(coalesce(trim(${bisuiteSales.stato}), '')) <> 'ANNULLATA'`,
+        sql`EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(${bisuiteSales.rawData}->'articoli') = 'array'
+              THEN ${bisuiteSales.rawData}->'articoli'
+              ELSE '[]'::jsonb
+            END
+          ) AS article
+          WHERE upper(trim(article->'categoria'->>'nome')) = 'RICARICHE'
+            AND regexp_replace(article::text, '[^0-9]', '', 'g') ~ ${phonePattern}
+        )`,
+      ))
+      .orderBy(desc(bisuiteSales.dataVendita), desc(bisuiteSales.id));
   }
 
   async getBisuiteRechargeSalesPage(

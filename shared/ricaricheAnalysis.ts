@@ -61,6 +61,8 @@ export interface RechargeSaleCandidate {
 export interface RechargeReconciliationRow {
   id: string;
   date: string;
+  fileDate: string | null;
+  bisuiteDate: string | null;
   phone: string | null;
   temporaryPhone: string | null;
   amount: number | null;
@@ -496,25 +498,37 @@ function aggregateProviderRowsByTransaction(rows: RechargeProviderRow[]): Rechar
 export function reconcileRechargeRows(
   providerRows: RechargeProviderRow[],
   sales: RechargeSaleCandidate[],
-  options: { includeUnmatchedSales?: boolean } = {},
+  options: { includeUnmatchedSales?: boolean; allowDateMismatch?: boolean } = {},
 ): RechargeReconciliationRow[] {
   const transactions = aggregateProviderRowsByTransaction(providerRows);
   const candidateKey = (sale: RechargeSaleCandidate) => sale.candidateId ?? sale.saleId;
   const remainingSales = new Set(sales.map(candidateKey));
   const assignments = new Map<string, RechargeSaleCandidate>();
+  const providerDay = (row: RechargeProviderRow) => row.date.slice(0, 10);
+  const canMatch = (row: RechargeProviderRow, sale: RechargeSaleCandidate) =>
+    (options.allowDateMismatch || sale.date === providerDay(row)) &&
+    sale.phones.some((phone) => row.phoneCandidates.includes(phone));
+  const dayDistance = (a: string, b: string) => {
+    const aTime = Date.parse(`${a}T00:00:00.000Z`);
+    const bTime = Date.parse(`${b}T00:00:00.000Z`);
+    return Number.isFinite(aTime) && Number.isFinite(bTime)
+      ? Math.abs(aTime - bTime)
+      : Number.MAX_SAFE_INTEGER;
+  };
   const ordered = [...transactions].sort((a, b) => {
-    const candidatesA = sales.filter((sale) => sale.date === a.date.slice(0, 10) && sale.phones.some((phone) => a.phoneCandidates.includes(phone))).length;
-    const candidatesB = sales.filter((sale) => sale.date === b.date.slice(0, 10) && sale.phones.some((phone) => b.phoneCandidates.includes(phone))).length;
+    const candidatesA = sales.filter((sale) => canMatch(a, sale)).length;
+    const candidatesB = sales.filter((sale) => canMatch(b, sale)).length;
     return candidatesA - candidatesB || a.transactionId.localeCompare(b.transactionId);
   });
   for (const row of ordered) {
     const candidates = sales.filter((sale) =>
       remainingSales.has(candidateKey(sale)) &&
-      sale.date === row.date.slice(0, 10) &&
-      sale.phones.some((phone) => row.phoneCandidates.includes(phone)),
+      canMatch(row, sale),
     );
     candidates.sort((a, b) =>
+      Number(b.date === providerDay(row)) - Number(a.date === providerDay(row)) ||
       Math.abs(a.amount - row.amount) - Math.abs(b.amount - row.amount) ||
+      dayDistance(a.date, providerDay(row)) - dayDistance(b.date, providerDay(row)) ||
       a.saleId.localeCompare(b.saleId, undefined, { numeric: true }),
     );
     if (candidates[0]) {
@@ -529,6 +543,8 @@ export function reconcileRechargeRows(
     return {
       id: `provider:${row.transactionId}`,
       date: row.date,
+      fileDate: row.date,
+      bisuiteDate: sale?.date ?? null,
       phone: row.phone || null,
       temporaryPhone: row.temporaryPhone || null,
       amount: row.amount,
@@ -548,6 +564,8 @@ export function reconcileRechargeRows(
     result.push({
       id: `bisuite:${candidateKey(sale)}`,
       date: sale.date,
+      fileDate: null,
+      bisuiteDate: sale.date,
       phone: sale.phones[0] || null,
       temporaryPhone: null,
       amount: null,
@@ -570,6 +588,8 @@ export function rechargeApiRows(sales: RechargeSaleCandidate[]): RechargeReconci
   return sales.map((sale) => ({
     id: `bisuite-api:${sale.candidateId ?? sale.saleId}`,
     date: sale.date,
+    fileDate: null,
+    bisuiteDate: sale.date,
     phone: sale.phones.join(", ") || null,
     temporaryPhone: null,
     amount: null,

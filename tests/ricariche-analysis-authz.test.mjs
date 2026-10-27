@@ -290,6 +290,57 @@ test("WindTre API riconcilia ogni ricarica dello stesso scontrino senza duplicar
   }
 });
 
+test("Vodafone trova la vendita BiSuite dello stesso numero anche con data diversa", async () => {
+  const pool = await newPool();
+  const user = await signup({ prefix: "ricariche_vf_date_match", fullName: "Ricariche Vodafone date diverse" });
+  try {
+    const phone = "3895199215";
+    await pool.query(`INSERT INTO bisuite_sales
+      (organization_id,bisuite_id,data_vendita,codice_pos,nome_cliente,stato,totale,raw_data)
+      VALUES ($1,9901,'2026-09-30 23:59:00','POS-VF','Cliente VF','FINALIZZATA IN CASSA','10.00',$2::jsonb)`,
+    [user.orgId, JSON.stringify({ articoli: [{
+      categoria: { nome: "RICARICHE" },
+      telefono: phone,
+      dettaglio: { prezzo: "10.00" },
+    }] })]);
+    const probe = await pool.query(`SELECT bisuite_id,
+      regexp_replace(article::text, '[^0-9]', '', 'g') AS digits
+      FROM bisuite_sales
+      CROSS JOIN LATERAL jsonb_array_elements(raw_data->'articoli') AS article
+      WHERE organization_id=$1 AND upper(trim(article->'categoria'->>'nome'))='RICARICHE'
+        AND regexp_replace(article::text, '[^0-9]', '', 'g') ~ $2`,
+    [user.orgId, `(${phone})`]);
+    console.log("Vodafone date mismatch SQL probe", probe.rows);
+
+    const headers = { Cookie: user.cookieHeader };
+    const upload = await jsonReq(`${BASE}/api/ricariche-analysis/upload`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        provider: "vodafone_fastweb",
+        fileName: "vodafone-date-diverse.xlsx",
+        workbookBase64: workbookBase64Rows([
+          ["01/10/26 00:01:00", phone, "", "€10.00", "VF-DATE-DIFF", "Vodafone Store"],
+        ]),
+      }),
+    });
+    assert.equal(upload.status, 201, JSON.stringify(upload.body));
+    const result = await jsonReq(
+      `${BASE}/api/ricariche-analysis?provider=vodafone_fastweb&reportId=${encodeURIComponent(upload.body.reportId)}`,
+      { headers },
+    );
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.equal(result.body.rows.length, 1);
+    assert.equal(result.body.rows[0].status, "VERIFICATO");
+    assert.equal(result.body.rows[0].fileDate, "2026-10-01T00:01:00.000Z");
+    assert.equal(result.body.rows[0].bisuiteDate, "2026-09-30");
+    assert.equal(result.body.rows[0].saleId, "9901");
+  } finally {
+    await cleanupOrg(pool, user.orgId);
+    await pool.end();
+  }
+});
+
 test("Analisi Ricariche API pagina le vendite per periodo mantenendo l'isolamento tra organizzazioni", async () => {
   const pool = await newPool();
   const orgA = await signup({ prefix: "ricariche_page_a", fullName: "Ricariche pagina A" });

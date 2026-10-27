@@ -222,6 +222,27 @@ test("ricariche Vodafone duplicate salvate si sommano per ID prima del match BiS
   assert.equal(row.transactionId, "1412523");
 });
 
+test("Vodafone abbina per numero anche con date diverse e restituisce entrambe le date", () => {
+  const phone = "3895199215";
+  const [row] = reconcileRechargeRows([
+    recharge("VF-DATE-DIFF", "2026-10-01T00:01:00.000Z", phone, "", 10),
+  ], [
+    {
+      saleId: "901",
+      bisuiteId: 901,
+      date: "2026-09-30",
+      pdv: "POS-1",
+      customer: "Cliente",
+      amount: 10,
+      phones: [phone],
+    },
+  ], { allowDateMismatch: true });
+  assert.equal(row.status, "VERIFICATO");
+  assert.equal(row.fileDate, "2026-10-01T00:01:00.000Z");
+  assert.equal(row.bisuiteDate, "2026-09-30");
+  assert.equal(row.difference, 0);
+});
+
 test("riconciliazione WindTre conserva il provider e abbina la singola Keycode alla vendita", () => {
   const providerRows = parseWindTreRechargeWorkbook(workbookBytes(windTreHeaders, [
     ["ORD-1", "KEY-1", "3471112233", "ICCID-1", 15, "VSC", "BURNED", "2026-10-09", "POS-1", "alias"],

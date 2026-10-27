@@ -33,6 +33,7 @@ import {
   extractRechargeSales,
   getRicaricheAnalysisProvidersForBrands,
   isRechargeDateWithinPeriod,
+  normalizeRechargePhone,
   parseVodafoneRechargeWorkbook,
   parseWindTreRechargeWorkbook,
   rechargeApiRows,
@@ -1847,21 +1848,54 @@ export async function registerRoutes(
       const periodConfirmed = !!declaredFrom && !!declaredTo;
       const salesFrom = periodConfirmed ? declaredFrom! : dates[0];
       const salesTo = periodConfirmed ? declaredTo! : dates[dates.length - 1];
-      const sales = salesFrom && salesTo
-        ? await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, salesFrom, salesTo, true)
-        : [];
+      const sales = provider === "vodafone_fastweb"
+        ? await storage.getBisuiteRechargeSalesByPhones(
+            profile.organizationId,
+            Array.from(new Set(providerRows.flatMap((row) => [
+              ...(Array.isArray(row?.phoneCandidates) ? row.phoneCandidates : []),
+              row?.phone,
+              row?.temporaryPhone,
+            ]).map(normalizeRechargePhone).filter((phone) => phone.length >= 8))),
+          )
+        : salesFrom && salesTo
+          ? await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, salesFrom, salesTo, true)
+          : [];
       const candidates = extractRechargeSales(sales, { splitArticles: provider === "windtre" });
-      const reconciled = periodConfirmed
-        ? [
-            ...reconcileRechargeRows(
-              providerRows.filter((row) => isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!)),
-              candidates,
-            ),
-            ...rowsOutsideRechargePeriod(
-              providerRows.filter((row) => !isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!)),
-            ),
-          ].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id))
-        : reconcileRechargeRows(providerRows, candidates, { includeUnmatchedSales: false });
+      let reconciled;
+      if (periodConfirmed && provider === "vodafone_fastweb") {
+        const inPeriodProviderRows = providerRows.filter((row) => isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!));
+        const matchedRows = reconcileRechargeRows(inPeriodProviderRows, candidates, {
+          allowDateMismatch: true,
+          includeUnmatchedSales: false,
+        });
+        const matchedSaleIds = new Set(matchedRows.map((row) => row.saleId).filter(Boolean));
+        const unmatchedPeriodSales = candidates.filter((sale) =>
+          isRechargeDateWithinPeriod(sale.date, declaredFrom!, declaredTo!) &&
+          !matchedSaleIds.has(sale.saleId),
+        );
+        reconciled = [
+          ...matchedRows,
+          ...reconcileRechargeRows([], unmatchedPeriodSales),
+          ...rowsOutsideRechargePeriod(
+            providerRows.filter((row) => !isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!)),
+          ),
+        ].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+      } else if (periodConfirmed) {
+        reconciled = [
+          ...reconcileRechargeRows(
+            providerRows.filter((row) => isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!)),
+            candidates,
+          ),
+          ...rowsOutsideRechargePeriod(
+            providerRows.filter((row) => !isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!)),
+          ),
+        ].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+      } else {
+        reconciled = reconcileRechargeRows(providerRows, candidates, {
+          includeUnmatchedSales: false,
+          allowDateMismatch: provider === "vodafone_fastweb",
+        });
+      }
       const pdvs = Array.from(new Set(reconciled.map((r) => r.pdv).filter((v): v is string => !!v)))
         .sort((a, b) => a.localeCompare(b, "it"))
         .map((key) => ({ key, label: key }));
