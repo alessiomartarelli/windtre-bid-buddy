@@ -492,8 +492,8 @@ function aggregateProviderRowsByTransaction(rows: RechargeProviderRow[]): Rechar
 /**
  * Abbina una sola transazione fornitore a ogni candidato BiSuite al massimo
  * (singola ricarica WindTre o vendita aggregata VF).
- * Una corrispondenza richiede giorno e numero; tra più candidati si preferisce
- * l'importo più vicino, mantenendo deterministico il risultato.
+ * Prima abbina giorno e numero; per VF è possibile un secondo passaggio sui
+ * numeri rimasti anche con date diverse. Ogni vendita viene consumata una volta.
  */
 export function reconcileRechargeRows(
   providerRows: RechargeProviderRow[],
@@ -505,8 +505,8 @@ export function reconcileRechargeRows(
   const remainingSales = new Set(sales.map(candidateKey));
   const assignments = new Map<string, RechargeSaleCandidate>();
   const providerDay = (row: RechargeProviderRow) => row.date.slice(0, 10);
-  const canMatch = (row: RechargeProviderRow, sale: RechargeSaleCandidate) =>
-    (options.allowDateMismatch || sale.date === providerDay(row)) &&
+  const canMatch = (row: RechargeProviderRow, sale: RechargeSaleCandidate, allowDateMismatch: boolean) =>
+    (allowDateMismatch || sale.date === providerDay(row)) &&
     sale.phones.some((phone) => row.phoneCandidates.includes(phone));
   const dayDistance = (a: string, b: string) => {
     const aTime = Date.parse(`${a}T00:00:00.000Z`);
@@ -515,27 +515,30 @@ export function reconcileRechargeRows(
       ? Math.abs(aTime - bTime)
       : Number.MAX_SAFE_INTEGER;
   };
-  const ordered = [...transactions].sort((a, b) => {
-    const candidatesA = sales.filter((sale) => canMatch(a, sale)).length;
-    const candidatesB = sales.filter((sale) => canMatch(b, sale)).length;
-    return candidatesA - candidatesB || a.transactionId.localeCompare(b.transactionId);
-  });
-  for (const row of ordered) {
-    const candidates = sales.filter((sale) =>
-      remainingSales.has(candidateKey(sale)) &&
-      canMatch(row, sale),
-    );
-    candidates.sort((a, b) =>
-      Number(b.date === providerDay(row)) - Number(a.date === providerDay(row)) ||
-      Math.abs(a.amount - row.amount) - Math.abs(b.amount - row.amount) ||
-      dayDistance(a.date, providerDay(row)) - dayDistance(b.date, providerDay(row)) ||
-      a.saleId.localeCompare(b.saleId, undefined, { numeric: true }),
-    );
-    if (candidates[0]) {
-      assignments.set(row.transactionId, candidates[0]);
-      remainingSales.delete(candidateKey(candidates[0]));
+  const assign = (allowDateMismatch: boolean) => {
+    const ordered = transactions.filter(row => !assignments.has(row.transactionId)).sort((a, b) => {
+      const candidatesA = sales.filter((sale) => remainingSales.has(candidateKey(sale)) && canMatch(a, sale, allowDateMismatch)).length;
+      const candidatesB = sales.filter((sale) => remainingSales.has(candidateKey(sale)) && canMatch(b, sale, allowDateMismatch)).length;
+      return candidatesA - candidatesB || a.transactionId.localeCompare(b.transactionId);
+    });
+    for (const row of ordered) {
+      const candidates = sales.filter((sale) =>
+        remainingSales.has(candidateKey(sale)) &&
+        canMatch(row, sale, allowDateMismatch),
+      );
+      candidates.sort((a, b) =>
+        Math.abs(a.amount - row.amount) - Math.abs(b.amount - row.amount) ||
+        dayDistance(a.date, providerDay(row)) - dayDistance(b.date, providerDay(row)) ||
+        a.saleId.localeCompare(b.saleId, undefined, { numeric: true }),
+      );
+      if (candidates[0]) {
+        assignments.set(row.transactionId, candidates[0]);
+        remainingSales.delete(candidateKey(candidates[0]));
+      }
     }
-  }
+  };
+  assign(false);
+  if (options.allowDateMismatch) assign(true);
 
   const result: RechargeReconciliationRow[] = transactions.map((row) => {
     const sale = assignments.get(row.transactionId);

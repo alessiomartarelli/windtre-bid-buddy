@@ -1848,20 +1848,29 @@ export async function registerRoutes(
       const periodConfirmed = !!declaredFrom && !!declaredTo;
       const salesFrom = periodConfirmed ? declaredFrom! : dates[0];
       const salesTo = periodConfirmed ? declaredTo! : dates[dates.length - 1];
-      const sales = provider === "vodafone_fastweb"
-        ? await storage.getBisuiteRechargeSalesByPhones(
+      let sales: BisuiteSale[];
+      if (provider === "vodafone_fastweb") {
+        const [phoneSales, periodSales] = await Promise.all([
+          storage.getBisuiteRechargeSalesByPhones(
             profile.organizationId,
             Array.from(new Set(providerRows.flatMap((row) => [
               ...(Array.isArray(row?.phoneCandidates) ? row.phoneCandidates : []),
               row?.phone,
               row?.temporaryPhone,
             ]).map(normalizeRechargePhone).filter((phone) => phone.length >= 8))),
-          )
-        : salesFrom && salesTo
+          ),
+          periodConfirmed
+            ? storage.getBisuiteSalesByItalianDateRange(profile.organizationId, salesFrom, salesTo, true)
+            : Promise.resolve([]),
+        ]);
+        sales = Array.from(new Map([...periodSales, ...phoneSales].map(sale => [sale.id, sale])).values());
+      } else {
+        sales = salesFrom && salesTo
           ? await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, salesFrom, salesTo, true)
           : [];
+      }
       const candidates = extractRechargeSales(sales, { splitArticles: provider === "windtre" });
-      let reconciled;
+      let reconciled: ReturnType<typeof reconcileRechargeRows>;
       if (periodConfirmed && provider === "vodafone_fastweb") {
         const inPeriodProviderRows = providerRows.filter((row) => isRechargeDateWithinPeriod(row.date, declaredFrom!, declaredTo!));
         const matchedRows = reconcileRechargeRows(inPeriodProviderRows, candidates, {

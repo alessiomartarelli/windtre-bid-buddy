@@ -243,6 +243,23 @@ test("Vodafone abbina per numero anche con date diverse e restituisce entrambe l
   assert.equal(row.difference, 0);
 });
 
+test("match tra date diverse rispetta gli abbinamenti dello stesso giorno e il consumo uno-a-uno", () => {
+  const phone = "7000000088";
+  const provider = [
+    recharge("A", "2026-10-01T10:00:00.000Z", phone, "", 10),
+    recharge("B", "2026-10-02T10:00:00.000Z", phone, "", 10),
+  ];
+  const sales = [{
+    saleId: "902", bisuiteId: 902, date: "2026-10-02",
+    pdv: "POS-1", customer: "", amount: 10, phones: [phone],
+  }];
+  const rows = reconcileRechargeRows(provider, sales, { allowDateMismatch: true });
+  assert.equal(rows.find(row => row.transactionId === "B").status, "VERIFICATO");
+  assert.equal(rows.find(row => row.transactionId === "A").status, "NON PRESENTE SU BISUITE");
+  const strict = reconcileRechargeRows([provider[0]], sales, { includeUnmatchedSales: false });
+  assert.equal(strict[0].status, "NON PRESENTE SU BISUITE", "WindTre/default still requires the same day");
+});
+
 test("riconciliazione WindTre conserva il provider e abbina la singola Keycode alla vendita", () => {
   const providerRows = parseWindTreRechargeWorkbook(workbookBytes(windTreHeaders, [
     ["ORD-1", "KEY-1", "3471112233", "ICCID-1", 15, "VSC", "BURNED", "2026-10-09", "POS-1", "alias"],

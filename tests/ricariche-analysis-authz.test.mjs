@@ -303,15 +303,6 @@ test("Vodafone trova la vendita BiSuite dello stesso numero anche con data diver
       telefono: phone,
       dettaglio: { prezzo: "10.00" },
     }] })]);
-    const probe = await pool.query(`SELECT bisuite_id,
-      regexp_replace(article::text, '[^0-9]', '', 'g') AS digits
-      FROM bisuite_sales
-      CROSS JOIN LATERAL jsonb_array_elements(raw_data->'articoli') AS article
-      WHERE organization_id=$1 AND upper(trim(article->'categoria'->>'nome'))='RICARICHE'
-        AND regexp_replace(article::text, '[^0-9]', '', 'g') ~ $2`,
-    [user.orgId, `(${phone})`]);
-    console.log("Vodafone date mismatch SQL probe", probe.rows);
-
     const headers = { Cookie: user.cookieHeader };
     const upload = await jsonReq(`${BASE}/api/ricariche-analysis/upload`, {
       method: "POST",
@@ -335,6 +326,31 @@ test("Vodafone trova la vendita BiSuite dello stesso numero anche con data diver
     assert.equal(result.body.rows[0].fileDate, "2026-10-01T00:01:00.000Z");
     assert.equal(result.body.rows[0].bisuiteDate, "2026-09-30");
     assert.equal(result.body.rows[0].saleId, "9901");
+
+    await pool.query(`INSERT INTO bisuite_sales
+      (organization_id,bisuite_id,data_vendita,stato,raw_data)
+      VALUES ($1,9902,'2026-10-01 12:00:00','FINALIZZATA IN CASSA',$2::jsonb)`,
+    [user.orgId, JSON.stringify({ articoli: [{
+      categoria: { nome: "RICARICHE" }, telefono: "7000000099", dettaglio: { prezzo: "5.00" },
+    }] })]);
+    const confirm = await jsonReq(`${BASE}/api/ricariche-analysis/${upload.body.reportId}/period`, {
+      method: "PUT", headers,
+      body: JSON.stringify({
+        provider: "vodafone_fastweb", declaredPeriodFrom: "2026-10-01", declaredPeriodTo: "2026-10-01",
+      }),
+    });
+    assert.equal(confirm.status, 200, JSON.stringify(confirm.body));
+    const confirmed = await jsonReq(
+      `${BASE}/api/ricariche-analysis?provider=vodafone_fastweb&reportId=${encodeURIComponent(upload.body.reportId)}`,
+      { headers },
+    );
+    assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
+    assert.equal(confirmed.body.rows.filter(row => row.status === "VERIFICATO").length, 1);
+    const missing = confirmed.body.rows.filter(row => row.status === "NON PRESENTE SU FILE");
+    assert.equal(missing.length, 1, "period sales with other phones must remain visible");
+    assert.equal(missing[0].saleId, "9902");
+    assert.equal(missing[0].fileDate, null);
+    assert.equal(missing[0].bisuiteDate, "2026-10-01");
   } finally {
     await cleanupOrg(pool, user.orgId);
     await pool.end();
