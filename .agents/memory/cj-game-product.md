@@ -50,3 +50,13 @@ o fuori contesto per gli addetti vendita.
 
 **How to apply:** valutare riferimenti di gamification aziendale e sottoporre
 le direzioni visive all'utente; non assumere già approvati temi, avatar o stili.
+
+Sono richieste due sezioni: missioni giornaliere impostate di default e
+missioni create dall'admin per utenti specifici.
+
+**Why:** il gioco deve avere attività quotidiane pronte senza dipendere
+dall'intervento dell'admin, affiancate da incarichi mirati.
+
+**How to apply:** mantenere distinte origine e assegnazione delle missioni
+nella progettazione; non sostituire i default con le sole missioni admin
+né mostrare incarichi personali a utenti non destinatari.
