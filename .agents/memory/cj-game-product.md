@@ -41,3 +41,12 @@ prodotto, non una rifinitura da rinviare dopo le funzioni.
 **How to apply:** progettare estetica, interazioni e meccaniche insieme;
 non ridurre il gioco a una tabella con classifica e non interpretare
 l'approvazione del concetto come autorizzazione a costruire schermate.
+
+Il pubblico è adulto e il contesto è business: l'utente chiede di trovare
+un compromesso fra coinvolgimento ludico e credibilità professionale.
+
+**Why:** l'estetica deve favorire l'uso del gioco senza risultare infantile
+o fuori contesto per gli addetti vendita.
+
+**How to apply:** valutare riferimenti di gamification aziendale e sottoporre
+le direzioni visive all'utente; non assumere già approvati temi, avatar o stili.
