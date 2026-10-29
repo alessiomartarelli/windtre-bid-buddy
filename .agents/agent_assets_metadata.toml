@@ -144,3 +144,17 @@ mtime_ms = 1791907580375
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/c8e08dca-43ce-4651-a6b7-f4db151342dc/fbecfc0f-dbf4-4ef4-a278-a7d4054664f8"
 storage_version_token = "1791907627597283"
 content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[outputs]]
+id = "CIFOfG7ZeWcAriOlbBzbH"
+uri = "file://docs/customer-journey-il-gioco-specifica.html"
+type = "html"
+title = "Customer Journey — Il Gioco: analisi e specifica"
+description = "Documento da approvare: esperienza addetto, missioni default e admin, regole combinabili, premi facoltativi, T6, brief visivo e piano di simulazione. Non è una demo frontend."
+logical_id = "8042141d-0e59-4e8f-b61f-7434bf014c84"
+content_hash = "sha256:6138210ad2eb2cf2cf613085c3fbcac133403399a6978c8922b5fd3dc7101aa5"
+size = 35703
+mtime_ms = 1793271560802
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/8042141d-0e59-4e8f-b61f-7434bf014c84/fc2c8070-1f93-42e2-b30c-88b36011cf37"
+storage_version_token = "1793271605256936"
+content_type = "text/html"

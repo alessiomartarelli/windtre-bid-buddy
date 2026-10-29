@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customer Journey — Il Gioco | Analisi e specifica proposta</title>
+<style>
+:root{color-scheme:light;--ink:#18243a;--muted:#526075;--line:#dce3ed;--accent:#3730a3}
+*{box-sizing:border-box}body{margin:0;background:#f2f5fa;color:var(--ink);font:16px/1.65 system-ui,sans-serif}
+main{max-width:1080px;margin:32px auto;background:white;padding:clamp(22px,5vw,66px);border:1px solid var(--line);border-radius:16px}
+h1{font-size:clamp(28px,5vw,44px);line-height:1.15;margin:12px 0 20px}h2{font-size:25px;margin:44px 0 14px;border-top:1px solid var(--line);padding-top:24px}
+h3{font-size:19px;margin:25px 0 8px}p,ul,ol{margin:10px 0 16px}li{margin:7px 0}a{color:var(--accent);text-underline-offset:3px}a:focus-visible{outline:3px solid #3730a3;outline-offset:4px}
+.eyebrow{font-weight:750;color:var(--accent);letter-spacing:.08em;font-size:12px;text-transform:uppercase}.meta{color:var(--muted)}
+.note{padding:16px 20px;background:#eef2ff;border-left:4px solid var(--accent);border-radius:4px}.warning{background:#fff8e7;border-color:#88630d}
+nav{padding:16px 20px;background:#f6f8fc;border-radius:8px}nav ul{columns:2;padding-left:20px}
+.scroll{overflow:auto;margin:18px 0}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;vertical-align:top;border:1px solid var(--line);padding:12px;min-width:145px}th{background:#f0f3fa}
+code{overflow-wrap:anywhere;font-size:.88em;background:#f2f4f8;padding:2px 5px;border-radius:4px}
+.flow{padding:15px;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;font-weight:600}
+footer{margin-top:40px;border-top:1px solid var(--line);padding-top:18px;color:var(--muted);font-size:13px}
+@media(max-width:640px){main{margin:0;border:0;border-radius:0}nav ul{columns:1}th,td{min-width:165px}}
+@media print{body{background:white}main{margin:0;max-width:none;border:0;padding:0}nav{display:none}h2,h3{break-after:avoid}tr,.note{break-inside:avoid}a{color:inherit}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">MyStoreDesk · Documento di progettazione</div>
+<h1>CUSTOMER JOURNEY<br>IL GIOCO</h1>
+<p class="meta">Analisi di fattibilità e specifica proposta · 29 ottobre 2026 · Da approvare</p>
+<p class="note"><strong>Questo è un documento, non una demo frontend.</strong> Non introduce funzioni, non assegna punti o premi e non modifica app, database o produzione. Il concetto è condiviso; stile grafico, punteggi e regolamenti specifici non sono ancora approvati.</p>
+</header>
+<nav aria-label="Indice del documento"><strong>Indice</strong><ul>
+<li><a href="#sintesi">1. Sintesi e confini</a></li>
+<li><a href="#fattibilita">2. Dati e fattibilità</a></li>
+<li><a href="#esperienza">3. Esperienza dell’addetto</a></li>
+<li><a href="#missioni">4. Missioni e verifiche</a></li>
+<li><a href="#admin">5. Missioni admin</a></li>
+<li><a href="#regole">6. Campagne e regole</a></li>
+<li><a href="#metriche">7. Metriche e classifiche</a></li>
+<li><a href="#economia">8. Maturato, T6 e premi</a></li>
+<li><a href="#visivo">9. Brief visivo</a></li>
+<li><a href="#architettura">10. Architettura e controlli</a></li>
+<li><a href="#simulazione">11. Simulazione e pilota</a></li>
+<li><a href="#versione">12. Prima versione e decisioni</a></li>
+<li><a href="#fonti">13. Evidenze e fonti</a></li>
+</ul></nav>
+
+<section id="sintesi">
+<h2>1. Sintesi e confini</h2>
+<p><strong>Fattibile con estensione della base esistente, non con un semplice restyling.</strong> Clienti, prodotti, vendite, finestra commerciale e parte degli esiti sono riutilizzabili. Missioni, attività, registro punti e gestione delle campagne sono nuove capacità.</p>
+<h3>Requisiti confermati dall’utente</h3>
+<ul>
+<li>Gioco per addetti vendita adulti in un contesto business; estetica e interazioni sono centrali per motivare l’utilizzo.</li>
+<li>Area personale con giornata, missioni, progressione dei clienti, sfide e classifiche.</li>
+<li>Due sezioni: missioni giornaliere predefinite e missioni assegnate dall’admin a utenti specifici.</li>
+<li>Condizioni configurabili e combinabili: classifica, attachment, percentuale del premio RS maturato e altre metriche, senza una formula universale.</li>
+<li>Premi facoltativi, anche fisici. Il gioco deve funzionare senza denaro o oggetti.</li>
+<li>Quando previsti, premi al T6 sul maturato ammesso dal regolamento. Non confondere avanzamento, stima e diritto al premio.</li>
+<li>Chiarire e concordare la direzione prima di costruire schermate o integrare funzioni nell’app.</li>
+</ul>
+<p><strong>Metodo di questa analisi:</strong> lettura del codice e della documentazione esistente, più riferimenti pubblici di gamification aziendale. Non sono stati interrogati dati cliente reali o il database di produzione. Completezza, copertura DRMS e distribuzione dei portafogli non sono state misurate.</p>
+</section>
+
+<section id="fattibilita">
+<h2>2. Dati e fattibilità</h2>
+<div class="scroll"><table><thead><tr><th>Capacità</th><th>Evidenza disponibile</th><th>Cosa manca o va verificato</th></tr></thead><tbody>
+<tr><td>Identità del cliente e contratti</td><td>CJ per organizzazione e CF/P.IVA; articoli collegati alle vendite BiSuite.</td><td>Misurare scarti senza identità e record non attribuibili; non inventare abbinamenti.</td></tr>
+<tr><td>Prodotti e opportunità</td><td>Driver, validità, filtri con/senza prodotto e coppie SIM–smartphone.</td><td>Prodotto assente non significa cliente idoneo o interessato. Consenso e contattabilità non sono dimostrati dalla presenza del telefono.</td></tr>
+<tr><td>Finestra commerciale</td><td>T0 e termine T5 per mesi solari, calcolati in UTC.</td><td>Politica di consolidamento al T6, esiti tardivi e ricalcolo del T0.</td></tr>
+<tr><td>Identità dell’addetto</td><td>Profilo autenticato con associazione a nominativi BiSuite; venditore per articolo.</td><td>Identità stabile del giocatore, alias, sovrapposizioni fra profili, trasferimenti, cessazioni e destinatario della missione.</td></tr>
+<tr><td>Stati ed esiti</td><td>Stato operativo distinto dall’economico; DRMS e modifiche manuali.</td><td>Misurare match ambigui, storici incompleti e dati legacy. Definire fonti ammesse ai premi.</td></tr>
+<tr><td>Valori CJ</td><td>Gettone stimato, maturato, componenti esplicite/presunte e conferme manuali.</td><td>Non sono prova automatica di incasso del gettone CJ né di premio individuale dovuto.</td></tr>
+<tr><td>Premio per RS</td><td>Dashboard Gara: aggregazione di premio attuale e proiettato in configurazioni per RS.</td><td>Non è un registro certificato del premio RS liquidato. Definire fonte autorevole, competenza, rettifiche e riconciliazione prima di usarlo come montepremi.</td></tr>
+<tr><td>Missioni e attività</td><td>Non individuato un modello dedicato nello schema attuale.</td><td>Catalogo, istanze giornaliere, assegnazioni, contatti, appuntamenti, evidenze e storico attività.</td></tr>
+<tr><td>Punti, campagne e premi</td><td>Esistono altri motori Gara/Incentivazione, ma non un registro dedicato al gioco CJ.</td><td>Regole versionate, registro punti, classifiche del gioco, assegnazione e consegna premi.</td></tr>
+</tbody></table></div>
+<p>La fattibilità operativa richiede anche un responsabile delle regole, gestione dei contatti autorizzati e una procedura di contestazione. Non è sufficiente avere il totale vendite.</p>
+</section>
+
+<section id="esperienza">
+<h2>3. Esperienza dell’addetto</h2>
+<p class="flow">La mia giornata → Missione → Clienti pertinenti → Azione ed esito → Verifica → Avanzamento → Prossimo passo</p>
+<ol>
+<li><strong>Ingresso:</strong> punti della giornata, attività pendenti e una missione principale leggibile; sincronizzazione e dati mancanti visibili.</li>
+<li><strong>Missioni del giorno:</strong> generate da modelli predefiniti, senza preparazione quotidiana dell’admin. Proposta: selezionare opportunità realmente disponibili, con limiti di carico e senza missioni impossibili.</li>
+<li><strong>Assegnate a te:</strong> sezione distinta per incarichi admin, con obiettivo, autore, destinatario, periodo e progressi.</li>
+<li><strong>Cliente:</strong> percorso T0–T5, piste presenti/in lavorazione/da valutare, attività precedenti, prossimo passo. Non usare una vendita come prova di contatto precedente.</li>
+<li><strong>Esito:</strong> interessato, ricontatto concordato, appuntamento, non interessato o non contattabile. Sono categorie proposte, da concordare; evitare note libere non necessarie.</li>
+<li><strong>Riscontro:</strong> distinguere attività dichiarata, attività verificata e risultato commerciale. La registrazione può essere immediata; l’accredito può restare in verifica.</li>
+<li><strong>Sfide:</strong> regole leggibili, metrica personale, posizione o distanza dall’obiettivo; niente sezione premi quando non previsti.</li>
+</ol>
+<p><strong>Cliente non interessato:</strong> esito legittimo, con esclusione dai solleciti ripetuti secondo una politica da approvare. Non deve essere necessario vendere per registrare una gestione corretta. Non assegnare punti illimitati alla ripetizione dello stesso esito.</p>
+<p><strong>Stati indispensabili:</strong> portafoglio vuoto, nessuna missione eleggibile, tutte completate, missione scaduta/revocata, sincronizzazione in ritardo, esito contestato, dati non sufficienti. Nessuno deve apparire come “zero performance” se mancano dati.</p>
+</section>
+
+<section id="missioni">
+<h2>4. Catalogo iniziale delle missioni</h2>
+<p>Catalogo proposto, non regolamento approvato. Non sono fissati punti numerici o quantità universali. Ogni modello dichiara ambito, obiettivo, eleggibilità, frequenza, prova, limite, cumulabilità e rettifica.</p>
+<div class="scroll"><table><thead><tr><th>Missione</th><th>Eleggibilità e verifica</th><th>Limite e rettifica</th></tr></thead><tbody>
+<tr><td>Riprendi un ricontatto</td><td>Attività programmata per quel giorno, cliente assegnato e contattabile; esito registrato. Attività dichiarata, non chiamata verificata dal solo clic.</td><td>Una chiusura utile per attività; riapertura non crea altri punti. Annullamento o duplicato produce rettifica.</td></tr>
+<tr><td>Segui una CJ vicina a T5</td><td>Finestra ancora aperta, opportunità e nessun contatto incompatibile già registrato; esito conforme alla procedura.</td><td>Una missione per cliente/intervallo configurato, con periodo di pausa. T5 trascorso non diventa urgenza commerciale ancora valida.</td></tr>
+<tr><td>Valuta una pista mancante</td><td>Driver assente nella CJ, pertinenza valutata dall’addetto e contatto consentito; esito strutturato.</td><td>Una valutazione per cliente/pista/ciclo; la sola apertura della scheda non completa la missione.</td></tr>
+<tr><td>Fai avanzare una CJ</td><td>Nuova pista valida rilevata dai dati commerciali nella finestra, secondo la semantica CJ.</td><td>Un evento qualificante non si duplica con sincronizzazioni o prodotti della stessa pista. KO/storno può rettificare i punti commerciali.</td></tr>
+<tr><td>Gestisci un appuntamento</td><td>Appuntamento concordato e registrato, con esito. Richiede una nuova funzione, non disponibile come storico CJ completo.</td><td>Riprogrammare non moltiplica i punti. No-show e cancellazione distinti da completamento.</td></tr>
+<tr><td>Obiettivo mirato dell’admin</td><td>Destinatari espliciti, metrica supportata e periodo; verifica automatica o approvazione dichiarata all’assegnazione.</td><td>Limite e versione fissati alla pubblicazione; modifica/revoca non cancellano silenziosamente punti storici.</td></tr>
+</tbody></table></div>
+<h3>Giornata, frequenza e punti</h3>
+<p>Proposta: la giornata del gioco usa Europe/Rome; le finestre commerciali conservano le regole UTC della CJ. Al cambio giorno si creano nuove istanze, non si azzera il registro. Turni, assenze, giorni lavorativi e missioni non completate richiedono una politica esplicita.</p>
+<p>I punti attività riconoscono lavoro ammissibile; i punti commerciali riconoscono eventi verificati; il premio economico è un risultato separato. Un semplice aggiornamento manuale non prova una vendita o una liquidazione.</p>
+<h3>Sovrapposizione fra missioni</h3>
+<p>Lo stesso evento può far avanzare più missioni, ma l’accredito non si duplica accidentalmente. Ogni campagna dichiara se i punti sono cumulabili, alternativi o soggetti a un tetto. Proposta prudenziale: in assenza di una politica esplicita non pubblicare combinazioni ambigue. La classifica deve spiegare quale regola ha prodotto ciascun accredito.</p>
+</section>
+
+<section id="admin">
+<h2>5. Missioni admin per utenti specifici</h2>
+<p class="flow">Bozza → Anteprima → Pubblicazione e assegnazione → In corso → Completata / Scaduta / Revocata</p>
+<ul>
+<li><strong>Creazione:</strong> titolo, istruzioni, metrica, target, date e fuso, destinatari, criteri cliente, evidenze, punti e cumulabilità. Premio opzionale e distinto dai punti.</li>
+<li><strong>Assegnazione:</strong> uno o più profili stabili appartenenti al perimetro dell’admin. La selezione non concede automaticamente accesso a clienti o contratti altrui.</li>
+<li><strong>Anteprima:</strong> conteggio eleggibili, eventuali utenti senza opportunità, conflitti con default e costo potenziale quando esiste un premio.</li>
+<li><strong>Modifica:</strong> bozze liberamente modificabili; missioni pubblicate con nuova revisione e regola esplicita sugli incarichi esistenti. Nessun cambio retroattivo invisibile di target o punti.</li>
+<li><strong>Revoca:</strong> impedisce nuove attività; conserva evidenze e accrediti, con eventuali rettifiche motivate. Non equivale a cancellazione dello storico.</li>
+<li><strong>Esiti:</strong> admin vede avanzamento, fonte, attività in verifica, rettifiche e motivazioni; operatore vede soltanto incarichi destinati a lui e i dati cliente già autorizzati.</li>
+</ul>
+</section>
+
+<section id="regole">
+<h2>6. Un modello di campagne, non una formula unica</h2>
+<p>Separare sempre <strong>chi partecipa, cosa si misura, chi soddisfa le condizioni, come si ordina, chi beneficia e cosa riceve</strong>. Non fissare universalmente il premio all’addetto del T0, al venditore successivo o a una ripartizione.</p>
+<div class="scroll"><table><thead><tr><th>Configurazione</th><th>Contenuto da rendere esplicito</th></tr></thead><tbody>
+<tr><td>Campagna e partecipanti</td><td>Organizzazione, RS, PDV, utenti/squadre, periodo, coorte e versione del regolamento.</td></tr>
+<tr><td>Condizioni</td><td>Soglie, volume minimo, stato dei contratti, tutte le condizioni / almeno una. Gruppi limitati e leggibili, non codice arbitrario dell’admin.</td></tr>
+<tr><td>Metrica e classifica</td><td>Punti, attachment o altro indicatore registrato; direzione ordinamento, precisione e spareggio.</td></tr>
+<tr><td>Attribuzione</td><td>Responsabile dell’attività, venditore, apertura CJ o squadra secondo la singola regola; gestione dei clienti condivisi e quote totali non superiori al 100%.</td></tr>
+<tr><td>Ricompensa opzionale</td><td>Nessuna, riconoscimento, importo, percentuale di una base ammessa, bene fisico o esperienza. Quantità, budget, massimali e beneficiari.</td></tr>
+<tr><td>Conflitti</td><td>Priorità fra regole, cumulabilità, gruppi esclusivi, tetto per persona/campagna e trattamento dei pari merito.</td></tr>
+<tr><td>Consolidamento</td><td>T6 di quali coorti, periodo di osservazione, prove, approvazione, dati mancanti e rettifiche successive.</td></tr>
+</tbody></table></div>
+<h3>Esempi di regolamento, non decisioni già prese</h3>
+<ol>
+<li><strong>Solo coinvolgimento:</strong> missioni quotidiane, punti e traguardi personali, nessun premio monetario o fisico.</li>
+<li><strong>Attachment:</strong> classifica dei partecipanti eleggibili con campione minimo; riconoscimento o premio fisico al migliore, se previsto.</li>
+<li><strong>Premio RS:</strong> montepremi pari a una percentuale del premio RS ammesso, distribuito ai beneficiari secondo quote o classifica dichiarate.</li>
+<li><strong>Condizioni combinate:</strong> posizione utile in classifica e attachment sopra soglia e contratti validi al consolidamento. La soddisfazione delle condizioni non sostituisce la verifica economica.</li>
+</ol>
+<p>Nuove condizioni dovranno usare metriche documentate con fonte e verifica, non la promessa di supportare subito qualsiasi formula immaginabile.</p>
+</section>
+
+<section id="metriche">
+<h2>7. Metriche, attachment e classifiche eque</h2>
+<p><strong>“Attachment” non ha una definizione unica già approvata.</strong> Una proposta coerente con la CJ è: clienti distinti della coorte con SIM valida e almeno una pista cross-sell valida ÷ clienti distinti con SIM valida della stessa coorte × 100. Non dividere prodotti per SIM e chiamarlo automaticamente percentuale clienti.</p>
+<p>Un attachment Fisso o Energia richiede invece un numeratore specifico e una scelta esplicita del denominatore: tutta la coorte oppure soli clienti eleggibili alla pista. Eventuali criteri di eleggibilità non presenti nei dati devono essere introdotti e verificati. Saturazione delle cinque piste e attachment sono indicatori diversi.</p>
+<ul>
+<li>Fissare coorte, periodo, data evento, stato commerciale/economico e regola di attribuzione prima del confronto.</li>
+<li>Denominatore zero: “non calcolabile”, non 0% o 100%. Campione insufficiente: fuori classifica con motivazione.</li>
+<li>Mostrare sempre numeratore, denominatore, ultima sincronizzazione e natura provvisoria/consolidata.</li>
+<li>Proposta: classifiche per PDV o gruppi comparabili, obiettivi personali e di squadra; non confronto globale indiscriminato fra portafogli diversi.</li>
+<li>Non assumere che il report filtrato di un operatore contenga tutta la CJ di un cliente condiviso. Calcolare gli aggregati autorizzati lato server, senza esporre item di colleghi.</li>
+<li>Le classifiche mostrano soltanto identità professionali autorizzate e aggregati; niente nomi cliente, CF, telefoni, dettagli contratto o dati fuori tenant.</li>
+<li>Stabilire spareggi prima della pubblicazione: ad esempio numerosità valida, metrica secondaria o pari merito con regola di budget. Nessun ordinamento casuale.</li>
+</ul>
+<p><strong>Disponibilità:</strong> vendite, piste e coorti sono derivabili dai dati presenti con verifiche di qualità; attività e puntualità dei ricontatti richiedono nuovi registri. Attachment configurato e premio RS ammesso richiedono una definizione commerciale, non solo un calcolo.</p>
+</section>
+
+<section id="economia">
+<h2>8. Economia, T6 e premi facoltativi</h2>
+<h3>Quattro valori da non confondere</h3>
+<ol>
+<li><strong>Punti:</strong> avanzamento del gioco, non valuta automaticamente convertibile.</li>
+<li><strong>Risultato commerciale:</strong> vendita o nuova pista valida; può essere rettificato.</li>
+<li><strong>Base economica ammessa:</strong> importo utilizzabile dalla campagna in base a fonti, competenze e prove dichiarate.</li>
+<li><strong>Premio:</strong> beneficio assegnato e poi effettivamente erogato/consegnato, se previsto.</li>
+</ol>
+<p class="warning note"><strong>Attenzione al “maturato”.</strong> Il calcolo CJ può includere smartphone presunti e stati economici manuali. La conferma del singolo contratto non dimostra l’incasso del gettone CJ. Il premio attuale/proiettato della Dashboard Gara per RS non dimostra una liquidazione della RS. Conservare questi valori separati; non cambiare le regole esistenti per farli sembrare verificati.</p>
+<h3>Calendario</h3>
+<p>Nel modello esistente T0 è il mese di apertura; le vendite qualificano fino alla fine del mese T5 incluso. Esempio: T0 luglio 2026, T5 dicembre 2026, T6 gennaio 2027. Il T6 è diverso per coorti diverse, non una scadenza comune a tutti i clienti.</p>
+<p><strong>Proposta da approvare:</strong> al T6 si apre la verifica, non il pagamento automatico. Una campagna su più coorti deve scegliere consolidamenti separati o chiusura dopo l’ultima coorte. Le date commerciali restano coerenti con UTC; scadenze delle attività espresse nel fuso dichiarato.</p>
+<h3>Esiti e rettifiche</h3>
+<ul>
+<li><strong>Esito mancante o ambiguo:</strong> in attesa di verifica; niente presunzione automatica di premio dovuto. Mostrare ciò che manca e a chi compete risolverlo.</li>
+<li><strong>Conferma manuale:</strong> ammessa solo se il regolamento la prevede, con evidenza e approvazione distinta dall’auto-dichiarazione del beneficiario.</li>
+<li><strong>DRMS tardivo:</strong> politica predefinita di riapertura o conguaglio entro un termine; competenza economica distinta da data di caricamento.</li>
+<li><strong>Storno/KO:</strong> aggiornare la posizione provvisoria e registrare rettifiche; dopo l’erogazione usare un conguaglio autorizzato, non una cancellazione silenziosa del premio.</li>
+<li><strong>Riaccredito:</strong> può ripristinare l’eleggibilità secondo la stessa versione del regolamento, senza doppia assegnazione.</li>
+<li><strong>T0 ricalcolato o cliente trasferito:</strong> segnalare l’impatto; i dati della fonte si aggiornano, ma i risultati consolidati si correggono con eventi motivati.</li>
+</ul>
+<h3>Percentuale del premio RS</h3>
+<p>Formula concettuale: montepremi = percentuale configurata × base RS ammessa. Premio individuale = montepremi × quota spettante, con massimali e regole di budget. Se il riparto usa pesi, la somma delle quote deve essere coerente con il totale; assenza di beneficiari o pesi validi non permette un pagamento.</p>
+<p>La base RS deve dichiarare RS stabile, fonte autorevole, componenti incluse/escluse, mese/coorti, importo netto o lordo, rettifiche e stato di verifica. Distinguerla dalla ragione sociale del cliente business e dal tenant. Nessuna base disponibile: “calcolo non disponibile”, non importo zero silenzioso.</p>
+<h3>Ciclo di un premio</h3>
+<p class="flow">Stima → In verifica → Approvato e assegnato → Erogato / Consegnato → Eventuale conguaglio</p>
+<p>Per beni fisici: descrizione, disponibilità, quantità riservata, eventuali alternative approvate, beneficiario e prova di consegna con data e responsabile. Un premio già assegnato non può essere promesso di nuovo se esaurito. Per denaro: registrazione dell’erogazione, non integrazione bancaria nella prima versione.</p>
+<p>Se non è previsto un premio, l’intero ciclo economico è assente e l’interfaccia mostra soltanto missioni, punti e traguardi. Non serve un premio di valore zero.</p>
+</section>
+
+<section id="visivo">
+<h2>9. Brief visivo: gioco per adulti nel business</h2>
+<p><strong>Obiettivo:</strong> invogliare ad aprire l’esperienza, capire cosa fare e percepire il progresso, senza estetica infantile o pressione a vendere prodotti non appropriati. Il compromesso non è una dashboard ordinaria con badge decorativi.</p>
+<h3>Gerarchia proposta, non schermate già approvate</h3>
+<ol>
+<li><strong>La mia giornata:</strong> una missione principale, progressi di oggi e azione successiva.</li>
+<li><strong>Missioni del giorno:</strong> carte brevi con obiettivo, motivo, progresso e verifica.</li>
+<li><strong>Assegnate a te:</strong> stesso linguaggio, etichetta admin e scadenza evidente.</li>
+<li><strong>I miei clienti:</strong> percorso T0–T5, prodotti ed esiti, prossime attività; non clienti trattati come oggetti da collezionare.</li>
+<li><strong>Sfide e classifica:</strong> posizione, obiettivo e andamento personale anche senza primato.</li>
+<li><strong>Premi:</strong> presenti soltanto nelle campagne che li prevedono, con immagini e condizioni trasparenti.</li>
+</ol>
+<p>Direzione da discutere: tipografia leggibile, gerarchia forte, carte con progressi riconoscibili, icone coerenti e colore d’accento controllato. Il blu notte citato nella conversazione è una proposta, non una scelta approvata. Avatar e livelli non sono obbligatori; se presenti devono rappresentare progressi reali.</p>
+<p>Microinterazioni: feedback immediato sulla registrazione, diverso dalla celebrazione dell’accredito verificato; animazione breve solo per traguardi significativi. Niente suoni obbligatori, premi casuali, effetti da casinò o serie consecutive che penalizzano ferie e assenze.</p>
+<p><strong>Telefono:</strong> una colonna, azione principale raggiungibile, navigazione essenziale, nessuna tabella larga necessaria per lavorare. Desktop: missioni in evidenza e sfide secondarie, non tutti gli indicatori con lo stesso peso.</p>
+<p><strong>Accessibilità proposta:</strong> contrasto almeno WCAG AA, navigazione da tastiera, etichette testuali insieme ai colori, aree tocco comode, annunci accessibili dei cambi di stato, supporto a riduzione del movimento e nessun lampeggio. Controllare anche testi lunghi, zoom e layout a 375–402 px.</p>
+<h3>Riferimenti e limiti</h3>
+<p><a href="https://centrical.com/solutions/solutions-by-use-case/sales/salesforce-gamification/">Centrical</a> descrive sfide personali, di squadra, riconoscimenti e premi su attività commerciali. <a href="https://spinify.com/product/leaderboards/">Spinify</a> descrive classifiche, confronti e obiettivi personalizzati. Sono riferimenti di categoria da valutare, non prove indipendenti di efficacia né modelli da copiare integralmente.</p>
+<p><strong>Validazione prima dello sviluppo:</strong> approvare il brief, poi valutare un template isolato con dati dimostrativi su desktop e telefono, includendo missione admin, risultato in verifica e campagna senza premio. Non integrare automaticamente il template nell’app.</p>
+</section>
+
+<section id="architettura">
+<h2>10. Architettura concettuale e controlli</h2>
+<p>La CJ e le vendite restano le fonti commerciali; non creare una seconda anagrafica cliente. Il gioco aggiunge un livello con riferimenti stabili alle fonti. I seguenti sono concetti, non tabelle già create.</p>
+<ul>
+<li><strong>Giocatore:</strong> identificativo profilo stabile e associazioni BiSuite storicizzate; nomi leggibili separati dalle chiavi contabili.</li>
+<li><strong>Catalogo e istanze missione:</strong> modello versionato, origine default/admin, destinatari, obiettivo e periodo fissati nell’istanza.</li>
+<li><strong>Attività ed evidenze:</strong> autore, data evento, data registrazione, esito, cliente autorizzato, verifica e riferimenti minimi necessari.</li>
+<li><strong>Campagna e regolamento:</strong> revisioni pubblicate immutabili, condizioni strutturate, metrica, riparto e premio opzionale.</li>
+<li><strong>Registro punti:</strong> accrediti e rettifiche append-only con fonte, motivo, beneficiario, missione e versione. Nessun saldo locale del browser come autorità.</li>
+<li><strong>Consolidamento:</strong> risultati e fonti fotografati al momento della verifica; correzioni successive esplicite.</li>
+<li><strong>Premi e consegne:</strong> catalogo, budget, assegnazioni, quantità e registrazione di erogazione/consegna solo quando necessari.</li>
+</ul>
+<h3>Prevenzione errori e abuso</h3>
+<ul>
+<li>Identità evento basata su organizzazione, sorgente e identificativi stabili della vendita/articolo o attività; unicità anche in concorrenza. Risincronizzare, riprovare o riaprire una scheda non accredita di nuovo.</li>
+<li>La ricezione di un esito tardivo non deve fingere che l’azione sia stata svolta oggi: distinguere giorno dell’evento, verifica e accredito.</li>
+<li>Fonte manuale esplicita: le attuali autorizzazioni a modificare gli item CJ non devono consentire di auto-certificare un premio.</li>
+<li>Campagne economiche con autorizzazioni dedicate e separazione fra beneficiario e approvatore; ogni eccezione deve essere tracciata.</li>
+<li>Consultazione e anteprima in sola lettura: niente reconcile implicito o assegnazioni durante l’apertura della pagina.</li>
+<li>Controlli tenant, brand, modulo e destinatario lato server. Filtro operatore vuoto significa nessun item, non tutto il tenant.</li>
+<li>Uscita di un addetto o cambio alias non trasferiscono lo storico a un altro profilo. Clienti senza attribuzione restano segnalati.</li>
+<li>Minimizzazione di dati e note; niente dati cliente nei log o nelle classifiche. Verifica professionale di privacy, contattabilità, monitoraggio dei lavoratori e conservazione.</li>
+</ul>
+<p>Gestione delle contestazioni: mostrare all’addetto origine e motivo del risultato, consentire una richiesta di verifica e registrare risposta e rettifica dell’admin. Non fornire una modifica libera del saldo punti.</p>
+</section>
+
+<section id="simulazione">
+<h2>11. Simulazione storica e pilota</h2>
+<p>Questo documento definisce il metodo; <strong>la simulazione non è stata eseguita</strong>. Non sono stati calcolati vincitori reali, costi o percentuali di completezza.</p>
+<ol>
+<li><strong>Definire il campione autorizzato:</strong> organizzazione, RS/PDV, coorti, periodo e versione dei dati. Analizzare aggregati senza esportare dati personali non necessari.</li>
+<li><strong>Misurare la qualità:</strong> identità mancanti, vendite senza addetto, alias sovrapposti, date assenti, match DRMS ambigui, presunti e storici incompleti.</li>
+<li><strong>Ricostruire scenari commerciali:</strong> attachment per definizioni candidate, nuove piste e risultati per coorte. I report attuali possono rappresentare lo storico ricalcolato con validità di oggi: non chiamarlo fotografia certa della classifica di allora.</li>
+<li><strong>Provare regolamenti:</strong> nessun premio, classifica attachment con minimo, condizioni combinate e quota della base RS solo se verificata. Variare soglie e osservare concentrazione dei vincitori, numerosità esclusa e costo massimo.</li>
+<li><strong>Scenari avversi:</strong> stesso evento ripetuto, cliente condiviso, T0 modificato, revoca missione, pari merito, base RS mancante, premio esaurito, DRMS tardivo, storno dopo consegna e riaccredito.</li>
+<li><strong>Pilota controllato:</strong> prima senza obblighi economici, su un gruppo concordato. Valutare utilità delle missioni, tempi di gestione, partecipazione, contestazioni e pressione percepita, non soltanto accessi o chiamate.</li>
+</ol>
+<p>Non ricostruibili con certezza dai soli dati attuali: contatti mai registrati, appuntamenti, consenso al momento dell’azione, vecchie assegnazioni e tutte le revisioni passate degli stati manuali. Le relative metriche si misurano solo dopo l’introduzione dei registri.</p>
+<p>Esito atteso: scheda di qualità, risultati per scenario, sensibilità alle soglie, massimo impegno di premio e elenco dei casi non calcolabili. Un dato mancante non deve diventare un risultato favorevole silenzioso.</p>
+</section>
+
+<section id="versione">
+<h2>12. Prima versione, rischi e decisioni</h2>
+<h3>Prima versione proposta, dopo approvazione</h3>
+<p>Area personale responsive; default giornalieri; missioni admin mirate; attività ed esiti; registro punti verificabile; metriche e classifiche esplicitamente definite; poche condizioni combinabili ma verificabili; premi opzionali con approvazione e consegna manuale. Il collegamento alla base RS entra solo dopo averne validato significato e fonte.</p>
+<p>Fuori dalla prima versione: pagamenti e spedizioni automatici, motore di formule libere, intelligence predittiva non validata, ricostruzione inventata del passato, duplicazione dei motori commerciali, sostituzione della CJ attuale o modifiche alle sue regole per semplificare il gioco.</p>
+<h3>Ordine di lavoro proposto</h3>
+<ol>
+<li>Approvare specifica e chiarire le decisioni che incidono sul template.</li>
+<li>Realizzare un frontend dimostrativo isolato e valutarne estetica e uso; nessun dato reale o premio dovuto.</li>
+<li>Verificare qualità dati, definizioni delle metriche e fonte RS; simulare scenari prima di promettere premi.</li>
+<li>Implementare e collaudare missioni, autorizzazioni e registro eventi; poi pilota senza liquidazioni automatiche.</li>
+<li>Attivare eventuali premi solo con condizioni e responsabilità approvate.</li>
+</ol>
+<div class="scroll"><table><thead><tr><th>Decisione aperta</th><th>Perché serve</th></tr></thead><tbody>
+<tr><td>Direzione visiva e tono</td><td>Il concetto è approvato, colori, livelli e composizione definitiva no.</td></tr>
+<tr><td>Catalogo default, frequenze e punti</td><td>Definire un carico utile, turni/assenze e verifiche senza premiare clic ripetuti.</td></tr>
+<tr><td>Perimetro clienti e destinatari</td><td>Il venditore dell’item non è automaticamente responsabile di tutte le attività future.</td></tr>
+<tr><td>Attachment per campagna</td><td>Coorte, numeratore, denominatore, volume minimo e trattamento storni.</td></tr>
+<tr><td>Attribuzione e cumulabilità</td><td>Configurabili, non una scelta universale; evitare doppie contabilizzazioni.</td></tr>
+<tr><td>Fonte del premio RS maturato</td><td>Stima attuale/proiezione, gettone CJ e liquidazione reale sono basi diverse.</td></tr>
+<tr><td>T6 e termine di verifica</td><td>Coorti multiple, fonti tardive, sospensione dei risultati e conguagli.</td></tr>
+<tr><td>Budget e beni fisici</td><td>Quantità, disponibilità, fiscalità, approvazione e prova di consegna.</td></tr>
+<tr><td>Regolamento e tutele</td><td>Verifica fiscale, giuslavoristica e privacy da professionisti competenti; questo documento non fornisce consulenza conclusiva.</td></tr>
+</tbody></table></div>
+<p><strong>Valutazione del rischio:</strong> missioni e coinvolgimento sono realizzabili ma richiedono nuovi registri; i rischi più alti riguardano auto-conferme economiche, criteri di confronto non omogenei, attribuzioni ambigue e promesse di premio su basi non consolidate. Non è prudente fissare tempi o costo dell’intero modulo prima delle decisioni economiche e dell’audit dati.</p>
+</section>
+
+<section id="fonti">
+<h2>13. Evidenze tecniche e fonti</h2>
+<p>I percorsi seguenti sono riferimenti per chi realizzerà le fasi successive. Il codice osservato prevale su commenti storici o esempi datati della documentazione.</p>
+<ul>
+<li><code>docs/customer-journey.md</code>: concetti e regole del modulo esistente.</li>
+<li><code>shared/schema.ts</code>: profili, associazioni BiSuite, CJ, item e fonti economiche; nessun registro dedicato al gioco individuato.</li>
+<li><code>shared/customerJourney.ts</code>: validità, gettone, separazione componenti esplicite/presunte e stati effettivi.</li>
+<li><code>shared/customerJourneyCohorts.ts</code>: coorti, eventi commerciali/economici, storici incompleti e importi non attribuibili.</li>
+<li><code>shared/customerJourneyProgression.ts</code>: progressione ricalcolata con la validità corrente, non fotografie mensili immutabili.</li>
+<li><code>client/src/lib/customerJourneyTimeline.ts</code>: scadenza T5 e date UTC.</li>
+<li><code>client/src/pages/CustomerJourney.tsx</code>: esperienza attuale e componenti da non sostituire automaticamente.</li>
+<li><code>server/routes.ts</code>: isolamento operatore e modifiche manuali degli stati economici/operativi e del gettone.</li>
+<li><code>client/src/pages/DashboardGaraReale.tsx</code>: aggregato premio attuale/proiettato per RS; non prova di liquidazione.</li>
+</ul>
+<p>Riferimenti pubblici consultati nella fase di confronto: <a href="https://centrical.com/solutions/solutions-by-use-case/sales/salesforce-gamification/">Centrical — Salesforce Gamification</a> e <a href="https://spinify.com/product/leaderboards/">Spinify — Leaderboards</a>. Contenuti dei fornitori: utili per confrontare meccaniche, non per promettere incrementi di vendita.</p>
+</section>
+<footer>Documento di analisi da approvare. Nessun cliente reale, punteggio o premio è stato creato. La consegna non costituisce approvazione dei regolamenti proposti né implementazione del frontend.</footer>
+</main>
+</body>
+</html>
