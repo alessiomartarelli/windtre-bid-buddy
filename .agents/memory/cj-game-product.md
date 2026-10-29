@@ -28,3 +28,16 @@ restringe impropriamente il prodotto; il regolamento deve variare per campagna.
 **How to apply:** progettare condizioni configurabili e combinabili,
 distinguendo criterio di vittoria, base economica e beneficiari; verificare
 la fonte del premio RS maturato senza assimilarlo automaticamente al gettone CJ.
+
+L'utente ha confermato il concetto di area personale centrata su giornata,
+missioni, progressione dei clienti, sfide e premi. Ha specificato che
+“la parte estetica però sarà importantissima perchè deve spingerli ad usarlo
+e a giocarci”. Prima di costruire vuole capire e concordare l'idea e come
+mostrarla.
+
+**Why:** il coinvolgimento visivo è un requisito centrale di adozione del
+prodotto, non una rifinitura da rinviare dopo le funzioni.
+
+**How to apply:** progettare estetica, interazioni e meccaniche insieme;
+non ridurre il gioco a una tabella con classifica e non interpretare
+l'approvazione del concetto come autorizzazione a costruire schermate.
