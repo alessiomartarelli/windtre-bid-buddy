@@ -60,3 +60,12 @@ dall'intervento dell'admin, affiancate da incarichi mirati.
 **How to apply:** mantenere distinte origine e assegnazione delle missioni
 nella progettazione; non sostituire i default con le sole missioni admin
 né mostrare incarichi personali a utenti non destinatari.
+
+Il premio non deve esserci per forza: l'utente richiede che il gioco possa
+funzionare anche senza ricompense monetarie o fisiche.
+
+**Why:** il coinvolgimento non deve dipendere dall'esistenza di un premio
+configurato per ogni missione o sfida.
+
+**How to apply:** trattare il premio come facoltativo anche nei template;
+non inserire premi obbligatori o sezioni vuote quando non sono previsti.
