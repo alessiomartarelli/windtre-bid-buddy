@@ -158,3 +158,17 @@ mtime_ms = 1793271560802
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/8042141d-0e59-4e8f-b61f-7434bf014c84/fc2c8070-1f93-42e2-b30c-88b36011cf37"
 storage_version_token = "1793271605256936"
 content_type = "text/html"
+
+[[outputs]]
+id = "iY93oPIbiqtYMaObXKq2s"
+uri = "file://docs/customer-journey-regole-drms.md"
+type = "text"
+title = "Regole Customer Journey e DRMS"
+description = "Documento Markdown italiano verificato sul codice corrente: apertura e T0, gettoni, smartphone, matching ed esiti DRMS, limiti e fonti tecniche."
+logical_id = "167ee7ec-1e9b-4097-959d-5932acb8e462"
+content_hash = "sha256:98bdd64bd1bdd67755b7335060c0b1dc1fd2d5e82b1b350eaa957fb39050afb4"
+size = 49979
+mtime_ms = 1793630903569
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/167ee7ec-1e9b-4097-959d-5932acb8e462/32c7d474-d1a0-4252-833d-80a5df05d95b"
+storage_version_token = "1793630931067564"
+content_type = "text/markdown"

@@ -4,7 +4,7 @@ description: Why the scheda timeline validity badges and the gettone count must 
 ---
 
 **Rule:** scheda, timeline, riepiloghi, analisi gettoni ed export devono concordare:
-finestra solare T0–T6 inclusi, anche giorni precedenti alla SIM nello stesso mese.
+finestra solare T0–T5 inclusi, anche giorni precedenti alla SIM nello stesso mese.
 Una journey parte dalla prima nuova SIM voce ammessa dalla data configurata
 (default 1 luglio 2026). SIM dati, Tourist e SIM allarme non aprono journey, non
 anticipano T0 e non alimentano SIM/coorti/gettoni. I prodotti Protetti/ALLARMI
