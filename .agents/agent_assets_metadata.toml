@@ -172,3 +172,17 @@ mtime_ms = 1793630903569
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/167ee7ec-1e9b-4097-959d-5932acb8e462/32c7d474-d1a0-4252-833d-80a5df05d95b"
 storage_version_token = "1793630931067564"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "nC55i3OnpBy_QaWcZF8KC"
+uri = "file://docs/CUSTOMER-JOURNEY-WINDTRE-HANDOFF-CLAUDE.md"
+type = "text"
+title = "Modulo CJ WindTre — Handoff per Claude Code"
+description = "Markdown autonomo con concetto Customer Journey, formule gettoni, esempi numerici, coppie SIM–smartphone, DRMS, decisioni delle analisi precedenti e distinzione dalla proposta Il Gioco."
+logical_id = "44016982-9356-44dd-a355-c8eea4e6c795"
+content_hash = "sha256:bd10a0dbec977509d7e104fa660ccdf2502e114fb2cc4c2696b48229d3742a90"
+size = 30006
+mtime_ms = 1793641359289
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/44016982-9356-44dd-a355-c8eea4e6c795/3f198cc6-ca92-49f5-86ca-a81b35937f3e"
+storage_version_token = "1793641378463168"
+content_type = "text/markdown"
