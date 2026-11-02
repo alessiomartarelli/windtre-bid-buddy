@@ -197,6 +197,17 @@ const STATE_VARIANTS: Record<string, string> = {
 };
 // Liquidato presunto (smartphone, nessun processo automatico): arancione "da verificare".
 const PRESUMED_PAID_VARIANT = "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/40";
+const DRMS_PAID_DARK_VARIANT =
+  "bg-emerald-800/25 text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-200 border-emerald-800/55 dark:border-emerald-300/45";
+
+function isDrmsPaidItem(it: CustomerJourneyItem): boolean {
+  return (
+    (it.drmsOutcomeState === "pagato" || it.drmsOutcomeState === "riaccreditato") &&
+    (it.economicState === "pagato" || it.economicState === "riaccreditato") &&
+    !it.economicStateManual &&
+    !it.drmsMismatch
+  );
+}
 
 // Referente / persona fisica del cliente (Nome Cognome, fallback nominativo).
 function journeyReferente(j: CustomerJourney): string {
@@ -3335,21 +3346,34 @@ function JourneyDetailViewImpl({
               : activated
                 ? "attivo"
                 : "assente";
+            const drmsLiquidated = items.some(
+              (it) =>
+                it.driver === driver &&
+                isCjItemActive(it) &&
+                isDrmsPaidItem(it) &&
+                (status === "attivo" || !!driverItemValidity.get(it.id)?.counts),
+            );
             const Icon = CJ_DRIVER_ICONS[driver];
             const borderCls =
-              status === "valido"
+              drmsLiquidated
+                ? "border-emerald-800/60 dark:border-emerald-300/50 bg-emerald-800/10 dark:bg-emerald-400/10"
+                : status === "valido"
                 ? "border-emerald-500/50"
                 : status === "attivo"
                   ? "border-amber-500/50"
                   : "border-dashed opacity-80";
             const markCls =
-              status === "valido"
+              drmsLiquidated
+                ? "text-emerald-800 dark:text-emerald-200"
+                : status === "valido"
                 ? "text-emerald-500"
                 : status === "attivo"
                   ? "text-amber-500"
                   : "text-muted-foreground/40";
             const iconCls =
-              status === "valido"
+              drmsLiquidated
+                ? "text-emerald-800 dark:text-emerald-200"
+                : status === "valido"
                 ? "text-emerald-500"
                 : status === "attivo"
                   ? "text-amber-500"
@@ -3363,7 +3387,9 @@ function JourneyDetailViewImpl({
                     : "Attivo · non conta"
                   : "Attivabile";
             const badgeCls =
-              status === "valido"
+              drmsLiquidated
+                ? "border-emerald-800/50 bg-emerald-800/10 text-emerald-800 dark:border-emerald-300/45 dark:bg-emerald-300/10 dark:text-emerald-200"
+                : status === "valido"
                 ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
                 : status === "attivo"
                   ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
@@ -3392,6 +3418,11 @@ function JourneyDetailViewImpl({
                   >
                     {badgeText}
                   </Badge>
+                  {drmsLiquidated && (
+                    <span className="text-[9px] font-medium leading-tight text-emerald-800 dark:text-emerald-200">
+                      Liquidato DRMS
+                    </span>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -3713,9 +3744,10 @@ function EconomicStateCell({
           disabled={pending}
         >
           <SelectTrigger
-            className={`h-8 w-[150px] text-xs border ${it.economicState ? STATE_VARIANTS[it.economicState] || "" : presumedPaid ? PRESUMED_PAID_VARIANT : ""}`}
+            className={`h-8 w-[150px] text-xs border ${isDrmsPaidItem(it) ? DRMS_PAID_DARK_VARIANT : it.economicState ? STATE_VARIANTS[it.economicState] || "" : presumedPaid ? PRESUMED_PAID_VARIANT : ""}`}
             data-testid={`select-economic-state-${it.id}`}
             data-presumed-paid={presumedPaid ? "true" : undefined}
+            data-drms-paid={isDrmsPaidItem(it) ? "true" : undefined}
             title={it.economicStateManual ? "Stato economico impostato a mano" : hasDrms ? "Stato economico da DRMS" : presumedPaid ? CJ_PRESUMED_PAID_NOTE : "Nessun esito economico"}
           >
             <SelectValue />
