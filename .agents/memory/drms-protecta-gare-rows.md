@@ -15,3 +15,9 @@ contratto nei venditaInfo: il match reale passa quasi sempre dal fallback CF/P.I
 Non estendere le GARE ad altri TIPO_FONIA (per mobile/fisso le GARE duplicherebbero il
 contrattuale). Dopo un cambio del motore in prod serve rilanciare "Esita DRMS".
 Dry-run senza scrivere: tsx + tunnel prod chiamando `computeDrmsOutcomes` sulle righe/item letti via pg.
+
+Per distinguere la gara Protecta nel riepilogo economico DRMS, l'utente ha indicato esplicitamente `NOME_GARA = Gara Protecta`.
+
+**Why:** il nome gara è il criterio commerciale confermato per il capitolo dedicato; non va confuso con il criterio per gli esiti contratto CJ.
+
+**How to apply:** classificare il premio dal nome gara conservato, senza inventare il nome negli upload storici che non lo contengono. Non cambiare per questo le regole del motore esiti CJ.

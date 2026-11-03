@@ -1,7 +1,7 @@
 export type CapitoloKey =
   | "ENERGIA" | "MOBILE" | "FISSO" | "PARTNERSHIP_REWARD" | "CB"
   | "PR_ASSICURAZIONI" | "EXTRA_PR_ENERGIA" | "ASSICURAZIONI" | "RELOAD"
-  | "SOS_CARING" | "PR_RELOAD" | "PINPAD" | "ASSISTENZA_TECNICA" | "EXTRA_PIVA" | "ALTRO";
+  | "SOS_CARING" | "PR_RELOAD" | "PINPAD" | "ASSISTENZA_TECNICA" | "EXTRA_PIVA" | "PROTECTA" | "ALTRO";
 
 export interface CapitoloMeta {
   label: string;
@@ -24,6 +24,7 @@ export const CAPITOLI_CONFIG: Record<CapitoloKey, CapitoloMeta> = {
   PINPAD: { label: "Pinpad", color: "#64748b", order: 12 },
   ASSISTENZA_TECNICA: { label: "Ass. Tecnica", color: "#94a3b8", order: 13 },
   EXTRA_PIVA: { label: "Extra P.iva", color: "#0d9488", order: 14 },
+  PROTECTA: { label: "Protecta", color: "#6366f1", order: 15 },
   ALTRO: { label: "Altro (non classificato)", color: "#fde047", order: 99 },
 };
 
@@ -138,9 +139,15 @@ export function isDrmsExtraPiva(row: { NOME_GARA?: unknown; "NOME GARA"?: unknow
   return name === "GARA PIVA FRANCHISING";
 }
 
+export function isDrmsProtecta(row: { NOME_GARA?: unknown; "NOME GARA"?: unknown }): boolean {
+  const name = str(row.NOME_GARA || row["NOME GARA"]).trim().replace(/\s+/g, " ").toUpperCase();
+  return name === "GARA PROTECTA";
+}
+
 /** Refresh only explicitly identifiable categories; never guess missing legacy fields. */
 export function getStoredDrmsCapitolo(row: DrmsRow): CapitoloKey {
   if (isDrmsExtraPiva(row)) return "EXTRA_PIVA";
+  if (isDrmsProtecta(row)) return "PROTECTA";
   if (isDrmsSosCaring(row)) return "SOS_CARING";
   return row.CAPITOLO;
 }
@@ -156,6 +163,7 @@ export function isDrmsSosCaring(row: {
 
 export function classificaRiga(row: RawRow, periodComp: string): CapitoloKey | null {
   if (isDrmsExtraPiva(row)) return "EXTRA_PIVA";
+  if (isDrmsProtecta(row)) return "PROTECTA";
   const regola = str(row.REGOLA_DI_CALCOLO);
   const desc = str(row.DESCRIZIONE_ITEM);
   const fonia = str(row.TIPO_FONIA);
