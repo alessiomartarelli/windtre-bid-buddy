@@ -1,7 +1,7 @@
 export type CapitoloKey =
   | "ENERGIA" | "MOBILE" | "FISSO" | "PARTNERSHIP_REWARD" | "CB"
   | "PR_ASSICURAZIONI" | "EXTRA_PR_ENERGIA" | "ASSICURAZIONI" | "RELOAD"
-  | "SOS_CARING" | "PR_RELOAD" | "PINPAD" | "ASSISTENZA_TECNICA" | "ALTRO";
+  | "SOS_CARING" | "PR_RELOAD" | "PINPAD" | "ASSISTENZA_TECNICA" | "EXTRA_PIVA" | "ALTRO";
 
 export interface CapitoloMeta {
   label: string;
@@ -23,6 +23,7 @@ export const CAPITOLI_CONFIG: Record<CapitoloKey, CapitoloMeta> = {
   PR_RELOAD: { label: "PR Reload", color: "#dc2626", order: 11 },
   PINPAD: { label: "Pinpad", color: "#64748b", order: 12 },
   ASSISTENZA_TECNICA: { label: "Ass. Tecnica", color: "#94a3b8", order: 13 },
+  EXTRA_PIVA: { label: "Extra P.iva", color: "#0d9488", order: 14 },
   ALTRO: { label: "Altro (non classificato)", color: "#fde047", order: 99 },
 };
 
@@ -56,6 +57,8 @@ export interface DrmsRow {
   TIPO_FONIA: string;
   TIPO_ATTIVAZIONE: string;
   REGOLA_DI_CALCOLO: string;
+  /** Optional because historical uploads did not retain this field. */
+  NOME_GARA?: string;
   DESCRIZIONE_ITEM: string;
   DESCRIZIONE_PIANO_TARIFFARIO: string;
   DESCRIZIONE_EVENTO: string;
@@ -130,6 +133,18 @@ type RawRow = Record<string, unknown>;
 
 const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
 
+export function isDrmsExtraPiva(row: { NOME_GARA?: unknown; "NOME GARA"?: unknown }): boolean {
+  const name = str(row.NOME_GARA || row["NOME GARA"]).trim().replace(/\s+/g, " ").toUpperCase();
+  return name === "GARA PIVA FRANCHISING";
+}
+
+/** Refresh only explicitly identifiable categories; never guess missing legacy fields. */
+export function getStoredDrmsCapitolo(row: DrmsRow): CapitoloKey {
+  if (isDrmsExtraPiva(row)) return "EXTRA_PIVA";
+  if (isDrmsSosCaring(row)) return "SOS_CARING";
+  return row.CAPITOLO;
+}
+
 export function isDrmsSosCaring(row: {
   REGOLA_DI_CALCOLO?: unknown;
   DESCRIZIONE_ITEM?: unknown;
@@ -140,6 +155,7 @@ export function isDrmsSosCaring(row: {
 }
 
 export function classificaRiga(row: RawRow, periodComp: string): CapitoloKey | null {
+  if (isDrmsExtraPiva(row)) return "EXTRA_PIVA";
   const regola = str(row.REGOLA_DI_CALCOLO);
   const desc = str(row.DESCRIZIONE_ITEM);
   const fonia = str(row.TIPO_FONIA);
@@ -238,6 +254,7 @@ export function classifyAndNormalize(rawRows: RawRow[], period: string): DrmsRow
       TIPO_FONIA: str(r.TIPO_FONIA),
       TIPO_ATTIVAZIONE: str(r.TIPO_ATTIVAZIONE),
       REGOLA_DI_CALCOLO: str(r.REGOLA_DI_CALCOLO),
+      NOME_GARA: str(r.NOME_GARA || r["NOME GARA"]).trim(),
       DESCRIZIONE_ITEM: str(r.DESCRIZIONE_ITEM),
       DESCRIZIONE_PIANO_TARIFFARIO: str(r.DESCRIZIONE_PIANO_TARIFFARIO),
       DESCRIZIONE_EVENTO: str(r.DESCRIZIONE_EVENTO),

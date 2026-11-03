@@ -13,7 +13,7 @@ import {
   Target, Activity, Loader2, Trash2, Save,
 } from "lucide-react";
 import {
-  CAPITOLI_CONFIG, classifyAndNormalize, detectPeriod, parsePeriodToMonthYear, isDrmsSosCaring,
+  CAPITOLI_CONFIG, classifyAndNormalize, detectPeriod, parsePeriodToMonthYear, getStoredDrmsCapitolo,
   getDrmsThresholdForLatestCompetence,
   type CapitoloKey, type DrmsRow,
 } from "@/lib/drmsClassifier";
@@ -1345,7 +1345,7 @@ function DriverTab({ filteredData, perCapitolo, selectedCapitoli }: {
                 onClick={() => downloadCSV(`${selectedCap}_${Date.now()}.csv`, capitoloData.rows.map(r => ({
                   CODICE_NEGOZIO_COSY: r.CODICE_NEGOZIO_COSY, CODICE_CONTRATTO: r.CODICE_CONTRATTO,
                   COMPETENZA: r.COMPETENZA, TIPO_FONIA: r.TIPO_FONIA, TIPO_ATTIVAZIONE: r.TIPO_ATTIVAZIONE,
-                  REGOLA_DI_CALCOLO: r.REGOLA_DI_CALCOLO, DESCRIZIONE_ITEM: r.DESCRIZIONE_ITEM,
+                  REGOLA_DI_CALCOLO: r.REGOLA_DI_CALCOLO, NOME_GARA: r.NOME_GARA || "", DESCRIZIONE_ITEM: r.DESCRIZIONE_ITEM,
                   DESCRIZIONE_PIANO_TARIFFARIO: r.DESCRIZIONE_PIANO_TARIFFARIO, IMPORTO: r.IMPORTO_NUM,
                 })))} className="font-mono uppercase tracking-wider text-xs">
                 <Download size={12} className="mr-2" /> Esporta righe
@@ -1916,7 +1916,7 @@ export default function DrmsCommissioning() {
       if (!res.ok) throw new Error("Errore caricamento DRMS salvato");
       const upload: DrmsUploadFull = await res.json();
       const tagged: DrmsRow[] = upload.rows.map(r => ({
-        ...r, CAPITOLO: isDrmsSosCaring(r) ? "SOS_CARING" : r.CAPITOLO,
+        ...r, CAPITOLO: getStoredDrmsCapitolo(r),
         __PERIOD: upload.period, __UPLOAD_ID: upload.id,
       }));
       setParsedData(tagged);
@@ -1977,7 +1977,7 @@ export default function DrmsCommissioning() {
       const newSources: DrmsSource[] = [];
       for (const u of results) {
         for (const r of u.rows) allRows.push({
-          ...r, CAPITOLO: isDrmsSosCaring(r) ? "SOS_CARING" : r.CAPITOLO,
+          ...r, CAPITOLO: getStoredDrmsCapitolo(r),
           __PERIOD: u.period, __UPLOAD_ID: u.id,
         });
         newSources.push({
