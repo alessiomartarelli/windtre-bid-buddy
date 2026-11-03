@@ -13,7 +13,7 @@ import {
   Target, Activity, Loader2, Trash2, Save,
 } from "lucide-react";
 import {
-  CAPITOLI_CONFIG, classifyAndNormalize, detectPeriod, parsePeriodToMonthYear,
+  CAPITOLI_CONFIG, classifyAndNormalize, detectPeriod, parsePeriodToMonthYear, isDrmsSosCaring,
   getDrmsThresholdForLatestCompetence,
   type CapitoloKey, type DrmsRow,
 } from "@/lib/drmsClassifier";
@@ -1915,7 +1915,10 @@ export default function DrmsCommissioning() {
       const res = await fetch(apiUrl(`/api/drms/${id}`), { credentials: "include" });
       if (!res.ok) throw new Error("Errore caricamento DRMS salvato");
       const upload: DrmsUploadFull = await res.json();
-      const tagged: DrmsRow[] = upload.rows.map(r => ({ ...r, __PERIOD: upload.period, __UPLOAD_ID: upload.id }));
+      const tagged: DrmsRow[] = upload.rows.map(r => ({
+        ...r, CAPITOLO: isDrmsSosCaring(r) ? "SOS_CARING" : r.CAPITOLO,
+        __PERIOD: upload.period, __UPLOAD_ID: upload.id,
+      }));
       setParsedData(tagged);
       setSources([{
         id: upload.id,
@@ -1973,7 +1976,10 @@ export default function DrmsCommissioning() {
       const allRows: DrmsRow[] = [];
       const newSources: DrmsSource[] = [];
       for (const u of results) {
-        for (const r of u.rows) allRows.push({ ...r, __PERIOD: u.period, __UPLOAD_ID: u.id });
+        for (const r of u.rows) allRows.push({
+          ...r, CAPITOLO: isDrmsSosCaring(r) ? "SOS_CARING" : r.CAPITOLO,
+          __PERIOD: u.period, __UPLOAD_ID: u.id,
+        });
         newSources.push({
           id: u.id, period: u.period, fileName: u.fileName,
           month: u.month, year: u.year,

@@ -130,6 +130,15 @@ type RawRow = Record<string, unknown>;
 
 const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
 
+export function isDrmsSosCaring(row: {
+  REGOLA_DI_CALCOLO?: unknown;
+  DESCRIZIONE_ITEM?: unknown;
+}): boolean {
+  const normalize = (v: unknown) => str(v).trim().replace(/\s+/g, " ").toUpperCase();
+  const isSos = (v: unknown) => Array.from(REGOLE_SOS).some(label => normalize(label) === normalize(v));
+  return isSos(row.REGOLA_DI_CALCOLO) || isSos(row.DESCRIZIONE_ITEM);
+}
+
 export function classificaRiga(row: RawRow, periodComp: string): CapitoloKey | null {
   const regola = str(row.REGOLA_DI_CALCOLO);
   const desc = str(row.DESCRIZIONE_ITEM);
@@ -142,7 +151,8 @@ export function classificaRiga(row: RawRow, periodComp: string): CapitoloKey | n
 
   if (REGOLE_PR_RELOAD.has(regola)) return "PR_RELOAD";
   if (regola === "Gara Partnership Reward Insurance") return "PR_ASSICURAZIONI";
-  if (REGOLE_SOS.has(regola)) return "SOS_CARING";
+  // SOS is identified by DESCRIZIONE_ITEM even under the generic Top PR rule.
+  if (isDrmsSosCaring(row)) return "SOS_CARING";
 
   if (regola === REGOLA_PC_ADJ) {
     if (/Convergenza Fisso Energy/i.test(desc)) return "ENERGIA";

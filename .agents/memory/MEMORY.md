@@ -88,3 +88,4 @@
 - [Perimetro provider ricariche](ricariche-provider-brand.md) — i tenant WindTre e Vodafone/Fastweb vedono e caricano solo i report dei provider associati al proprio brand.
 - [Ricariche WindTre per articolo](windtre-recharge-granularity.md) — Keycode confrontate con le singole ricariche, non col totale dello scontrino; non estendere la regola a VF.
 - [Customer Journey Il Gioco](cj-game-product.md) — futura versione per addetti con missioni, punti giornalieri, classifiche e premi al T6 anche fisici; richiesta iniziale di fattibilità.
+- [DRMS SOS Caring](drms-sos-caring-description.md) — la descrizione SOS identifica il premio anche sotto la regola generica Top Partnership Reward Mobile Tied.
