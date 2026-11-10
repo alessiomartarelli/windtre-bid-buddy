@@ -8,6 +8,9 @@ mobile-SIM-driven journey. Keep acquisition-cohort analysis distinct from
 the flow of SIM sales in a calendar month.
 
 Rules (decided):
+- Negli «Scaglioni del gettone base», la percentuale richiesta è clienti dello scaglione / totale SIM attive in CJ nello stesso perimetro selezionato, non / clienti unici.
+  **Why:** l'utente ha chiesto esplicitamente la percentuale dei clienti con 1, 2, 3 e più prodotti rispetto al totale SIM in CJ.
+  **How to apply:** includere lo scaglione zero e mostrare il denominatore; con più SIM per cliente le percentuali degli scaglioni non necessariamente sommano a 100%.
 - Le vendite SIM annullate possono essere mostrate nel solo dettaglio diagnostico degli scarti BiSuite, mai nei clienti partecipanti o nelle SIM valide CJ.
   **Why:** il confronto con le vendite mensili deve spiegare gli scarti senza cambiare la regola che esclude le SIM annullate dalla CJ.
   **How to apply:** separare il flusso mensile BiSuite dalla selezione dei clienti; le esclusioni sono una partizione senza doppio conteggio, non un ampliamento della coorte.

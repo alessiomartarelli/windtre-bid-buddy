@@ -23,6 +23,7 @@ import {
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { useToast } from "@/hooks/use-toast";
 import { cjPhoneIccidLinks } from "@shared/customerJourneyPhoneLink";
+import { getCjBaseTierDistribution } from "@shared/customerJourneyBaseTiers";
 import type { CjPhoneCommercialSale } from "@shared/customerJourneyPhoneCommercial";
 import { SmartphoneIccidLink } from "@/components/customer-journey/SmartphoneIccidLink";
 import { SimIccid, CbSimReferences } from "@/components/customer-journey/SimIccid";
@@ -2201,6 +2202,10 @@ function AnalisiViewImpl({
     () => detailMode ? buildGettoneAuditDetails(diagnosticRows, diagnosticSelected) : [],
     [detailMode, diagnosticRows, diagnosticSelected],
   );
+  const baseTierDistribution = useMemo(
+    () => getCjBaseTierDistribution(diagnosticSelected),
+    [diagnosticSelected],
+  );
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -2636,12 +2641,20 @@ function AnalisiViewImpl({
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-md border p-3">
                     <p className="mb-2 text-sm font-semibold">Scaglioni del gettone base</p>
+                    <p className="mb-2 text-xs text-muted-foreground" data-testid="gettone-base-tier-denominator">
+                      Clienti dello scaglione / {baseTierDistribution.totalSim} SIM attive in CJ nel perimetro selezionato.
+                      {" "}Ogni cliente è contato una volta, anche se ha più SIM.
+                    </p>
                     <div className="space-y-1 text-sm">
-                      {CJ_GETTONE_TABLE.map((tariffa, piste) => {
-                        const clienti = diagnosticSelected.filter(j => j.pisteAttive === piste).length;
+                      {baseTierDistribution.tiers.map(({ tariffa, piste, clienti, percentualeSim }) => {
                         return <div key={piste} className="flex justify-between gap-3">
-                          <span>{clienti} {clienti === 1 ? "cliente" : "clienti"} · {piste} {piste === 1 ? "pista" : "piste"} × {fmtEuro(tariffa)}</span>
-                          <strong>{fmtEuro(clienti * tariffa)}</strong>
+                          <span className="min-w-0">
+                            {clienti} {clienti === 1 ? "cliente" : "clienti"} · {piste} {piste === 1 ? "pista" : "piste"} × {fmtEuro(tariffa)}
+                            <span className="block text-xs text-muted-foreground" data-testid={`gettone-base-tier-percentage-${piste}`}>
+                              {fmtPct(percentualeSim)} del totale SIM in CJ
+                            </span>
+                          </span>
+                          <strong className="shrink-0">{fmtEuro(clienti * tariffa)}</strong>
                         </div>;
                       })}
                     </div>
