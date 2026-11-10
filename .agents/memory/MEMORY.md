@@ -90,3 +90,4 @@
 - [Customer Journey Il Gioco](cj-game-product.md) — futura versione per addetti con missioni, punti giornalieri, classifiche e premi al T6 anche fisici; richiesta iniziale di fattibilità.
 - [DRMS SOS Caring](drms-sos-caring-description.md) — la descrizione SOS identifica il premio anche sotto la regola generica Top Partnership Reward Mobile Tied.
 - [DRMS Extra P.IVA](drms-extra-piva-identity.md) — la gara Extra P.IVA è identificata da NOME_GARA = Gara PIVA Franchising; non dedurla dalla fonia.
+- [Negozi nella riga cliente CJ](cj-export-client-context.md) — negli export Excel e PDF il negozio va nella riga cliente principale, non soltanto nei filtri o in sezioni separate.

@@ -264,6 +264,7 @@ export async function exportJourneyListPdf(data: JourneyListExportData): Promise
     body: listPdfBody(journeys),
     styles: { fontSize: 8, cellPadding: 1.8, valign: "middle", overflow: "linebreak" },
     headStyles: { fillColor: [99, 102, 241], fontSize: 8, halign: "center", minCellHeight: 9 },
+    rowPageBreak: "avoid",
     columnStyles: {
       0: { cellWidth: 50 },
       1: { cellWidth: 20 },
@@ -322,9 +323,10 @@ export function exportJourneyListExcel(data: JourneyListExportData): void {
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"] = [
-    { wch: 32 }, { wch: 10 }, { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 14 },
+    { wch: 32 }, { wch: 32 }, { wch: 32 },
+    { wch: 10 }, { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 14 },
     ...CJ_DRIVER_ORDER.map(() => ({ wch: 6 })),
-    ...[18, 22, 18, 32, 32, 45, 45].map(wch => ({ wch })),
+    ...[18, 22, 18, 45, 45].map(wch => ({ wch })),
   ];
   XLSX.utils.book_append_sheet(workbook, ws, "Elenco");
 

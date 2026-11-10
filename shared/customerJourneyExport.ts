@@ -381,8 +381,9 @@ export function listPdfBody(journeys: CjListJourney[]): (string | number)[][] {
   const total = CJ_DRIVER_ORDER.length;
   return journeys.map((j) => {
     const m = journeyDriverMap(j);
+    const [origine, destinazione] = listStoreKpiValues(j);
     return [
-      journeyTitle(j),
+      `${journeyTitle(j)}\nOrigine: ${origine}\nDestinazione: ${destinazione}`,
       j.customerType === "azienda" ? "Business" : "Privato",
       j.customerKey,
       j.status === "aperta" ? "Aperta" : "Chiusa",
@@ -412,10 +413,11 @@ export function listExcelHeaderRows(
 /** Intestazione tabella elenco Excel: include Telefono + emoji per driver. */
 export function listExcelHead(): string[] {
   return [
-    "Cliente", "Tipo", "CF/P.IVA", "Telefono", "Stato", "Driver attivati",
+    "Cliente", ...listStoreKpiHead().slice(0, 2),
+    "Tipo", "CF/P.IVA", "Telefono", "Stato", "Driver attivati",
     ...CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d] || driverLabel(d)),
     "Gettone base stimato", "Extra SIM–smartphone", "Totale stimato",
-    ...listStoreKpiHead(),
+    ...listStoreKpiHead().slice(2),
   ];
 }
 
@@ -424,8 +426,10 @@ export function listExcelBody(journeys: CjListJourney[]): (string | number)[][] 
   const total = CJ_DRIVER_ORDER.length;
   return journeys.map((j) => {
     const m = journeyDriverMap(j);
+    const storeKpi = listStoreKpiValues(j);
     return [
       journeyTitle(j),
+      ...storeKpi.slice(0, 2),
       j.customerType === "azienda" ? "Business" : "Privato",
       j.customerKey,
       j.telefono || "—",
@@ -433,7 +437,7 @@ export function listExcelBody(journeys: CjListJourney[]): (string | number)[][] 
       `${activeDriverCount(j)}/${total}`,
       ...CJ_DRIVER_ORDER.map((d) => (m.get(d)?.activated ? "Sì" : "")),
       j.gettone?.gettoneBase ?? 0, j.gettone?.extraStimato ?? 0, j.gettone?.fatturato ?? 0,
-      ...listStoreKpiValues(j),
+      ...storeKpi.slice(2),
     ];
   });
 }

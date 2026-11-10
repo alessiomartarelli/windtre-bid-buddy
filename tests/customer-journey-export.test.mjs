@@ -385,6 +385,8 @@ test('actual Schede PDF/XLSX downloads preserve selected filters and long PDF su
     cognome: 'Sintetico export filtri',
     nominativo: 'Cliente Sintetico export filtri',
     customerKey: 'CF_SINTETICO',
+    pdvOrigini: ['NEGOZIO_CLIENTE_ROMA'],
+    pdvDestinazioni: ['NEGOZIO_CLIENTE_TORINO'],
   });
   const cases = {
     active: { journeys: [exportedJourney], filterLabel: activeFilterLabel },
@@ -442,6 +444,11 @@ test('actual Schede PDF/XLSX downloads preserve selected filters and long PDF su
   const activeWorkbook = XLSX.read(await readFile(path.join(fileTestOutput, 'active.xlsx')), { type: 'buffer' });
   assert.deepEqual(activeWorkbook.SheetNames, ['Elenco']);
   const activeRows = XLSX.utils.sheet_to_json(activeWorkbook.Sheets.Elenco, { header: 1, defval: '' });
+  const clientRow = activeRows.find(row => row[0] === 'Cliente Sintetico export filtri');
+  assert.ok(clientRow, 'the customer has an export row');
+  assert.deepEqual(clientRow.slice(0, 3), [
+    'Cliente Sintetico export filtri', 'NEGOZIO_CLIENTE_ROMA', 'NEGOZIO_CLIENTE_TORINO',
+  ], 'stores are next to the customer in the same Excel row');
   const activeExcelText = activeRows.flat().join(' ');
   for (const expected of [
     'PDV origine: ORIGINE_ROMA_FILTRATA',
@@ -478,6 +485,11 @@ test('actual Schede PDF/XLSX downloads preserve selected filters and long PDF su
         }
       }
       const pdfText = compact(pages.join(' '));
+      const mainTableText = pdfText.split(compact('Negozi e KPI per cliente'))[0];
+      assert.ok(mainTableText.includes(compact('Origine: NEGOZIO_CLIENTE_ROMA')),
+        'origin is in the main customer table, not just the separate summary');
+      assert.ok(mainTableText.includes(compact('Destinazione: NEGOZIO_CLIENTE_TORINO')),
+        'destination is in the main customer table, not just the separate summary');
       if (scenario === 'active') {
         for (const expected of [
           'PDV origine: ORIGINE_ROMA_FILTRATA',
@@ -525,7 +537,7 @@ test('listPdfBody: tipo Business/Privato, stato, conteggio attivi, "Si"/""', () 
   assert.equal(rows[0][LIST_FIXED_COLS + 1], 'Si'); // fisso
   assert.equal(rows[0][LIST_FIXED_COLS + 2], ''); // energia
   // riga azienda
-  assert.equal(rows[1][0], 'Acme');
+  assert.equal(rows[1][0], 'Acme\nOrigine: Non disponibile\nDestinazione: Senza destinazione');
   assert.equal(rows[1][1], 'Business');
   assert.equal(rows[1][2], 'IT1');
   assert.equal(rows[1][3], 'Chiusa');
@@ -537,24 +549,24 @@ test('listPdfBody: tipo Business/Privato, stato, conteggio attivi, "Si"/""', () 
 // ===========================================================================
 test('listExcelHead: include Telefono e usa emoji per driver', () => {
   const head = listExcelHead();
-  assert.deepEqual(head.slice(0, 6), ['Cliente', 'Tipo', 'CF/P.IVA', 'Telefono', 'Stato', 'Driver attivati']);
-  assert.deepEqual(head.slice(6, 6 + CJ_DRIVER_ORDER.length), CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d]));
+  assert.deepEqual(head.slice(0, 8), ['Cliente', 'Negozi origine', 'Negozi destinazione effettiva', 'Tipo', 'CF/P.IVA', 'Telefono', 'Stato', 'Driver attivati']);
+  assert.deepEqual(head.slice(8, 8 + CJ_DRIVER_ORDER.length), CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d]));
 });
 
 test('listExcelBody: include telefono, "Sì" per driver attivati', () => {
   const d = drivers({ energia: { activated: true } });
   const rows = listExcelBody([listJourney({ telefono: '3331234567', drivers: d })]);
-  assert.equal(rows[0][3], '3331234567'); // telefono
-  assert.equal(rows[0][5], `1/${CJ_DRIVER_ORDER.length}`);
-  const energiaIdx = 6 + CJ_DRIVER_ORDER.indexOf('energia');
+  assert.equal(rows[0][5], '3331234567'); // telefono
+  assert.equal(rows[0][7], `1/${CJ_DRIVER_ORDER.length}`);
+  const energiaIdx = 8 + CJ_DRIVER_ORDER.indexOf('energia');
   assert.equal(rows[0][energiaIdx], 'Sì');
-  const mobileIdx = 6 + CJ_DRIVER_ORDER.indexOf('mobile');
+  const mobileIdx = 8 + CJ_DRIVER_ORDER.indexOf('mobile');
   assert.equal(rows[0][mobileIdx], '');
 });
 
 test('listExcelBody: telefono mancante => "—"', () => {
   const rows = listExcelBody([listJourney({ telefono: null })]);
-  assert.equal(rows[0][3], '—');
+  assert.equal(rows[0][5], '—');
 });
 
 test('KPI summary partitions every driver using the same activated flag as the cards', () => {
@@ -581,8 +593,11 @@ test('store/KPI export preserves multiple stores and never substitutes origin fo
     'Roma · Milano', 'Torino · Senza destinazione', driverLabel('fisso'),
     CJ_DRIVER_ORDER.filter(d => d !== 'fisso').map(driverLabel).join(', '),
   ]);
-  assert.deepEqual(listExcelHead().slice(-4), listStoreKpiHead());
-  assert.deepEqual(listExcelBody([j])[0].slice(-4), values);
+  assert.deepEqual(listExcelHead().slice(1, 3), listStoreKpiHead().slice(0, 2));
+  assert.deepEqual(listExcelBody([j])[0].slice(1, 3), values.slice(0, 2));
+  assert.deepEqual(listExcelHead().slice(-2), listStoreKpiHead().slice(2));
+  assert.deepEqual(listExcelBody([j])[0].slice(-2), values.slice(2));
+  assert.equal(listPdfBody([j])[0][0], 'Mario Rossi\nOrigine: Roma · Milano\nDestinazione: Torino · Senza destinazione');
   assert.equal(listExcelHead().length, listExcelBody([j])[0].length);
   assert.deepEqual(listStoreKpiValues(listJourney()).slice(0, 2), ['Non disponibile', 'Senza destinazione']);
 });
