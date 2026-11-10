@@ -48,6 +48,10 @@ const {
   listExcelHeaderRows,
   listExcelHead,
   listExcelBody,
+  journeyKpiSummary,
+  listStoreKpiHead,
+  listStoreKpiValues,
+  detailStoreKpiRows,
 } = await import('../shared/customerJourneyExport.ts');
 
 const { CJ_DRIVER_ORDER, CJ_NO_DESTINATION_FILTER_VALUE } = await import('../shared/customerJourney.ts');
@@ -551,4 +555,48 @@ test('listExcelBody: include telefono, "Sì" per driver attivati', () => {
 test('listExcelBody: telefono mancante => "—"', () => {
   const rows = listExcelBody([listJourney({ telefono: null })]);
   assert.equal(rows[0][3], '—');
+});
+
+test('KPI summary partitions every driver using the same activated flag as the cards', () => {
+  const summary = journeyKpiSummary([
+    { driver: 'mobile', activated: true, count: 2 },
+    { driver: 'energia', activated: false, count: 1 },
+  ]);
+  assert.equal(summary.presenti, driverLabel('mobile'));
+  assert.equal(summary.mancanti, CJ_DRIVER_ORDER.filter(d => d !== 'mobile').map(driverLabel).join(', '));
+  assert.equal(journeyKpiSummary([]).presenti, 'Nessuno');
+  assert.equal(journeyKpiSummary(CJ_DRIVER_ORDER.map(driver => ({
+    driver, activated: true, count: 1,
+  }))).mancanti, 'Nessuno');
+});
+
+test('store/KPI export preserves multiple stores and never substitutes origin for missing destination', () => {
+  const j = listJourney({
+    pdvOrigini: [' Roma ', 'Milano', 'Roma', ''],
+    pdvDestinazioni: ['Torino', CJ_NO_DESTINATION_FILTER_VALUE],
+    drivers: [{ driver: 'fisso', activated: true, count: 1 }],
+  });
+  const values = listStoreKpiValues(j);
+  assert.deepEqual(values, [
+    'Roma · Milano', 'Torino · Senza destinazione', driverLabel('fisso'),
+    CJ_DRIVER_ORDER.filter(d => d !== 'fisso').map(driverLabel).join(', '),
+  ]);
+  assert.deepEqual(listExcelHead().slice(-4), listStoreKpiHead());
+  assert.deepEqual(listExcelBody([j])[0].slice(-4), values);
+  assert.equal(listExcelHead().length, listExcelBody([j])[0].length);
+  assert.deepEqual(listStoreKpiValues(listJourney()).slice(0, 2), ['Non disponibile', 'Senza destinazione']);
+});
+
+test('detail store/KPI summary separates effective destination from manual destination', () => {
+  const rows = detailStoreKpiRows([
+    item({ pdvOrigine: 'Roma', pdvDestinazione: 'MANUALE', pdvDestinazioneEffettiva: 'Torino' }),
+    item({ pdvOrigine: 'Roma', pdvDestinazione: 'MANUALE' }),
+  ], []);
+  assert.deepEqual(rows.slice(0, 2), [
+    ['Negozi origine', 'Roma'],
+    ['Negozi destinazione effettiva', 'Torino · Senza destinazione'],
+  ]);
+  assert.equal(rows[2][1], 'Nessuno');
+  assert.equal(rows[3][1], CJ_DRIVER_ORDER.map(driverLabel).join(', '));
+  assert.ok(!JSON.stringify(rows).includes('MANUALE'));
 });

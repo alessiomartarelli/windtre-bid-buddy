@@ -15,6 +15,7 @@ import {
   detailExcelHeaderRows,
   listSubtitle, listPdfHead, listPdfBody,
   listExcelHeaderRows, listExcelHead, listExcelBody,
+  CJ_EXPORT_KPI_LEGEND, detailStoreKpiRows, listStoreKpiHead, listStoreKpiValues,
 } from "@shared/customerJourneyExport";
 import { CJ_DRIVER_ICONS } from "./customerJourneyIcons";
 
@@ -22,7 +23,7 @@ export type DriverSummary = CjExportDriverSummary;
 
 export interface JourneyExportData {
   journey: CustomerJourney;
-  items: CustomerJourneyItem[];
+  items: (CustomerJourneyItem & { pdvDestinazioneEffettiva?: string | null })[];
   drivers: DriverSummary[];
   phoneCommercialSales?: CjPhoneCommercialSale[];
 }
@@ -131,6 +132,15 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
 
   autoTable(doc, {
     startY: ((doc as any).lastAutoTable?.finalY ?? 60) + 8,
+    head: [["Negozi e KPI del cliente", "Dettaglio"]],
+    body: [...detailStoreKpiRows(items, drivers), ["Criterio KPI", CJ_EXPORT_KPI_LEGEND]],
+    styles: { fontSize: 9, cellPadding: 2, overflow: "linebreak" },
+    headStyles: { fillColor: [99, 102, 241] },
+    rowPageBreak: "avoid",
+  });
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY ?? 60) + 8,
     head: [["Gettoni (base ed extra separati)", "€ / numero"]],
     body: journeyGettoneRows(journey, items),
     styles: { fontSize: 9 }, headStyles: { fillColor: [99, 102, 241] },
@@ -205,6 +215,14 @@ export function exportJourneyExcel(data: JourneyExportData): void {
   wsDriver["!cols"] = [{ wch: 4 }, { wch: 18 }, { wch: 14 }, { wch: 10 }];
   XLSX.utils.book_append_sheet(workbook, wsDriver, "Driver");
 
+  const wsKpi = XLSX.utils.aoa_to_sheet([
+    ...detailExcelHeaderRows(journey),
+    ...detailStoreKpiRows(items, drivers),
+    ["Criterio KPI", CJ_EXPORT_KPI_LEGEND],
+  ]);
+  wsKpi["!cols"] = [{ wch: 32 }, { wch: 90 }];
+  XLSX.utils.book_append_sheet(workbook, wsKpi, "Negozi e KPI");
+
   const contractRows: (string | number)[][] = [
     contractsHead(),
     ...contractsBody(items, true, journey, phoneCommercialSales),
@@ -269,6 +287,25 @@ export async function exportJourneyListPdf(data: JourneyListExportData): Promise
     },
   });
 
+  if (journeys.length > 0) {
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.setTextColor(40, 40, 40);
+    doc.text("Negozi e KPI per cliente", 14, 18);
+    doc.setFontSize(9);
+    const legendLines = doc.splitTextToSize(CJ_EXPORT_KPI_LEGEND, doc.internal.pageSize.getWidth() - 28);
+    doc.text(legendLines, 14, 25);
+    autoTable(doc, {
+      startY: 28 + legendLines.length * 4,
+      head: [["Cliente / CF-P.IVA", ...listStoreKpiHead()]],
+      body: journeys.map(j => [`${journeyTitle(j)}\n${j.customerKey}`, ...listStoreKpiValues(j)]),
+      styles: { fontSize: 9, cellPadding: 2, valign: "top", overflow: "linebreak" },
+      headStyles: { fillColor: [99, 102, 241] },
+      rowPageBreak: "avoid",
+      showHead: "everyPage",
+    });
+  }
+
   doc.save("customer_journey_elenco.pdf");
 }
 
@@ -278,6 +315,7 @@ export function exportJourneyListExcel(data: JourneyListExportData): void {
 
   const rows: (string | number)[][] = [
     ...listExcelHeaderRows(journeys, filterLabel, new Date()),
+    [CJ_EXPORT_KPI_LEGEND],
     listExcelHead(),
     ...listExcelBody(journeys),
   ];
@@ -286,6 +324,7 @@ export function exportJourneyListExcel(data: JourneyListExportData): void {
   ws["!cols"] = [
     { wch: 32 }, { wch: 10 }, { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 14 },
     ...CJ_DRIVER_ORDER.map(() => ({ wch: 6 })),
+    ...[18, 22, 18, 32, 32, 45, 45].map(wch => ({ wch })),
   ];
   XLSX.utils.book_append_sheet(workbook, ws, "Elenco");
 

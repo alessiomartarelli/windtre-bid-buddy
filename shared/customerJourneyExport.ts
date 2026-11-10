@@ -34,7 +34,52 @@ export interface CjExportDriverSummary {
   count: number;
 }
 
-export type CjListJourney = CustomerJourney & { drivers: CjExportDriverSummary[]; gettone?: CjGettoneJourney };
+export type CjListJourney = CustomerJourney & {
+  drivers: CjExportDriverSummary[];
+  gettone?: CjGettoneJourney;
+  pdvOrigini?: string[];
+  pdvDestinazioni?: string[];
+};
+
+export const CJ_EXPORT_KPI_LEGEND = "KPI presenti/mancanti: driver attivati/non attivati nella scheda cliente; non indicano la maturazione del gettone. I negozi sono quelli dei contratti della journey, non necessariamente il negozio di ogni KPI.";
+
+function exportStores(values: (string | null | undefined)[], destination = false): string {
+  const names = [...new Set(values.map(value => value?.trim()).filter((value): value is string => !!value))];
+  return names.map(value => destination && value === CJ_NO_DESTINATION_FILTER_VALUE
+    ? "Senza destinazione" : value).join(" · ") || (destination ? "Senza destinazione" : "Non disponibile");
+}
+
+/** Same activated flags as the customer cards, not economic/gettone eligibility. */
+export function journeyKpiSummary(drivers: CjExportDriverSummary[]) {
+  const map = driverSummaryMap(drivers);
+  return {
+    presenti: CJ_DRIVER_ORDER.filter(driver => map.get(driver)?.activated).map(driverLabel).join(", ") || "Nessuno",
+    mancanti: CJ_DRIVER_ORDER.filter(driver => !map.get(driver)?.activated).map(driverLabel).join(", ") || "Nessuno",
+  };
+}
+
+export function listStoreKpiHead(): string[] {
+  return ["Negozi origine", "Negozi destinazione effettiva", "KPI presenti", "KPI mancanti"];
+}
+
+export function listStoreKpiValues(j: CjListJourney): string[] {
+  const kpi = journeyKpiSummary(j.drivers);
+  return [exportStores(j.pdvOrigini ?? []), exportStores(j.pdvDestinazioni ?? [], true), kpi.presenti, kpi.mancanti];
+}
+
+export function detailStoreKpiRows(
+  items: (CustomerJourneyItem & { pdvDestinazioneEffettiva?: string | null })[],
+  drivers: CjExportDriverSummary[],
+): string[][] {
+  const kpi = journeyKpiSummary(drivers);
+  return [
+    ["Negozi origine", exportStores(items.map(item => item.pdvOrigine))],
+    ["Negozi destinazione effettiva", exportStores(items.map(item =>
+      item.pdvDestinazioneEffettiva?.trim() || CJ_NO_DESTINATION_FILTER_VALUE), true)],
+    ["KPI presenti", kpi.presenti],
+    ["KPI mancanti", kpi.mancanti],
+  ];
+}
 
 // Numero di colonne fisse (non-driver) prima delle colonne per-driver nella
 // tabella PDF dell'elenco, usato per mappare l'indice colonna ↔ driver nei
@@ -370,6 +415,7 @@ export function listExcelHead(): string[] {
     "Cliente", "Tipo", "CF/P.IVA", "Telefono", "Stato", "Driver attivati",
     ...CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d] || driverLabel(d)),
     "Gettone base stimato", "Extra SIM–smartphone", "Totale stimato",
+    ...listStoreKpiHead(),
   ];
 }
 
@@ -387,6 +433,7 @@ export function listExcelBody(journeys: CjListJourney[]): (string | number)[][] 
       `${activeDriverCount(j)}/${total}`,
       ...CJ_DRIVER_ORDER.map((d) => (m.get(d)?.activated ? "Sì" : "")),
       j.gettone?.gettoneBase ?? 0, j.gettone?.extraStimato ?? 0, j.gettone?.fatturato ?? 0,
+      ...listStoreKpiValues(j),
     ];
   });
 }
